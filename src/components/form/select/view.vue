@@ -1,126 +1,122 @@
 <script setup>
-    import './style.css';
-    import { ref, onMounted, onUnmounted, watch } from 'vue';
-    import { fetch } from '@utils/fetch';
-    import { PhCaretDown } from "@phosphor-icons/vue";
-    import InputComponent from '@form/input/view.vue';
-    import MenusComponent from '@global/menus/view.vue';
-    
-    const props = defineProps({
-        options: {
-            type: Array
-        },
-        endpoint: {
-            type: String
-        },
-        label: {
-            type: String
-        },
-        name: {
-            type: String
-        },
-        type: {
-            type: String,
-            default: 'text'
-        },
-        required: {
-            type: Boolean
-        },
-        value: {
-            type: String
-        },
-        placeholder: {
-            type: String
-        },
-        iconLeft: {
-            type: String,
-            default: ''
-        },
-        iconRight: {
-            type: String,
-            default: 'unfold_more'
-        }
-    });
-    
-    // Important: Define the emits
-    const emit = defineEmits(['update:value', 'change', 'input']);
-    
-    const refValue = ref(props.value);
-    const refDisplay = ref(null);
-    
-    // Watch for value prop changes
-    watch(() => props.value, (newValue) => {
-        refValue.value = newValue;
-        
-        // Update display value when value changes externally
-        if(Array.isArray(props.options)) {
-            props.options.forEach((option) => {
-                if(option.value == newValue) {
-                    refDisplay.value = option.label;
-                }
-            });
-        }
-    });
-    
-    function onClick(event, item, index) {
-        refValue.value = item.value;
-        refDisplay.value = item.label;
-        
-        // Emit the change to parent components
-        emit('update:value', item.value);
-        emit('change', item.value);
-        emit('input', item.value);
-        
-        console.log('Select value changed to:', item.value);
+import './style.css';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { fetch } from '@utils/fetch';
+import { PhCaretDown } from "@phosphor-icons/vue";
+import MenusComponent from '@global/menus/view.vue';
+
+const props = defineProps({
+    options: {
+        type: Array
+    },
+    endpoint: {
+        type: String
+    },
+    label: {
+        type: String,
+    },
+    name: {
+        type: String,
+    },
+    required: {
+        type: Boolean,
+    },
+    value: {
+        type: [String, Number],
+    },
+    placeholder: {
+        type: String,
+    },
+    disabled: {
+        type: Boolean,
+        default: false
     }
-    
-    // Handle input changes
-    function handleInput(event, value) {
-        emit('input', value);
+});
+
+// Define emits with the value as the first parameter
+const emit = defineEmits(['update:value', 'change']);
+
+const refValue = ref(props.value);
+const displayValue = ref('');
+
+// Watch for changes in the props.value
+watch(() => props.value, (newValue) => {
+    refValue.value = newValue;
+    updateDisplayValue(newValue);
+}, { immediate: true });
+
+// Update the display value based on the current value
+function updateDisplayValue(value) {
+    if (!value) {
+        displayValue.value = '';
+        return;
     }
-    
-    function handleChange(event, value) {
-        emit('change', value);
+
+    if (Array.isArray(props.options)) {
+        const option = props.options.find(opt => opt.value == value);
+        if (option) {
+            displayValue.value = option.label;
+        }
     }
+}
+
+// Handle selecting an item from the dropdown
+function handleSelect(event, item) {
+    refValue.value = item.value;
+    displayValue.value = item.label;
     
-    onMounted(() => {
-        if(props.endpoint && props.value) {
-            refDisplay.value = 'Loading...';
-            
-            fetch.one(props.endpoint + '/' + props.value).then((data) => {
-                refDisplay.value = (data.name ?? data.title);
-            });
-        }
-        else if(Array.isArray(props.options)) {
-            props.options.forEach((option) => {
-                if(option.value == props.value) {
-                    refDisplay.value = option.label;
-                }
-            });
-        }
-    });
-    
-    onUnmounted(() => {
-        refDisplay.value = null;
-    });
+    // Emit the value as the first parameter
+    emit('update:value', item.value);
+    emit('change', item.value);
+}
+
+// Load data from endpoint if needed
+onMounted(() => {
+    if (props.endpoint && props.value) {
+        displayValue.value = 'Loading...';
+        
+        fetch.one(`${props.endpoint}/${props.value}`).then((data) => {
+            displayValue.value = data.name || data.title || data.label || props.value;
+        }).catch(() => {
+            displayValue.value = props.value;
+        });
+    }
+});
 </script>
 
 <template>
-    <div class="c-select">
-        <input-component 
-            v-dropdown="{ component: MenusComponent, properties: { onClick, search: true, endpoint, menus: options} }"
-            :label="label"
-            :name="name"
-            :type="type"
-            :required="required"
-            :value="refValue"
-            :placeholder="placeholder"
-            :display="refDisplay"
-            :iconLeft="iconLeft"
-            :iconRight="iconRight"
-            @onInput="handleInput"
-            @onChange="handleChange"
-        />
-        <PhCaretDown weight="fill"/>
+    <div class="c-input">
+        <!-- Label & Required -->
+        <div v-if="required || label" class="select-header">
+            <label v-if="label">{{ label }}</label>
+            <span class="required-indicator" v-if="required">Required</span>
+        </div>
+        
+        <!-- Select Field -->
+        <div 
+            style="padding:0 25px 0 10px; position: relative; cursor: pointer; min-width: 80px;"
+            class="holder"
+            v-dropdown="{ 
+                component: MenusComponent, 
+                properties: { 
+                    onClick: handleSelect, 
+                    menus: options,
+                    endpoint: endpoint 
+                }
+            }"
+            :class="{ disabled }"
+        >
+            <input 
+                type="hidden" 
+                :name="name" 
+                :value="refValue"
+            />
+            <div class="display">
+                <span v-if="displayValue">{{ displayValue }}</span>
+                <span v-else class="placeholder">{{ placeholder }}</span>
+            </div>
+            <PhCaretDown style="position: absolute; right: 6px; top:50%; transform: translateY(-50%);" class="caret-icon" weight="fill" size="10"/>
+        </div>
     </div>
 </template>
+

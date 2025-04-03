@@ -4,18 +4,17 @@
     defineProps({
         label: {
             type: String,
-            required: true,
         },
         type: {
             type: String,
         },
         iconLeft: {
             type: [Object, null], 
-            default: null,
+            default: null
         },
         iconRight: {
             type: [Object, null],
-            default: null,
+            default: null
         },
         as: {
             type: String,

@@ -1,20 +1,17 @@
+// src/panels/front/init.js
 import { initializeApp } from '@/app'
 import { runHooks } from '@/hooks'
 
-import RunUser from '@/panels/front/run';
+import RunFront from '@/panels/front/run';
+import RunFrontEvents from '@/panels/front/plugins/events/run';
 
-
-
-
-initializeApp((app, router, stores) => 
-{   
+initializeApp((app, router, stores) => {   
     const hooks = [
-        RunUser, 
+        RunFront,
+        RunFrontEvents
     ];
 
-
-    runHooks(...hooks).forEach((hook) => 
-    {
+    runHooks(...hooks).forEach((hook) => {
         new hook(app, router, stores, 'front')
-    })
+    });
 });

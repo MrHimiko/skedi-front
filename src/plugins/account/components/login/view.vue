@@ -19,7 +19,7 @@
                 label="E-mail" 
                 type="email" 
                 placeholder="Provide E-mail Address" 
-                :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold' }" 
+                :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold'  }" 
                 :required="true"
             />
 
@@ -31,14 +31,14 @@
                 type="password" 
                 placeholder="Enter Password" 
                 :required="true"
-                :iconLeft="{ component: PhPassword, weight: 'bold' }"
+                :iconLeft="{ component: PhPassword, weight: 'bold'  }"
                 @click:iconRight="togglePasswordVisibility" 
             />
             
             <div class="p-xl"></div>
 
 
-            <button-component :iconLeft="{ component: PhSignIn, weight: 'bold' }" label="Sign in" type="submit"/>
+            <button-component :iconLeft="{ component: PhSignIn, weight: 'bold'  }" label="Sign in" type="submit"/>
         </form>
 
         <div class="p-xl"></div>

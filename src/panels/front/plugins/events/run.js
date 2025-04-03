@@ -4,14 +4,5 @@ export default class {
         this.router = router;
         this.stores = stores;
         
-
-        this.routes();
-    }
-    
-    routes() {
-     
-
-        
-
     }
 }

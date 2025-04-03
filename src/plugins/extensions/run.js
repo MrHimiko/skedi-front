@@ -13,20 +13,11 @@ export default class
 
     routes() 
     {
-        this.router.addRoute(
-        {
-            path: '/extensions',
-            name: 'Extensions',
-            component: () => import('./pages/extensions/'+this.panel+'.vue'),
-            beforeEnter: (to, from, next) => 
-            {
-                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.path);
-            }
-        })
+        
     }
 
     sidebar() 
     {
-        this.stores.menu.add('sidebar:bottom', 'Extensions', 'extension', '/extensions');
+        
     }
 }

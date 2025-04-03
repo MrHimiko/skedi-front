@@ -119,6 +119,8 @@ export const form =
             }
         })
 
+        console.log("Form Submited: ", formData.values());
+
         if (callback)
         {
             callback(event, formData, null, true)

@@ -17,7 +17,7 @@
                 label="E-mail" 
                 type="email" 
                 placeholder="Provide E-mail Address" 
-                :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold' }" 
+                :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold'  }" 
                 :required="true"
             />
            

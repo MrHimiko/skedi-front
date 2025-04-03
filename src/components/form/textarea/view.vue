@@ -13,12 +13,12 @@
         value: String,
         placeholder: String,
         iconLeft: {
-            type: String,
-            default: '', 
+            type: [Object, null], 
+            default: null
         },
         iconRight: {
-            type: String,
-            default: '', 
+            type: [Object, null], 
+            default: null
         },
     });
 

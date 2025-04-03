@@ -58,7 +58,7 @@
         </div>
         <div class="holder">
             <slot name="left"></slot>
-            <component v-if="iconLeft" :is="iconLeft.component" class="icon left" v-bind="iconLeft" />
+            <component label="icon" v-if="iconLeft" :is="iconLeft.component" class="icon left" v-bind="iconLeft" />
             <input 
                 v-if="mask"
                 autocomplete="off"

@@ -33,20 +33,16 @@ function createTeamTree(teams, parentId = null) {
     const teams = toRaw(userStore.getTeams() || []);
     const orgs = toRaw(userStore.getOrganizations() || []);
     
-    console.log("Teams from store (unwrapped):", teams);
-    console.log("Organizations from store (unwrapped):", orgs);
-    
+
     // Create organizations with nested team structure
     const enhancedOrgs = orgs.map(org => {
       const orgId = org.entity?.id;
-      console.log("Processing organization ID:", orgId);
-      
+
       const orgTeams = teams.filter(team => {
         if (!team || !team.entity || !team.entity.organization_id) return false;
         return team.entity.organization_id === orgId;
       });
-      
-      console.log(`Teams for org ${orgId}:`, orgTeams);
+
       
       // Create the team tree for this organization (only top-level teams)
       const topLevelTeams = createTeamTree(orgTeams, null);

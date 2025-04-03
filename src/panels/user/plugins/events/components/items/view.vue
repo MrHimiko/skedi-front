@@ -1,17 +1,21 @@
 <script setup>
+    
     // Styles and utility imports
+    
     import '@user_shared/utils/styles/organization-dropdowns.css';
     import '@user_shared/utils/styles/event-card.css';
+    import './style.css';
     import { mergeOrganizationsAndTeams } from '@user_shared/utils/js/organization-structure.js';
     import { popup } from '@utils/popup';
     import { api } from '@utils/api';
-    import { ref, onMounted, toRaw } from 'vue';
+    import { markRaw, ref, onMounted, toRaw } from 'vue';
 
     // Component imports
     import MenusComponent from '@global/menus/view.vue';
     import ButtonComponent from '@form/button/view.vue';
     import EventEditSchedule from '@user_events/components/form/eventEditSchedule.vue';
     import EventEditDuration from '@user_events/components/form/eventEditDuration.vue';
+    import EventEditAssignees from '@user_events/components/form/eventEditAssignees.vue';
     
     import EventCreateForm from '@user_events/components/form/eventCreate.vue';
     import OrganizationEditForm from '@user_teams/components/form/organizationEdit.vue';
@@ -25,7 +29,7 @@
         PhFlowArrow, PhTable, PhTrash 
     } from "@phosphor-icons/vue";
 
-    import './style.css';
+    
     import { UserStore } from '@stores/user';
 
     // State management
@@ -93,16 +97,17 @@
     }
 
     // Menu items for event actions
-    const eventActionMenus = [
+    const eventActionMenus = markRaw([
         { label: 'Preview', icon: null, iconComponent: PhArrowSquareOut, weight: 'regular' },
         { label: 'Edit duration', icon: null, iconComponent: PhClock, weight: 'regular' },
         { label: 'Edit availability', icon: null, iconComponent: PhCalendar, weight: 'regular' },
         { label: 'Edit location', icon: null, iconComponent: PhMapPin, weight: 'regular' },
-        { label: 'Duplicate', icon: null, iconComponent: PhCopy, weight: 'regular' },
+        { label: 'Edit hosts', icon: null, iconComponent: PhUsers, weight: 'regular' },
         { label: 'Add workflow', icon: null, iconComponent: PhFlowArrow, weight: 'regular' },
         { label: 'Add routing form', icon: null, iconComponent: PhTable, weight: 'regular' },
+        { label: 'Duplicate', icon: null, iconComponent: PhCopy, weight: 'regular' },
         { label: 'Remove', icon: null, iconComponent: PhTrash, weight: 'regular' }
-    ];
+    ]);
 
     // Handle menu action clicks
     const handleMenuAction = (clickEvent, menu, eventData) => {
@@ -114,8 +119,6 @@
         const selectedEventId = eventData.id;
         const orgId = eventData.organization_id;
 
-        console.log('Action', menu.label, 'selected for event:', eventData.name);
-        console.log('Event ID:', selectedEventId, 'Org ID:', orgId);
 
         switch(menu.label) {
             case 'Preview':
@@ -161,13 +164,39 @@
                             if (success) {
                                 reloadData();
                             }
-                        }
+                        },
+                        
                     },
                     {                          
                         position: 'center'
                     }
                 );
                 break;
+
+                case 'Edit hosts':
+                    popup.open(
+                        'edit-event-assignees',
+                        null,
+                        EventEditAssignees,
+                        {
+                            endpoint: `events/${selectedEventId}/assignees?organization_id=${orgId}`,
+                            type: 'PUT',
+                            eventId: selectedEventId,
+                            organizationId: orgId,
+                            callback: (event, data, response, success) => {
+                                if (success) {
+                                    reloadData();
+                                }
+                            },
+                            class: 'h-auto event-assignees',
+                            title: `Edit Hosts for ${eventData.name}`,
+                        },
+                        {
+                            position: 'center'
+                        }
+                    );
+                    break;
+
             case 'Edit location':
                 console.log('Edit location for event', selectedEventId);
                 break;
@@ -270,11 +299,12 @@
                     </a>
                     <div class="separator"></div>
                     <div class="actions">
-                        <button-component v-tooltip="{ content: 'Copy URL' }" as="tertiary icon"
+                        <button-component  v-tooltip="{ content: 'Copy URL' }" as="tertiary icon" 
                             :iconLeft="{ component: PhLink, weight: 'bold' }" />
                         <button-component v-tooltip="{ content: 'Embed on a website' }" as="tertiary icon"
                             :iconLeft="{ component: PhCode, weight: 'bold' }" />
                         <button-component 
+                            
                             v-popup="{
                                 component: OrganizationEditForm,
                                 overlay: { position: 'center' },
@@ -295,6 +325,7 @@
                             :iconLeft="{ component: PhGearSix, weight: 'bold' }" />
 
                             <button-component 
+                                
                                 as="tertiary icon" 
                                 :iconLeft="{ component: PhPlus, weight: 'bold' }" 
                                 v-tooltip="{ content: 'New event type' }" 

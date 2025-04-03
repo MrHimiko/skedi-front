@@ -178,6 +178,8 @@ export const timeLogic = (props, emit) => {
 
     const updateDayTime = (dayIndex, timeType, value) => {
         // KEY FIX: Force reactivity by directly setting the value
+        console.log("VALUE", value);
+
         const validatedTime = validateTimeFormat(value);
         days[dayIndex][timeType] = validatedTime;
         // Log to verify the update

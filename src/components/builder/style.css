@@ -104,10 +104,6 @@
 {
     display: flex;
     justify-content: end;
-}
-
-.c-builder.form > .actions > div:first-child
-{
-    display: none;
+    margin-top: 40px;
 }
 

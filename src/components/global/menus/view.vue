@@ -43,9 +43,6 @@ onUnmounted(() => {
 
 <template>
     <div class="c-menus scrollbar">
-        <div v-if="refMenus.length > 10" class="p-xl search">
-            <input-component as="bg1" placeholder="Search..."></input-component>
-        </div>
 
         <h1 v-if="title">{{ title }}</h1>
 
