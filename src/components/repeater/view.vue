@@ -1,7 +1,6 @@
 <script setup>
 import './style.css';
 import {onMounted, onUnmounted, ref} from 'vue';
-import ButtonComponent from '@form/button/view.vue';
 import BuilderComponent from '@/components/builder/view.vue';
 
 const props = defineProps({
@@ -48,7 +47,6 @@ const toggled = ref([]);
 onMounted(() => {
     // Initialize items from props
     if(Array.isArray(props.value)) {
-        // Create a deep copy to avoid reference issues
         items.value = JSON.parse(JSON.stringify(props.value));
     }
     else if(props.value && typeof props.value === 'object') {
@@ -70,22 +68,9 @@ function addItem() {
 }
 
 function removeItem(indexToRemove) {
-    console.log('Removing item at index:', indexToRemove);
-    console.log('Before remove:', JSON.stringify(items.value));
+    items.value = items.value.filter((_, index) => index !== indexToRemove);
     
-    // Create a new array without the item at indexToRemove
-    const newItems = items.value.filter((_, index) => index !== indexToRemove);
-    items.value = newItems;
-    
-    console.log('After remove:', JSON.stringify(items.value));
-    
-    // Also remove from toggled array if present
-    toggled.value = toggled.value.filter(index => index !== indexToRemove);
-    
-    // Adjust toggled indices that are above the removed index
-    toggled.value = toggled.value.map(index => index > indexToRemove ? index - 1 : index);
-    
-    // Notify parent of change
+    // Notify parent component of the change
     if (props.onChange) {
         props.onChange(null, null, items.value);
     }
@@ -100,18 +85,40 @@ function toggle(index) {
     }
 }
 
-// Function to get item values for builder
+// Return a function that provides the current state of the item
+// This ensures BuilderComponent always gets up-to-date values
 function getItemValues(item) {
-    return () => item;
+    return function() {
+        // Find the actual item in our array (in case it's been updated)
+        const index = items.value.indexOf(item);
+        if (index >= 0) {
+            return items.value[index]; 
+        }
+        return item;
+    };
 }
 
-// Handle builder component changes
-function handleBuilderChange(item, event, value) {
-    console.log('Builder change:', item, value);
-    
-    // Update the item with the new value
-    if (props.onChange) {
-        props.onChange(item, event, items.value);
+function handleBuilderChange(itemIndex, event, newValue) {
+    // Ensure we have a valid index
+    if (typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < items.value.length) {
+        // Get the current item and create a copy
+        const currentItem = items.value[itemIndex];
+        const updatedItem = {...currentItem};
+        
+        // Handle direct DOM events
+        if (event && event.target && event.target.name) {
+            updatedItem[event.target.name] = event.target.value;
+        }
+        
+        // Update our local state
+        const newItems = [...items.value];
+        newItems[itemIndex] = updatedItem;
+        items.value = newItems;
+        
+        // Notify parent of the change
+        if (props.onChange) {
+            props.onChange(updatedItem, event, items.value);
+        }
     }
 }
 </script>
@@ -122,18 +129,19 @@ function handleBuilderChange(item, event, value) {
             <div v-for="(item, itemIndex) in items" :key="'item-' + itemIndex" class="item">
                 <div v-if="heading" :class="['top', toggled.includes(itemIndex) ? 'closed' : '']">
                     <div class="left">
-                        <!-- <i class="action i-sortable-handle">drag_indicator</i> -->
                         <p>{{ label ? label : 'Item'}} Information</p>
                     </div>
                     <div class="right">
                         <div :class="['action', 'toggle', !toggled.includes(itemIndex) ? 'opened' : '']" @click="toggle(itemIndex)">
                             <i>keyboard_arrow_down</i>
                         </div>
-                        <i class="action" @click="() => removeItem(itemIndex)">close</i>
+                        <i v-if="remove" class="action" @click="() => removeItem(itemIndex)">close</i>
                     </div>
                 </div>
                 <div class="bottom flex gap-xl" style="flex-wrap: nowrap" v-show="!toggled.includes(itemIndex)">
+                    <!-- Key is critical to force re-render when item data changes -->
                     <builder-component 
+                        :key="`builder-${itemIndex}-${JSON.stringify(item)}`"
                         :values="getItemValues(item)" 
                         :name="name" 
                         :actions="false" 
@@ -143,7 +151,7 @@ function handleBuilderChange(item, event, value) {
                                 components,
                             }
                         ]"
-                        @change="(e, v) => handleBuilderChange(item, e, v)"
+                        @change="(e, v) => handleBuilderChange(itemIndex, e, v)"
                     ></builder-component>
                     <div v-if="!heading && remove">
                         <i class="action" @click="() => removeItem(itemIndex)">close</i>

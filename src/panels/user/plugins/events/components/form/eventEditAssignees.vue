@@ -218,7 +218,7 @@ onMounted(() => {
     max-height: 80vh;
     overflow: auto;
     width: 100%;
-    max-width: 550px;
+    max-width: 600px;
 }
 
 .loading-container {
