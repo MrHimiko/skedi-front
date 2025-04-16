@@ -11,6 +11,7 @@ import SelectComponent from '@form/select/view.vue';
 import { common } from '@utils/common';
 
 const userStore = UserStore();
+const currentTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
 // State variables
 const currentStep = ref(1);
@@ -327,6 +328,12 @@ const handleSubmit = async () => {
                         <h3 class="step-title">Availability Schedule</h3>
                         <p class="step-description">Set your weekly availability for this event type.</p>
                         
+                        <!-- Add timezone info message -->
+                        <div class="timezone-info">
+                            <i class="info-icon">info</i>
+                            <p>Times are displayed in your local timezone ({{ currentTimezone }}), but stored in UTC for consistency.</p>
+                        </div>
+                        
                         <div class="schedule-section">
                             <edit-time
                                 @update="updateSchedule"
@@ -476,4 +483,27 @@ const handleSubmit = async () => {
 .durations-section :deep(.event-durations p) {
     display: none;
 }
+
+
+
+.timezone-info {
+    display: flex;
+    align-items: center;
+    background-color: var(--background-1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 20px;
+    gap: 10px;
+}
+
+.timezone-info .info-icon {
+    color: var(--brand-default);
+}
+
+.timezone-info p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0;
+}
+
 </style>

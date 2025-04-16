@@ -24,6 +24,7 @@ const isSubmitting = ref(false);
 const eventData = ref(null);
 const scheduleData = ref(null);
 const errorMessage = ref('');
+const currentTimezone = ref('');
 
 // Method to handle the schedule update from the EditTime component
 const updateSchedule = (data) => {
@@ -33,6 +34,10 @@ const updateSchedule = (data) => {
 
 // Fetch the current event data when the component is mounted
 onMounted(async () => {
+    // Get and format the current timezone
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    currentTimezone.value = timeZone;
+    
     try {
         isLoading.value = true;
         errorMessage.value = '';
@@ -113,6 +118,11 @@ const handleSubmit = async () => {
             </div>
             
             <div v-else class="form-section">
+                <!-- Timezone info message -->
+                <div class="timezone-info">
+                    <i class="info-icon">info</i>
+                    <p>Times are displayed in your local timezone ({{ currentTimezone }}), but stored in UTC for consistency.</p>
+                </div>
 
                 <!-- EditTime Component -->
                 <div class="content scrollable">
@@ -181,5 +191,26 @@ const handleSubmit = async () => {
 .schedule-section {
     border-top: 1px solid var(--border);
     padding-top: 20px;
+}
+
+/* New timezone info styles */
+.timezone-info {
+    display: flex;
+    align-items: center;
+    background-color: var(--background-1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 20px;
+    gap: 10px;
+}
+
+.timezone-info .info-icon {
+    color: var(--brand-default);
+}
+
+.timezone-info p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0;
 }
 </style>

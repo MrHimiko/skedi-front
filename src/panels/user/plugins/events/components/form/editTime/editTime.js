@@ -19,6 +19,47 @@ const generateTimeOptions = () => {
     return options;
 };
 
+// Convert local time string to UTC time string
+const convertLocalTimeToUTC = (timeString) => {
+    if (!timeString) return timeString;
+    
+    // Format: "HH:MM" or "HH:MM:SS"
+    const [hours, minutes, seconds = '00'] = timeString.split(':');
+    
+    // Create date with today's date and the specified time in local timezone
+    const localDate = new Date();
+    localDate.setHours(parseInt(hours, 10));
+    localDate.setMinutes(parseInt(minutes, 10));
+    localDate.setSeconds(parseInt(seconds, 10));
+    
+    // Convert to UTC time strings
+    const utcHours = localDate.getUTCHours().toString().padStart(2, '0');
+    const utcMinutes = localDate.getUTCMinutes().toString().padStart(2, '0');
+    const utcSeconds = localDate.getUTCSeconds().toString().padStart(2, '0');
+    
+    return `${utcHours}:${utcMinutes}:${utcSeconds}`;
+};
+
+// Convert UTC time string to local time string
+const convertUTCToLocalTime = (timeString) => {
+    if (!timeString) return timeString;
+    
+    // Format: "HH:MM" or "HH:MM:SS"
+    const [hours, minutes, seconds = '00'] = timeString.split(':');
+    
+    // Create date with today's date and the specified UTC time
+    const date = new Date();
+    date.setUTCHours(parseInt(hours, 10));
+    date.setUTCMinutes(parseInt(minutes, 10));
+    date.setUTCSeconds(parseInt(seconds, 10));
+    
+    // Get local hours and minutes
+    const localHours = date.getHours().toString().padStart(2, '0');
+    const localMinutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${localHours}:${localMinutes}`;
+};
+
 export const timeLogic = (props, emit) => {
     // Default structure for a day's schedule
     const createDefaultDay = (name) => ({
@@ -64,20 +105,20 @@ export const timeLogic = (props, emit) => {
                     
                     // Only apply times and breaks if the day is enabled
                     if (dayData.enabled) {
-                        // Update times (remove seconds part if present)
+                        // Update times (convert from UTC to local)
                         if (dayData.start_time) {
-                            days[index].startTime = dayData.start_time.substring(0, 5);
+                            days[index].startTime = convertUTCToLocalTime(dayData.start_time);
                         }
                         
                         if (dayData.end_time) {
-                            days[index].endTime = dayData.end_time.substring(0, 5);
+                            days[index].endTime = convertUTCToLocalTime(dayData.end_time);
                         }
                         
-                        // Update breaks/pauses
+                        // Update breaks/pauses (convert from UTC to local)
                         if (dayData.breaks && Array.isArray(dayData.breaks)) {
                             days[index].pauses = dayData.breaks.map(breakItem => ({
-                                startTime: breakItem.start_time.substring(0, 5),
-                                endTime: breakItem.end_time.substring(0, 5)
+                                startTime: convertUTCToLocalTime(breakItem.start_time),
+                                endTime: convertUTCToLocalTime(breakItem.end_time)
                             }));
                         }
                     }
@@ -89,35 +130,35 @@ export const timeLogic = (props, emit) => {
         }
     });
 
-    // Map our component format to the API format
+    // Map our component format to the API format with UTC conversion
     const mapToApiFormat = () => {
         const schedule = {};
         
         days.forEach(day => {
             const dayName = day.name.toLowerCase();
             if (day.enabled) {
-                // Format time to include seconds
-                const startTime = day.startTime + ':00';
-                const endTime = day.endTime + ':00';
+                // Convert local time to UTC time
+                const startTimeUTC = convertLocalTimeToUTC(day.startTime + ':00');
+                const endTimeUTC = convertLocalTimeToUTC(day.endTime + ':00');
                 
-                // Map pauses to breaks with proper time format
+                // Map pauses to breaks with proper time format in UTC
                 const breaks = day.pauses.map(pause => ({
-                    start_time: pause.startTime + ':00',
-                    end_time: pause.endTime + ':00'
+                    start_time: convertLocalTimeToUTC(pause.startTime + ':00'),
+                    end_time: convertLocalTimeToUTC(pause.endTime + ':00')
                 }));
                 
                 schedule[dayName] = {
                     enabled: true,
-                    start_time: startTime,
-                    end_time: endTime,
+                    start_time: startTimeUTC,
+                    end_time: endTimeUTC,
                     breaks: breaks
                 };
             } else {
-                // Always include disabled days with default times
+                // Always include disabled days with default times (in UTC)
                 schedule[dayName] = {
                     enabled: false,
-                    start_time: '09:00:00',
-                    end_time: '17:00:00',
+                    start_time: convertLocalTimeToUTC('09:00:00'),
+                    end_time: convertLocalTimeToUTC('17:00:00'),
                     breaks: []
                 };
             }
