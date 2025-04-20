@@ -9,12 +9,10 @@
     import { storage } from '@utils/storage' 
 
     import { MenuStore } from '@stores/menu'
-    import { UserStore } from '@stores/user'
 
-    import ToggleComponent from '@form/toggle/view.vue'
-
+    import TimezoneSelector from '@global/timezone-selector/view.vue';
+    
     const menuStore = MenuStore()
-    const userStore = UserStore()
 
     const route = useRoute()
 
@@ -61,18 +59,8 @@
         }
     }
 
-    function closeChildren() 
-    {
-        storage.set('sidebar.parent', null, false)
-        
-        minimized.value = storage.get('sidebar.minimized')
-        parent.value = null
-    }
 
-    function toggleScheme(value) 
-    {
-        new scheme().set(value ? 'dark' : 'light')
-    }
+
 </script>
 
 <template>
@@ -114,6 +102,10 @@
                             </div>
                         </router-link>
                     </div>
+                </div>
+
+                <div class="sidebar-footer">
+                    <timezone-selector />
                 </div>
 
             </div>

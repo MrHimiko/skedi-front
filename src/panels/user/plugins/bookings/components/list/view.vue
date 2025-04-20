@@ -172,8 +172,9 @@ function getMeetingPlatform(booking) {
         <!-- Booking Item -->
         <div v-else class="booking-card">
           <!-- Time indicator and color bar -->
-          <div class="time-indicator" :style="{ backgroundColor: item.color || '#6c5ce7' }">
-            {{ item.formattedStart }} - {{ item.formattedEnd }}
+          <div class="time-indicator">
+            <div class="clr-box" :style="{ backgroundColor: item.color || '#FFDE0E' }"> </div>
+            {{ item.formattedStart || '--:--' }} - {{ item.formattedEnd || '--:--' }}
           </div>
           
           <!-- Booking details -->
@@ -195,6 +196,7 @@ function getMeetingPlatform(booking) {
             <!-- Meeting platform -->
             <div class="meeting-platform">
               {{ getMeetingPlatform(item).name }}
+              {{ item.id }}
             </div>
             
             <!-- Details button -->
@@ -216,7 +218,7 @@ function getMeetingPlatform(booking) {
                     onClick: ($event, action) => handleBookingAction($event, action, item)
                   }
                 }"
-                as="tertiary icon"
+                as="tertiary icon size36"
                 :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
               />
             </div>
@@ -232,6 +234,12 @@ function getMeetingPlatform(booking) {
   margin-bottom: 30px;
 }
 
+.bookings-container {
+  border: 1px solid var(--border);
+  overflow: hidden;
+  border-radius: 6px;
+}
+
 .loading-state,
 .empty-state {
   padding: 20px;
@@ -242,49 +250,54 @@ function getMeetingPlatform(booking) {
 }
 
 .date-header {
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 10px 0;
-  margin: 10px 0;
+  font-weight: 500;
+  background-color: var(--background-1);
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border);
 }
 
 .booking-card {
   display: flex;
   align-items: center;
-  padding: 15px;
-  margin-bottom: 10px;
+  padding: 20px;
   background-color: var(--background-0);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border-bottom: 1px solid var(--border);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.booking-item:last-of-type .booking-card {border-bottom: none;}
+
+
 /* Hover effect */
 .booking-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+
 }
 
 .time-indicator {
-  padding: 8px 10px;
-  border-radius: 8px;
-  color: var(--white);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap:15px;
   text-align: center;
+}
+
+.time-indicator > div {
+  width: 24px;
+  height: 10px;
+  border-radius: 100px;
 }
 
 .booking-details {
   flex: 1;
-  margin-left: 15px;
+  margin-left: 65px;
 }
 
 .booking-title {
   font-weight: 600;
   margin-bottom: 5px;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .booking-attendees {
@@ -309,6 +322,8 @@ function getMeetingPlatform(booking) {
 .meeting-platform {
   font-size: 13px;
   color: var(--text-secondary);
+  margin-right: 50px;
+  min-width: 150px;
 }
 
 /* Now section styles */

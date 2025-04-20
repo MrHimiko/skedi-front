@@ -74,6 +74,12 @@
     min-width: 30px;
 }
 
+.c-button.icon.size36 {
+    height: 36px;
+    width: 36px;
+    max-width: 36px;
+}
+
 
 
 /* Icons */

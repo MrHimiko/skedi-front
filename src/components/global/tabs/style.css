@@ -2,8 +2,11 @@
 {
     display: flex;
     align-items: center;
-    border-bottom: 1px solid var(--border);
-    gap: var(--spacing-4xl);
+    border: 1px solid var(--border);
+    max-width: max-content;
+    background-color: var(--background-1);
+    padding: 4px 5px;
+    border-radius: 10px;
 }
 
 .c-tabs.column 
@@ -18,31 +21,29 @@
     align-items: center;
     transition: all 0.2s ease;
     border-bottom: 2px solid transparent;
-    padding: var(--spacing-xl) 0;
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 400;
     gap: var(--spacing-lg);
     cursor: pointer;
     line-height: 1;
+    padding: 0 10px;
+    border-radius: 6px;
+    height: 28px;
+    display: flex;
+    align-items: center;
 }
 
-.c-tabs.column > div > * 
-{
-    border-left: 2px solid transparent;
-    border-bottom: unset;
-    padding-left: var(--spacing-xl);
-}
+
 
 .c-tabs:not(.column) > div > *:hover 
 {
-    border-bottom: 2px solid var(--brand-default);
+    background-color: var(--background-2);
 }
 
 .c-tabs:not(.column) > div > *.active
 {
-    color: var(--brand-default);
-    border-bottom: 2px solid var(--brand-default);
+    background: var(--black);
+    color: var(--white);
 }
 
 .c-tabs.column > div > *:hover 
