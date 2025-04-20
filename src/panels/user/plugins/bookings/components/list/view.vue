@@ -179,9 +179,13 @@ function getMeetingPlatform(booking) {
           
           <!-- Booking details -->
           <div class="booking-details">
-            <div class="booking-title">
-              {{ item.title }}
+            <div class="booking-title-wrap">
+                <div class="booking-title">
+                  {{ item.title }}
+                </div>
+                <span class="status"> {{ item.status }} </span>
             </div>
+            
             
             <div class="booking-attendees">
               <span class="attendee-label">
@@ -292,6 +296,27 @@ function getMeetingPlatform(booking) {
 .booking-details {
   flex: 1;
   margin-left: 65px;
+}
+
+.booking-title-wrap {
+  display: flex;
+  gap:15px;
+}
+
+.booking-title-wrap span {
+  padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.booking-item.confirmed .booking-title-wrap span{
+  display: none;
 }
 
 .booking-title {
