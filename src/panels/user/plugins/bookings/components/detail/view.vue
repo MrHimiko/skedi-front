@@ -2,9 +2,16 @@
 import { ref, onMounted } from 'vue';
 import { BookingsService } from '@user_bookings/services/bookings';
 import { common } from '@utils/common';
+import { api } from '@utils/api';
+import { UserStore } from '@stores/user';
 import PopupView from '@layouts/popup/view.vue';
 import Button from '@form/button/view.vue';
-import { PhCalendarCheck, PhClock, PhMapPin, PhUsers, PhVideoCamera, PhClipboard, PhX } from "@phosphor-icons/vue";
+import { 
+  PhCalendarCheck, PhClock, PhMapPin, PhUsers, 
+  PhVideoCamera, PhClipboard, PhX, PhCheck, PhTrash 
+} from "@phosphor-icons/vue";
+import ConfirmComponent from '@floated/confirm/view.vue';
+import { popup } from '@utils/popup';
 
 const props = defineProps({
   bookingId: {
@@ -48,6 +55,58 @@ function getDuration(startTime, endTime) {
   return Math.round(durationMs / (1000 * 60));
 }
 
+// Utility function to change booking status
+async function changeBookingStatus(booking, status) {
+  try {
+    // Extract required IDs from booking
+    const bookingId = booking.id;
+    const eventId = booking.event_id;
+    
+    // Try to get organization ID
+    let organizationId = booking.organization_id;
+    
+    // If no organization_id in booking, try to get from event
+    if (!organizationId && booking.event) {
+      organizationId = booking.event.organization_id;
+    }
+    
+    // If still no organization_id, check if the booking has event_details
+    if (!organizationId && booking.event_details && booking.event_details.organization_id) {
+      organizationId = booking.event_details.organization_id;
+    }
+    
+    // As a last resort, try to get from user's first organization
+    if (!organizationId) {
+      const userStore = UserStore();
+      const orgs = userStore.getOrganizations();
+      if (Array.isArray(orgs) && orgs.length > 0 && orgs[0].entity) {
+        organizationId = orgs[0].entity.id;
+      }
+    }
+    
+    // If we still don't have an organization ID, we can't proceed
+    if (!bookingId || !eventId || !organizationId) {
+      console.error('Missing required booking information:', { bookingId, eventId, organizationId });
+      throw new Error('Missing required booking information');
+    }
+    
+    // Use API to update booking with new status
+    const response = await api.put(
+      `/organizations/${organizationId}/events/${eventId}/bookings/${bookingId}`, 
+      { status }
+    );
+    
+    if (!response || !response.success) {
+      throw new Error(`Failed to change booking status to ${status}`);
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Error changing booking status to ${status}:`, error);
+    throw error;
+  }
+}
+
 // Copy meeting link to clipboard
 async function copyMeetingLink() {
   if (booking.value?.conference_url) {
@@ -62,24 +121,94 @@ async function copyMeetingLink() {
   }
 }
 
-// Cancel booking
-async function cancelBooking() {
-  if (confirm('Are you sure you want to cancel this booking?')) {
-    try {
-      await BookingsService.cancelBooking(booking.value.id);
-      common.notification('Booking canceled successfully', true);
-      
-      // Call callback function if provided
-      if (props.callback) {
-        props.callback(true);
-      }
-      
-      // Close popup
-      document.querySelector('.i-popup-close').click();
-    } catch (error) {
-      common.notification('Error canceling booking', false);
+// Confirm a pending booking
+async function confirmBooking() {
+  try {
+    const updatedBooking = await changeBookingStatus(booking.value, 'confirmed');
+    common.notification('Booking confirmed successfully', true);
+    
+    // Update local booking data with server response
+    if (updatedBooking) {
+      booking.value = updatedBooking;
+    } else {
+      // If no data returned, refresh booking data
+      await loadBookingData();
     }
+    
+    // Call callback function if provided
+    if (props.callback) {
+      props.callback(true);
+    }
+  } catch (error) {
+    common.notification('Error confirming booking: ' + (error.message || 'Unknown error'), false);
   }
+}
+
+// Cancel booking
+function cancelBooking() {
+  popup.open(
+    'cancel-booking-confirm',
+    null,
+    ConfirmComponent,
+    {
+      as: 'red',
+      description: `Are you sure you want to cancel this booking?`,
+      callback: async (event, data, response, success) => {
+        if (success) {
+          try {
+            const updatedBooking = await changeBookingStatus(booking.value, 'canceled');
+            common.notification('Booking canceled successfully', true);
+            
+            // Update local booking data with server response
+            if (updatedBooking) {
+              booking.value = updatedBooking;
+            } else {
+              // If no data returned, refresh booking data
+              await loadBookingData();
+            }
+            
+            // Call callback function if provided
+            if (props.callback) {
+              props.callback(true);
+            }
+          } catch (error) {
+            common.notification('Error canceling booking: ' + (error.message || 'Unknown error'), false);
+          }
+        }
+      }
+    }
+  );
+}
+
+// Remove booking (for canceled bookings)
+function removeBooking() {
+  popup.open(
+    'remove-booking-confirm',
+    null,
+    ConfirmComponent,
+    {
+      as: 'red',
+      description: `Are you sure you want to remove this booking? This action cannot be undone.`,
+      callback: async (event, data, response, success) => {
+        if (success) {
+          try {
+            await changeBookingStatus(booking.value, 'removed');
+            common.notification('Booking removed successfully', true);
+            
+            // Call callback function if provided
+            if (props.callback) {
+              props.callback(true);
+            }
+            
+            // Close popup
+            document.querySelector('.i-popup-close').click();
+          } catch (error) {
+            common.notification('Error removing booking: ' + (error.message || 'Unknown error'), false);
+          }
+        }
+      }
+    }
+  );
 }
 
 // Join meeting
@@ -211,38 +340,63 @@ onMounted(() => {
           </div>
         </div>
         
-        <!-- Actions -->
+        <!-- Actions - conditionally show based on booking status -->
         <div class="actions-section">
-          <!-- Join meeting button -->
-          <Button 
-            v-if="booking.status === 'upcoming' || booking.status === 'active'" 
-            label="Join Meeting" 
-            :iconLeft="{ component: PhVideoCamera, weight: 'bold' }"
-            @click="joinMeeting"
-          />
+          <!-- Pending booking actions -->
+          <template v-if="booking.status === 'pending'">
+            <Button 
+              label="Confirm Booking" 
+              :iconLeft="{ component: PhCheck, weight: 'bold' }"
+              @click="confirmBooking"
+            />
+            
+            <Button 
+              label="Cancel" 
+              as="tertiary"
+              :iconLeft="{ component: PhX, weight: 'bold' }"
+              @click="cancelBooking"
+            />
+          </template>
           
-          <!-- Copy meeting link -->
-          <Button 
-            v-if="booking.conference_url"
-            label="Copy Meeting Link" 
-            as="secondary"
-            :iconLeft="{ component: PhClipboard, weight: 'bold' }"
-            @click="copyMeetingLink"
-          />
+          <!-- Upcoming or active booking actions -->
+          <template v-else-if="booking.status === 'upcoming' || booking.status === 'active'">
+            <Button 
+              label="Join Meeting" 
+              :iconLeft="{ component: PhVideoCamera, weight: 'bold' }"
+              @click="joinMeeting"
+            />
+            
+            <Button 
+              v-if="booking.conference_url"
+              label="Copy Meeting Link" 
+              as="secondary"
+              :iconLeft="{ component: PhClipboard, weight: 'bold' }"
+              @click="copyMeetingLink"
+            />
+            
+            <Button 
+              label="Cancel Booking" 
+              as="tertiary"
+              :iconLeft="{ component: PhX, weight: 'bold' }"
+              @click="cancelBooking"
+            />
+          </template>
           
-          <!-- Cancel button for upcoming bookings -->
-          <Button 
-            v-if="booking.status === 'upcoming'"
-            label="Cancel Booking" 
-            as="tertiary"
-            :iconLeft="{ component: PhX, weight: 'bold' }"
-            @click="cancelBooking"
-          />
+          <!-- Canceled booking actions -->
+          <template v-else-if="booking.status === 'canceled'">
+            <Button 
+              label="Remove Booking" 
+              as="tertiary"
+              :iconLeft="{ component: PhTrash, weight: 'bold' }"
+              @click="removeBooking"
+            />
+          </template>
         </div>
       </div>
     </template>
   </PopupView>
 </template>
+
 
 <style scoped>
 .booking-detail-content {

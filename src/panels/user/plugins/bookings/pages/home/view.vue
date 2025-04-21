@@ -5,7 +5,7 @@ import { storage } from '@utils/storage';
 import { common } from '@utils/common';
 import { BookingsService } from '@user_bookings/services/bookings';
 import { timezoneUtils } from '@utils/timezone';
-const currentTimezone = ref(timezoneUtils.getUserTimezone());
+
 // Layout components
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
@@ -17,13 +17,14 @@ const bookings = ref([]);
 const isLoading = ref(true);
 const currentTab = ref('upcoming');
 const searchQuery = ref('');
+const currentTimezone = ref(timezoneUtils.getUserTimezone());
+const refreshCounter = ref(0);
 
 // Time constants
 const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
 // Fetch bookings based on current tab
-// In the fetchBookings function, modify this part:
 async function fetchBookings() {
     isLoading.value = true;
     
@@ -57,10 +58,11 @@ async function fetchBookings() {
             startTime,
             endTime,
             page: 1,
-            pageSize: 100
+            pageSize: 100,
+            useCache: false // Ensure fresh data on tab switch
         });
         
-        // Access the correct nested data structure - this is the fix
+        // Access the correct nested data structure
         const bookingsData = data.bookings || [];
         
         // Process bookings data
@@ -74,14 +76,14 @@ async function fetchBookings() {
     }
 }
 
-// Process bookings data to add additional properties
+// Process bookings data to add additional properties and organize by date
 function processBookingsData(data) {
     // Handle empty data
     if (!Array.isArray(data) || data.length === 0) {
         return [];
     }
     
-    // Group bookings by date key (which now includes timezone adjustment)
+    // Group bookings by date key (which includes timezone adjustment)
     const groupedBookings = {};
     const now = new Date();
     
@@ -151,10 +153,17 @@ function processBookingsData(data) {
     return processedData;
 }
 
-
 // Handle tab changes
 function handleTabChange(event, tab) {
   currentTab.value = tab.title.toLowerCase();
+  fetchBookings();
+}
+
+// Handle booking refresh
+function handleBookingRefresh() {
+  // Increment counter to force refresh
+  refreshCounter.value++;
+  // Refetch bookings with current tab
   fetchBookings();
 }
 
@@ -188,12 +197,17 @@ onMounted(() => {
   fetchBookings();
 });
 
+// Watch for refresh counter changes
+watch(refreshCounter, () => {
+  fetchBookings();
+});
+
 // Define tabs configuration
 const tabs = [
-  { title: 'Upcoming', active: true },
-  { title: 'Pending', active: false },
-  { title: 'Past', active: false },
-  { title: 'Canceled', active: false }
+  { title: 'Upcoming', active: currentTab.value === 'upcoming' },
+  { title: 'Pending', active: currentTab.value === 'pending' },
+  { title: 'Past', active: currentTab.value === 'past' },
+  { title: 'Canceled', active: currentTab.value === 'canceled' }
 ];
 </script>
 
@@ -204,6 +218,10 @@ const tabs = [
         <HeadingComponent title="Bookings">
             <template #right>
                 <div class="heading-actions">
+                    <div class="timezone-info">
+                        <span class="timezone-label">Timezone:</span>
+                        <span class="timezone-value">{{ currentTimezone }}</span>
+                    </div>
                     <div class="search-container">
                         <input 
                             type="text" 
@@ -227,6 +245,7 @@ const tabs = [
             :bookings="nowBookings" 
             :isLoading="isLoading"
             highlightStyle="now"
+            @refresh="handleBookingRefresh"
           />
         </div>
         
@@ -243,6 +262,7 @@ const tabs = [
         <BookingsList 
           :bookings="filteredBookings" 
           :isLoading="isLoading"
+          @refresh="handleBookingRefresh"
         />
       </div>
     </template>
@@ -313,5 +333,4 @@ const tabs = [
     padding: 4px 8px;
     border-radius: 4px;
 }
-
 </style>

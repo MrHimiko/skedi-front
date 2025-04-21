@@ -1,12 +1,15 @@
-const emit = defineEmits(['refresh']);<script setup>
+<script setup>
 import { ref } from 'vue';
+import { UserStore } from '@stores/user';
 import ButtonComponent from '@form/button/view.vue';
 import { common } from '@utils/common';
 import { BookingsService } from '@user_bookings/services/bookings';
-import { PhCalendar, PhClock, PhUser, PhVideo, PhLink, PhDotsThree } from "@phosphor-icons/vue";
+import { api } from '@utils/api';
+import { PhCalendar, PhClock, PhUser, PhVideo, PhLink, PhDotsThree, PhCheck, PhTrash } from "@phosphor-icons/vue";
 import MenusComponent from '@global/menus/view.vue';
 import BookingDetailView from '@user_bookings/components/detail/view.vue';
 import { popup } from '@utils/popup';
+import ConfirmComponent from '@floated/confirm/view.vue';
 
 const props = defineProps({
   bookings: {
@@ -22,6 +25,8 @@ const props = defineProps({
     default: '' // 'now' for highlighted current bookings
   }
 });
+
+const emit = defineEmits(['refresh']);
 
 // Format date for headers
 function formatDate(date) {
@@ -43,30 +48,101 @@ function formatDate(date) {
   }
 }
 
-// Available actions for bookings menu
-const bookingActions = [
-  { 
-    label: 'Join Meeting',
-    iconComponent: PhVideo,
-    weight: 'bold'
-  },
-  { 
-    label: 'Copy Booking Link', 
-    iconComponent: PhLink,
-    weight: 'bold'
-  },
-  { 
-    label: 'Reschedule',
-    iconComponent: PhCalendar,
-    weight: 'bold'
-  },
-  { 
-    label: 'Cancel',
-    iconComponent: PhClock,
-    weight: 'bold'
+// Get booking actions based on status
+function getBookingActions(booking) {
+  const baseActions = [];
+  
+  // Only add these options for active or upcoming bookings (not canceled)
+  if (booking.status !== 'canceled') {
+    baseActions.push({ 
+      label: 'Join Meeting',
+      iconComponent: PhVideo,
+      weight: 'bold'
+    });
+    
+    baseActions.push({ 
+      label: 'Copy Booking Link', 
+      iconComponent: PhLink,
+      weight: 'bold'
+    });
   }
-];
+  
+  // Add these options for all non-canceled bookings
+  if (booking.status !== 'canceled') {
+    baseActions.push({ 
+      label: 'Reschedule',
+      iconComponent: PhCalendar,
+      weight: 'bold'
+    });
+    
+    baseActions.push({ 
+      label: 'Cancel',
+      iconComponent: PhClock,
+      weight: 'bold'
+    });
+  } else {
+    // For canceled bookings, show 'Remove' instead of 'Cancel'
+    baseActions.push({ 
+      label: 'Remove',
+      iconComponent: PhTrash,
+      weight: 'bold'
+    });
+  }
+  
+  return baseActions;
+}
 
+// Utility function to change booking status
+async function changeBookingStatus(booking, status) {
+  try {
+    // Extract required IDs from booking
+    const bookingId = booking.booking_id;
+    const eventId = booking.event_id;
+    
+    // Try to get organization ID
+    let organizationId = booking.organization_id;
+    
+    // If no organization_id in booking, try to get from event
+    if (!organizationId && booking.event) {
+      organizationId = booking.event.organization_id;
+    }
+    
+    // If still no organization_id, check if the booking has event_details
+    if (!organizationId && booking.event_details && booking.event_details.organization_id) {
+      organizationId = booking.event_details.organization_id;
+    }
+    
+    // As a last resort, try to get from user's first organization
+    if (!organizationId) {
+      const userStore = UserStore();
+      const orgs = userStore.getOrganizations();
+      if (Array.isArray(orgs) && orgs.length > 0 && orgs[0].entity) {
+        organizationId = orgs[0].entity.id;
+      }
+    }
+    
+    // If we still don't have an organization ID, we can't proceed
+    if (!bookingId || !eventId || !organizationId) {
+      console.error('Missing required booking information:', { bookingId, eventId, organizationId });
+      throw new Error('Missing required booking information');
+    }
+    
+    // Use API to update booking with new status
+    const response = await api.put(
+      `organizations/${organizationId}/events/${eventId}/bookings/${bookingId}`, 
+      { status }
+    );
+    
+    if (!response || !response.success) {
+      throw new Error(`Failed to change booking status to ${status}`);
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Error changing booking status to ${status}:`, error);
+    throw error;
+  }
+}
 // Handle booking action clicks
 async function handleBookingAction(event, action, booking) {
   switch(action.label) {
@@ -93,17 +169,64 @@ async function handleBookingAction(event, action, booking) {
       break;
       
     case 'Cancel':
-      if (confirm('Are you sure you want to cancel this booking?')) {
-        try {
-          await BookingsService.cancelBooking(booking.id);
-          common.notification('Booking canceled successfully', true);
-          // Emit event to refresh the bookings list
-          emit('refresh');
-        } catch (error) {
-          common.notification('Error canceling booking', false);
+      popup.open(
+        'cancel-booking-confirm',
+        null,
+        ConfirmComponent,
+        {
+          as: 'red',
+          description: `Are you sure you want to cancel this booking?`,
+          callback: async (event, data, response, success) => {
+            if (success) {
+              try {
+                await changeBookingStatus(booking, 'canceled');
+                common.notification('Booking canceled successfully', true);
+                // Emit event to refresh the bookings list
+                emit('refresh');
+              } catch (error) {
+                common.notification('Error canceling booking: ' + (error.message || 'Unknown error'), false);
+              }
+            }
+          }
         }
-      }
+      );
       break;
+      
+    case 'Remove':
+      popup.open(
+        'remove-booking-confirm',
+        null,
+        ConfirmComponent,
+        {
+          as: 'red',
+          description: `Are you sure you want to remove this canceled booking?`,
+          callback: async (event, data, response, success) => {
+            if (success) {
+              try {
+                await changeBookingStatus(booking, 'removed');
+                common.notification('Booking removed successfully', true);
+                // Emit event to refresh the bookings list
+                emit('refresh');
+              } catch (error) {
+                common.notification('Error removing booking: ' + (error.message || 'Unknown error'), false);
+              }
+            }
+          }
+        }
+      );
+      break;
+  }
+}
+
+// Confirm a pending booking
+async function confirmBooking(booking) {
+  try {
+    await changeBookingStatus(booking, 'confirmed');
+    common.notification('Booking confirmed successfully', true);
+    // Emit event to refresh the bookings list
+    emit('refresh');
+  } catch (error) {
+    common.notification('Error confirming booking: ' + (error.message || 'Unknown error'), false);
   }
 }
 
@@ -115,6 +238,7 @@ function openBookingDetail(booking) {
     BookingDetailView,
     {
       bookingId: booking.id,
+      bookingData: booking, // Pass full booking data for direct access
       callback: (needsRefresh) => {
         if (needsRefresh) {
           // Emit event to refresh the bookings list
@@ -179,13 +303,17 @@ function getMeetingPlatform(booking) {
           
           <!-- Booking details -->
           <div class="booking-details">
-            <div class="booking-title-wrap">
-                <div class="booking-title">
-                  {{ item.title }}
-                </div>
-                <span class="status"> {{ item.status }} </span>
+            <div class="booking-title">
+              {{ item.title }}
+              {{ item.booking_id }}
+              <!-- Status badge for pending or canceled -->
+              <span v-if="item.status === 'pending'" class="status-badge pending">
+                Pending
+              </span>
+              <span v-if="item.status === 'canceled'" class="status-badge canceled">
+                Canceled
+              </span>
             </div>
-            
             
             <div class="booking-attendees">
               <span class="attendee-label">
@@ -200,25 +328,32 @@ function getMeetingPlatform(booking) {
             <!-- Meeting platform -->
             <div class="meeting-platform">
               {{ getMeetingPlatform(item).name }}
-              {{ item.id }}
             </div>
             
-            <!-- Details button -->
-            <div class="details-button">
+            <!-- Buttons section -->
+            <div class="actions-buttons">
+              <!-- Confirm button for pending bookings -->
+              <ButtonComponent 
+                v-if="item.status === 'pending'"
+                label="Confirm" 
+                as="secondary"
+                :iconLeft="{ component: PhCheck, weight: 'bold' }"
+                @click="confirmBooking(item)"
+              />
+              
+              <!-- Details button for all bookings -->
               <ButtonComponent 
                 label="Details" 
                 as="tertiary"
                 @click="openBookingDetail(item)"
               />
-            </div>
-            
-            <!-- Actions menu -->
-            <div class="actions-menu">
+              
+              <!-- Actions menu -->
               <ButtonComponent 
                 v-dropdown="{ 
                   component: MenusComponent,
                   properties: {
-                    menus: bookingActions,
+                    menus: getBookingActions(item),
                     onClick: ($event, action) => handleBookingAction($event, action, item)
                   }
                 }"
@@ -232,6 +367,8 @@ function getMeetingPlatform(booking) {
     </div>
   </div>
 </template>
+
+
 
 <style scoped>
 .bookings-list {
@@ -271,12 +408,6 @@ function getMeetingPlatform(booking) {
 
 .booking-item:last-of-type .booking-card {border-bottom: none;}
 
-
-/* Hover effect */
-.booking-card:hover {
-
-}
-
 .time-indicator {
   font-size: 13px;
   font-weight: 400;
@@ -298,31 +429,31 @@ function getMeetingPlatform(booking) {
   margin-left: 65px;
 }
 
-.booking-title-wrap {
-  display: flex;
-  gap:15px;
-}
-
-.booking-title-wrap span {
-  padding: 2px 8px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    font-weight: 500;
-    font-size: 12px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.booking-item.confirmed .booking-title-wrap span{
-  display: none;
-}
-
 .booking-title {
   font-weight: 600;
   margin-bottom: 5px;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Status badges */
+.status-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.status-badge.pending {
+  background-color: #fff8e1;
+  color: #ff8f00;
+}
+
+.status-badge.canceled {
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .booking-attendees {
@@ -347,8 +478,13 @@ function getMeetingPlatform(booking) {
 .meeting-platform {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-right: 50px;
-  min-width: 150px;
+  margin-right: 20px;
+}
+
+.actions-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 /* Now section styles */

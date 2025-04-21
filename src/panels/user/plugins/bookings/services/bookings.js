@@ -1,19 +1,19 @@
 import { api } from '@utils/api';
 import { UserStore } from '@stores/user';
 import { timezoneUtils } from '@utils/timezone';
-import { storage } from '@utils/storage'
-
+import { storage } from '@utils/storage';
 
 /**
- * BookingsService - Service for managing bookings
- * Optimized for scalability with 500K+ users
+ * BookingsService - Enhanced service for managing bookings
+ * With support for pending and canceled bookings status management
  */
 export class BookingsService {
 	// Cache bookings to reduce API calls
 	static bookingsCache = {
 		upcoming: { data: [], timestamp: 0 },
 		past: { data: [], timestamp: 0 },
-		cancelled: { data: [], timestamp: 0 },
+		canceled: { data: [], timestamp: 0 },
+		pending: { data: [], timestamp: 0 },
 		active: { data: [], timestamp: 0 },
 		all: { data: [], timestamp: 0 }
 	};
@@ -256,48 +256,51 @@ export class BookingsService {
 		}
 	}
 	
-	/**
-	 * Cancel a booking with optimized error handling
-	 */
-	static async cancelBooking(id) {
+	static async changeBookingStatus(id, eventId, organizationId, status) {
 		try {
-			const userId = this.getCurrentUserId();
-			const booking = await this.getBooking(id);
+			// The API expects a data object containing the status
+			const data = { status };
 			
-			// If it's an internal booking with event_id and booking_id, use the event booking API
-			if (booking.source === 'internal' && booking.event_id && booking.booking_id) {
-				let organizationId = booking.organization_id;
-				if (!organizationId) {
-					const userStore = UserStore();
-					organizationId = userStore.getSelectedOrganizationId();
-				}
-				
-				if (organizationId) {
-					// Use EventBookingController's cancel endpoint
-					const response = await api.put(`organizations/${organizationId}/events/${booking.event_id}/bookings/${booking.booking_id}/cancel`);
-					
-					if (response && response.success) {
-						// Clear all caches after cancellation
-						this.clearCache();
-						return response.data;
-					}
-				}
-			} else {
-				// Use the UserBookingsController cancellation method
-				const response = await api.put(`user/${userId}/bookings/${id}/cancel`);
-				
-				if (response && response.success) {
-					this.clearCache();
-					return response.data;
-				}
+			// Call the update endpoint with the new status
+			const response = await api.put(
+				`organizations/${organizationId}/events/${eventId}/bookings/${id}`, 
+				data
+			);
+			
+			if (response && response.success) {
+				// Clear all caches after status change
+				this.clearCache();
+				return response.data;
 			}
 			
-			throw new Error('Failed to cancel booking');
+			throw new Error(`Failed to change booking status to ${status}`);
 		} catch (error) {
-			console.error(`Error canceling booking ${id}:`, error);
+			console.error(`Error changing booking status (${id}) to ${status}:`, error);
 			throw error;
 		}
 	}
+	
+	/**
+	 * Confirm a pending booking
+	 */
+	static async confirmBooking(id, eventId, organizationId) {
+		return this.changeBookingStatus(id, eventId, organizationId, 'confirmed');
+	}
+	
+	/**
+	 * Cancel a booking
+	 */
+	static async cancelBooking(id, eventId, organizationId) {
+		return this.changeBookingStatus(id, eventId, organizationId, 'canceled');
+	}
+	
+	/**
+	 * Remove a booking
+	 */
+	static async removeBooking(id, eventId, organizationId) {
+		return this.changeBookingStatus(id, eventId, organizationId, 'removed');
+	}
+
 	
 	/**
 	 * Get bookings with efficient pagination (for scaling to large datasets)
@@ -411,8 +414,9 @@ export class BookingsService {
 		}
 	}
 
-
-
+	/**
+	 * Handle timezone conversion for displaying bookings
+	 */
 	static handleTimezoneConversion(bookings) {
 		if (!bookings || !Array.isArray(bookings)) return [];
 		
@@ -474,5 +478,4 @@ export class BookingsService {
 			}
 		});
 	}
-	
 }
