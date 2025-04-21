@@ -1,19 +1,31 @@
 <script setup>
     import './style.css';
 
-    import { togglePasswordVisibility } from './logic'
+    import { togglePasswordVisibility, handleSubmit } from './logic';
+    import { form } from '@utils/form';
 
     import HeaderComponent from '@account/components/header/view.vue';
     import InputComponent from '@form/input/view.vue';
     import ButtonComponent from '@form/button/view.vue';
-    import { PhSignIn, PhPassword, PhEye, PhEnvelopeSimple } from "@phosphor-icons/vue";
+    import { PhSignIn, PhPassword, PhEye, PhEnvelopeSimple, PhUser } from "@phosphor-icons/vue";
 </script>
 
 <template>
     <div class="account-c-register p-4xl">
         <header-component :google="true" heading="Sign up" separator="or sign up with email" />
 
-        <form>
+        <form @submit="event => form.toAPI(event, 'POST', 'account/register', handleSubmit)">
+            <input-component 
+                name="name" 
+                label="Full Name" 
+                type="text" 
+                placeholder="Enter your full name" 
+                :iconLeft="{ component: PhUser, weight: 'bold' }" 
+                :required="true"
+            />
+
+            <div class="p-2xl"></div>
+
             <input-component 
                 name="email" 
                 label="E-mail" 

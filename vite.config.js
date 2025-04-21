@@ -54,6 +54,7 @@ export default defineConfig({
     },
     server: {
         hmr: true,
+        host: '0.0.0.0',
         allowedHosts: ['app.skedi.com', 'front.skedi.com']
     },
     preview: {

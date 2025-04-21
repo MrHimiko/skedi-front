@@ -86,12 +86,11 @@ onMounted(() => {
                     </a>
                     <div class="separator"></div>
                     <div class="actions">
-                        <button-component label="Copy Url" v-tooltip="{ content: 'Copy URL' }" as="tertiary icon"
+                        <button-component v-tooltip="{ content: 'Copy URL' }" as="tertiary icon"
                             :iconLeft="{ component: PhLink, weight: 'bold' }" />
-                        <button-component label="Embed on site" v-tooltip="{ content: 'Embed on a website' }" as="tertiary icon"
+                        <button-component v-tooltip="{ content: 'Embed on a website' }" as="tertiary icon"
                             :iconLeft="{ component: PhCode, weight: 'bold' }" />
                         <button-component 
-                            label="Settings"
                             v-popup="{
                                 component: OrganizationEditForm,
                                 overlay: { position: 'center' },
