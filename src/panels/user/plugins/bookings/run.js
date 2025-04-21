@@ -1,3 +1,4 @@
+import { PhCalendarCheck} from "@phosphor-icons/vue";
 export default class
 {
     constructor(app, router, stores) 
@@ -27,7 +28,6 @@ export default class
 
     sidebar() 
     {
-        // Add bookings to sidebar menu
-        this.stores.menu.add('sidebar:top', 'Bookings', 'calendar_month', '/bookings');
+        this.stores.menu.add('sidebar:top', 'Bookings', { component: PhCalendarCheck, weight: 'bold' }, '/bookings');
     }
 }

@@ -65,6 +65,7 @@
     color: var(--text-secondary);
     font-weight: 500;
     font-size: 12px;
+    margin-bottom: 10px;
 }
 
 
@@ -141,7 +142,6 @@
 /* Switcher */
 .c-sidebar .switcher 
 {
-    margin: 0 15px;
     background-color: var(--background-0);
     border-radius: 10px;
     margin-bottom: var(--spacing-2xl);
@@ -215,5 +215,9 @@
 
 
 .c-sidebar > .left > .bottom {
-    padding: 0 var(--spacing-xl);
+    padding: 0 15px;
+}
+
+.c-sidebar > .left > .top {
+    padding: 0 15px;
 }

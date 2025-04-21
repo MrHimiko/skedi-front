@@ -1,3 +1,4 @@
+
 export default class 
 {
     constructor(app, router, stores) 
@@ -26,6 +27,6 @@ export default class
 
     sidebar() 
     {
-        this.stores.menu.add('sidebar:bottom', 'Activity', 'history', '/activity/logs');
+       
     }
 }

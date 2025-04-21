@@ -1,3 +1,4 @@
+import { PhLink} from "@phosphor-icons/vue";
 export default class
 {
     constructor(app, router, stores) 
@@ -28,6 +29,6 @@ export default class
 
     sidebar() 
     {
-        this.stores.menu.add('sidebar:top', 'Event Types', 'sticky_note_2', '/events');
+        this.stores.menu.add('sidebar:top', 'Event Types', { component: PhLink, weight: 'bold' }, '/events');
     }
 }

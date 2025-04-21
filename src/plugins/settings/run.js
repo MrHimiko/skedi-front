@@ -37,6 +37,6 @@ export default class
 
     sidebar() 
     {
-        this.stores.menu.add('sidebar:bottom', 'Settings', 'settings', '/settings');
+     
     }
 }

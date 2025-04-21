@@ -81,8 +81,9 @@ onMounted(() => {
 
 <style>
 .timezone-selector {
-    padding: 15px;
     border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-top: 10px;
 }
 
 .selector-label {

@@ -8,7 +8,6 @@ export default class
         this.router = router;
         this.stores = stores;
 
-        this.stores.menu.add('sidebar:top', 'Builder', 'library_add', '/builder');
 
         settingCompany(this.stores);
     }

@@ -1,3 +1,4 @@
+import { PhGridNine } from "@phosphor-icons/vue";
 export default class
 {
     constructor(app, router, stores) 
@@ -28,6 +29,6 @@ export default class
 
     sidebar() 
     {
-        this.stores.menu.add('sidebar:top', 'Dashboard', 'sticky_note_2', '/');
+        this.stores.menu.add('sidebar:top', 'Dashboard', { component: PhGridNine, weight: 'bold' }, '/');
     }
 }

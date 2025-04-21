@@ -1,19 +1,14 @@
 <script setup>
     import './style.css'
     import { ref } from 'vue'
-
-    import scheme from '@/other/logic/scheme'
-
     import { useRoute } from 'vue-router'
-
     import { storage } from '@utils/storage' 
-
     import { MenuStore } from '@stores/menu'
-
-    import TimezoneSelector from '@global/timezone-selector/view.vue';
+    import TimezoneSelector from '@global/timezone-selector/view.vue'
+    
+    import { PhTextOutdent } from "@phosphor-icons/vue";
     
     const menuStore = MenuStore()
-
     const route = useRoute()
 
     const minimized = ref(storage.get('sidebar.minimized'))
@@ -60,7 +55,12 @@
     }
 
 
-
+    function isRouteActive(menuLink) {
+        if (!menuLink || menuLink === '/') {
+            return route.path === '/'
+        }
+        return route.path.startsWith(menuLink)
+    }
 </script>
 
 <template>
@@ -72,18 +72,33 @@
                         <div class="logo"></div>
                     </div>
 
-                    <i @click="toggle" class="action">menu_open</i>
+                    <PhTextOutdent class="action" weight="bold" @click="toggle" />
+                </div>
+
+                <div v-if="!minimized" class="separator">
+                    <p>Main menu</p>
                 </div>
 
                 <div class="menus">
                     <div @click="openChildren(menu)" v-for="(menu, index) in menuStore.get('sidebar:top')" :key="index">
-                        <div :class="parent === menu ? 'active' : ''" :key="minimized" v-tooltip="minimized ? {content: menu.label, options: { placement: 'right' }} : null">
+                        <router-link 
+                            :to="menu.link" 
+                            :class="{ 'active': isRouteActive(menu.link) }" 
+                            :key="minimized" 
+                            v-tooltip="minimized ? {content: menu.label, options: { placement: 'right' }} : null"
+                        >
                             <div>
-                                <i v-if="menu.icon">{{ menu.icon }}</i>
+                                <!-- Support both component-based and string-based icons -->
+                                <component 
+                                    v-if="typeof menu.icon === 'object' && menu.icon.component" 
+                                    :is="menu.icon.component" 
+                                    :weight="menu.icon.weight || 'bold'" 
+                                    class="phosphor-icon"
+                                />
+                                <i v-else-if="menu.icon">{{ menu.icon }}</i>
                                 <span class="ellipsis ellipsis-1" v-if="!minimized"> {{ menu.label }} </span>
                             </div>
-                        </div>
-
+                        </router-link>
                     </div>
                 </div>
             </div>
@@ -95,9 +110,21 @@
 
                 <div class="menus">
                     <div v-for="(menu, index) in menuStore.get('sidebar:bottom')" :key="index">
-                        <router-link :to="menu.link" :class="route.path.startsWith(menu.link) && menu.link.length > 1 ? 'active' : ''" :key="minimized" v-tooltip="minimized ? { content: menu.label, options: { placement: 'right' }} : null">
+                        <router-link 
+                            :to="menu.link" 
+                            :class="{ 'active': isRouteActive(menu.link) }" 
+                            :key="minimized" 
+                            v-tooltip="minimized ? { content: menu.label, options: { placement: 'right' }} : null"
+                        >
                             <div>
-                                <i v-if="menu.icon">{{ menu.icon }}</i>
+                                <!-- Support both component-based and string-based icons -->
+                                <component 
+                                    v-if="typeof menu.icon === 'object' && menu.icon.component" 
+                                    :is="menu.icon.component" 
+                                    :weight="menu.icon.weight || 'bold'" 
+                                    class="phosphor-icon"
+                                />
+                                <i v-else-if="menu.icon">{{ menu.icon }}</i>
                                 <span class="ellipsis ellipsis-1" v-if="!minimized"> {{ menu.label }} </span>
                             </div>
                         </router-link>
@@ -107,10 +134,7 @@
                 <div class="sidebar-footer">
                     <timezone-selector />
                 </div>
-
             </div>
-        </div>
-
-        
+        </div>   
     </div>
 </template>
