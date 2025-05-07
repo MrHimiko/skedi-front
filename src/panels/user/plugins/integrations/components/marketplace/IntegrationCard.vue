@@ -2,7 +2,6 @@
 <script setup>
     import { ref, onMounted, watch } from 'vue';
     import { common } from '@utils/common';
-    import { IntegrationsManager } from '@user_integrations/services/IntegrationsManager';
     import IntegrationProviders from '@user_integrations/providers';
     
     import Button from '@form/button/view.vue';
@@ -70,34 +69,22 @@
     // Handle connect button click - OAuth process
     function handleConnect() {
         try {
-            if (!props.integration || !props.integration.id) {
-                common.notification('Invalid integration', false);
+            if (!provider.value) {
+                common.notification('Provider not available', false);
                 return;
             }
             
             isConnecting.value = true;
             
             // Start the OAuth flow using the provider instance directly
-            if (provider.value) {
-                provider.value.startOAuthFlow((success) => {
-                    isConnecting.value = false;
-                    
-                    if (success) {
-                        isConnected.value = true;
-                        emit('connect', props.integration.id);
-                    }
-                });
-            } else {
-                // Fallback to using IntegrationsManager
-                IntegrationsManager.startOAuthFlow(props.integration.id, (success) => {
-                    isConnecting.value = false;
-                    
-                    if (success) {
-                        isConnected.value = true;
-                        emit('connect', props.integration.id);
-                    }
-                });
-            }
+            provider.value.startOAuthFlow((success) => {
+                isConnecting.value = false;
+                
+                if (success) {
+                    isConnected.value = true;
+                    emit('connect', props.integration.id);
+                }
+            });
         } catch (error) {
             console.error('Error connecting to integration:', error);
             common.notification('Failed to connect to integration', false);
@@ -105,16 +92,10 @@
         }
     }
     
-    // Open details dialog
-    function openDetails() {
-        // TODO: Implement details view
-        common.notification(`${props.integration.name} integration details`, true);
-    }
-    
     // Handle disconnect
     function handleDisconnect() {
-        if (!props.integration || !props.integration.id) {
-            common.notification('Invalid integration', false);
+        if (!provider.value) {
+            common.notification('Provider not available', false);
             return;
         }
         
@@ -127,15 +108,7 @@
                 description: `Are you sure you want to disconnect from ${props.integration.name}?`,
                 callback: async () => {
                     try {
-                        // Use the provider instance directly if available
-                        let result = false;
-                        
-                        if (provider.value) {
-                            result = await provider.value.disconnect();
-                        } else {
-                            // Fallback to using IntegrationsManager
-                            result = await IntegrationsManager.disconnect(props.integration.id);
-                        }
+                        const result = await provider.value.disconnect();
                         
                         if (result) {
                             isConnected.value = false;
@@ -153,6 +126,12 @@
                 position: 'center'
             }
         );
+    }
+    
+    // Open details dialog
+    function openDetails() {
+        // TODO: Implement details view
+        common.notification(`${props.integration.name} integration details`, true);
     }
 </script>
 
@@ -189,9 +168,6 @@
             />
             
             <div v-else class="connected-status">
-                <div class="connected-badge">
-                    Connected
-                </div>
                 <Button 
                     label="Disconnect"
                     as="tertiary"
@@ -201,7 +177,6 @@
         </div>
     </div>
 </template>
-
 <style scoped>
 .integration-card {
     background-color: var(--background-0);

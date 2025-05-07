@@ -1,8 +1,8 @@
-<!-- src/panels/user/plugins/integrations/pages/home/view.vue -->
+// src/panels/user/plugins/integrations/pages/home/view.vue
 <script setup>
     import { ref, computed, onMounted } from 'vue';
-    import { api } from '@utils/api';
     import { common } from '@utils/common';
+    import IntegrationProviders from '@user_integrations/providers';
     
     import MainLayout from '@layouts/main/view.vue';
     import HeadingComponent from '@global/heading/view.vue';
@@ -10,109 +10,52 @@
     import Button from '@form/button/view.vue';
     
     // State management
-    const integrations = ref([]);
-    const userIntegrations = ref([]);
+    const providers = ref([]);
     const isLoading = ref(true);
     const activeTab = ref('installed');
     
-    // Sample integrations data (replace with API call later)
-    const sampleIntegrations = [
-        {
-            id: 'google_calendar',
-            name: 'Google Calendar',
-            description: 'Connect your Google Calendar to automatically manage scheduling, availability, and sync events.',
-            icon: 'google_calendar',
-            category: 'calendar',
-            isInstalled: false
-        },
-        {
-            id: 'google_meet',
-            name: 'Google Meet',
-            description: 'Google Meet is Google\'s web-based video conferencing platform, designed to compete with major conferencing platforms.',
-            icon: 'google_meet',
-            category: 'conferencing',
-            isInstalled: false
-        },
-        {
-            id: 'outlook_calendar',
-            name: 'Outlook Calendar',
-            description: 'Connect Microsoft Outlook Calendar to synchronize your events and manage availability.',
-            icon: 'outlook',
-            category: 'calendar',
-            isInstalled: false
-        },
-        {
-            id: 'zoom',
-            name: 'Zoom',
-            description: 'Integrate with Zoom to automatically create and manage video conferencing links for your meetings.',
-            icon: 'zoom',
-            category: 'conferencing',
-            isInstalled: false
-        }
-    ];
-    
     // Fetch available integrations
-    async function fetchIntegrations() {
+    async function fetchProviders() {
         try {
             isLoading.value = true;
             
-            // For now, use sample data
-            integrations.value = sampleIntegrations;
+            // Get all providers
+            const allProviders = IntegrationProviders.getAllProviders();
             
-            // In the future, use API:
-            // const response = await api.get('user/integrations/providers');
-            // if (response.success && response.data) {
-            //     integrations.value = response.data;
-            // }
-            
-            // Check which ones are installed
-            await fetchUserIntegrations();
+            // Convert provider instances to integration format
+            providers.value = allProviders.map(provider => ({
+                id: provider.id,
+                name: provider.name,
+                description: provider.description,
+                icon: provider.icon,
+                category: provider.category,
+                isInstalled: provider.isConnected()
+            }));
             
         } catch (error) {
-            console.error('Error fetching integrations:', error);
+            console.error('Error fetching providers:', error);
             common.notification('Failed to load integrations', false);
         } finally {
             isLoading.value = false;
         }
     }
     
-    // Fetch user's installed integrations
-    async function fetchUserIntegrations() {
-        try {
-            // For now, mark google_meet as installed for demonstration
-            const googleMeetIntegration = integrations.value.find(i => i.id === 'google_meet');
-            if (googleMeetIntegration) {
-                googleMeetIntegration.isInstalled = true;
-            }
-            
-            // In the future, use API:
-            // const response = await api.get('user/integrations');
-            // if (response.success && response.data) {
-            //     userIntegrations.value = response.data;
-            //     
-            //     // Mark installed integrations
-            //     integrations.value.forEach(integration => {
-            //         integration.isInstalled = userIntegrations.value.some(
-            //             ui => ui.provider === integration.id
-            //         );
-            //     });
-            // }
-        } catch (error) {
-            console.error('Error fetching user integrations:', error);
-        }
+    // Handle refresh after connect/disconnect
+    function handleIntegrationChange() {
+        fetchProviders();
     }
     
     // Filter integrations based on active tab
-    const filteredIntegrations = computed(() => {
+    const filteredProviders = computed(() => {
         if (activeTab.value === 'installed') {
-            return integrations.value.filter(integration => integration.isInstalled);
+            return providers.value.filter(provider => provider.isInstalled);
         }
-        return integrations.value;
+        return providers.value;
     });
     
     // Initialize component
     onMounted(() => {
-        fetchIntegrations();
+        fetchProviders();
     });
 </script>
 
@@ -137,7 +80,7 @@
                             :class="['tab', { active: activeTab === 'installed' }]"
                             @click="activeTab = 'installed'"
                         >
-                            Installed ({{ integrations.filter(i => i.isInstalled).length }})
+                            Installed ({{ providers.filter(p => p.isInstalled).length }})
                         </div>
                     </div>
                     
@@ -147,7 +90,7 @@
                     </div>
                     
                     <!-- Empty state -->
-                    <div v-else-if="filteredIntegrations.length === 0" class="empty-state">
+                    <div v-else-if="filteredProviders.length === 0" class="empty-state">
                         <div class="empty-content">
                             <div class="empty-icon">
                                 <i>extension</i>
@@ -167,10 +110,10 @@
                     <!-- Integrations grid -->
                     <div v-else class="integrations-grid">
                         <IntegrationCard 
-                            v-for="integration in filteredIntegrations"
-                            :key="integration.id"
-                            :integration="integration"
-                            @connect="fetchUserIntegrations"
+                            v-for="provider in filteredProviders"
+                            :key="provider.id"
+                            :integration="provider"
+                            @connect="handleIntegrationChange"
                         />
                     </div>
                 </div>

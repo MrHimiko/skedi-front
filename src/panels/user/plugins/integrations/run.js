@@ -25,6 +25,17 @@ export default class
             }
         })
 
+        this.router.addRoute(
+        {
+            path: '/oauth/google/callback',
+            name: 'google-oauth-callback',
+            component: () => import('./pages/google/callback.vue'),
+            beforeEnter: (to, from, next) => 
+            {
+                next();
+            }
+        })
+
     }
 
     sidebar() 

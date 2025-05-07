@@ -1,4 +1,4 @@
-// src/panels/user/plugins/integrations/providers/google-calendar/provider.js
+import { api } from '@utils/api';
 import { BaseIntegrationProvider } from '../base';
 import GoogleCalendarApi from './api';
 import GoogleCalendarOAuthView from './oauth-view.vue';
@@ -7,9 +7,6 @@ import GoogleCalendarOAuthView from './oauth-view.vue';
  * Google Calendar Integration Provider
  */
 export class GoogleCalendarProvider extends BaseIntegrationProvider {
-    /**
-     * Constructor
-     */
     constructor() {
         super({
             id: 'google_calendar',
@@ -19,99 +16,46 @@ export class GoogleCalendarProvider extends BaseIntegrationProvider {
             icon: 'google_calendar',
             scopes: [
                 'https://www.googleapis.com/auth/calendar',
-                'https://www.googleapis.com/auth/calendar.events',
-                'https://www.googleapis.com/auth/calendar.settings.readonly'
+                'https://www.googleapis.com/auth/calendar.events'
             ],
             permissions: [
                 'View and manage your calendars',
-                'View and edit events on your calendars',
-                'View your calendar settings'
+                'View and edit events on your calendars'
             ],
             oauthView: GoogleCalendarOAuthView
         });
         
         this.api = new GoogleCalendarApi(this);
+        this.isDevelopmentMode = false; // Set to false for real OAuth
     }
     
-    /**
-     * Get OAuth URL
-     * Override to provide Google Calendar specific URL
-     * @returns {Promise<string>} - OAuth URL
-     */
+    // Override getOAuthUrl to match your backend endpoint
     async getOAuthUrl() {
-        if (this.isDevelopmentMode) {
-            // Generate a state parameter for security
-            const state = btoa(JSON.stringify({
-                provider: this.id,
-                timestamp: Date.now()
-            }));
+        try {
+            // Call your backend endpoint
+            const response = await api.get('user/integrations/google/auth');
             
-            // Mock Google OAuth URL for development
-            return `https://accounts.google.com/o/oauth2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&response_type=code&scope=${this.scopes.join(' ')}&access_type=offline&prompt=consent&state=${state}`;
+            if (response.success && response.data && response.data.auth_url) {
+                return response.data.auth_url;
+            }
+            
+            throw new Error(response?.message || 'Failed to get authentication URL');
+        } catch (error) {
+            console.error(`Error getting OAuth URL:`, error);
+            throw error;
         }
-        
-        // In production, call the API
-        return super.getOAuthUrl();
     }
     
-    /**
-     * Get calendars from the connected account
-     * @returns {Promise<Array>} - List of calendars
-     */
-    async getCalendars() {
-        return await this.api.getCalendars();
-    }
-    
-    /**
-     * Get events from a calendar
-     * @param {string} calendarId - Calendar ID
-     * @param {Object} options - Options for fetching events
-     * @returns {Promise<Array>} - List of events
-     */
-    async getEvents(calendarId, options = {}) {
-        return await this.api.getEvents(calendarId, options);
-    }
-    
-    /**
-     * Create an event in a calendar
-     * @param {string} calendarId - Calendar ID
-     * @param {Object} eventData - Event data
-     * @returns {Promise<Object>} - Created event
-     */
-    async createEvent(calendarId, eventData) {
-        return await this.api.createEvent(calendarId, eventData);
-    }
-    
-    /**
-     * Update an event in a calendar
-     * @param {string} calendarId - Calendar ID
-     * @param {string} eventId - Event ID
-     * @param {Object} eventData - Event data
-     * @returns {Promise<Object>} - Updated event
-     */
-    async updateEvent(calendarId, eventId, eventData) {
-        return await this.api.updateEvent(calendarId, eventId, eventData);
-    }
-    
-    /**
-     * Delete an event from a calendar
-     * @param {string} calendarId - Calendar ID
-     * @param {string} eventId - Event ID
-     * @returns {Promise<boolean>} - True if successful
-     */
-    async deleteEvent(calendarId, eventId) {
-        return await this.api.deleteEvent(calendarId, eventId);
-    }
-    
-    /**
-     * Check availability for a time range
-     * @param {Date} startTime - Start time
-     * @param {Date} endTime - End time
-     * @param {Array} calendarIds - Calendar IDs to check (optional)
-     * @returns {Promise<boolean>} - True if available
-     */
-    async checkAvailability(startTime, endTime, calendarIds = null) {
-        return await this.api.checkAvailability(startTime, endTime, calendarIds);
+    // Override completeOAuth to match your backend endpoint
+    async completeOAuth(code) {
+        try {
+            const response = await api.post('user/integrations/google/callback', { code });
+            
+            return response;
+        } catch (error) {
+            console.error(`Error completing OAuth:`, error);
+            throw error;
+        }
     }
 }
 
