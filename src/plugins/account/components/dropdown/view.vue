@@ -2,15 +2,15 @@
     import './style.css';
 
     import MenusComponent from '@global/menus/view.vue';
+    import { UserStore } from '@stores/user';
+    
+    const userStore = UserStore();
 
     const menus = [
         {
-            label: 'My Profile',
-            link: '/settings'
-        },
-        {
-            label: 'My Organization',
-            link: '/settings'
+            label: 'My Account',
+            link: '/account/settings',
+            icon: 'person'
         },
     ]
 
@@ -24,10 +24,10 @@
 
 <template>
     <div class="account-c-dropdown" v-dropdown="{ component: MenusComponent, properties: { menus } }">
-        <!-- <div class="avatar">
+        <div class="avatar">
             {{ userStore.getName()[0] }}
             <div class="dot"></div>
-        </div> -->
+        </div>
         <i>expand_more</i>
     </div>
 </template>

@@ -2,6 +2,9 @@
 import './style.css';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { fetch } from '@utils/fetch';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 const props = defineProps({
     menus: {
@@ -39,6 +42,31 @@ onMounted(() => {
 onUnmounted(() => {
     refMenus.value = ref(Array.isArray(props.menus) ? props.menus : []);
 });
+
+// Handle menu item click
+function handleMenuClick(event, menu, menuIndex) {
+    // Close dropdown
+    const dropdownClose = document.querySelector('.i-dropdown-close');
+    if (dropdownClose) {
+        dropdownClose.click();
+    }
+
+    // If it has an onClick handler, call it
+    if (menu.onClick) {
+        menu.onClick(event, menu, menuIndex);
+        return;
+    }
+    
+    // If it has a link, navigate to it
+    if (menu.link) {
+        router.push(menu.link);
+    }
+    
+    // Call the onClick prop if it exists
+    if (props.onClick) {
+        props.onClick(event, menu, menuIndex);
+    }
+}
 </script>
 
 <template>
@@ -48,15 +76,12 @@ onUnmounted(() => {
 
         <div class="group">
             <div class="menus">
-                <div class="i-dropdown-close"
+                <div class="i-dropdown-close menu-item"
                     v-for="(menu, menuIndex) in refMenus" 
                     v-popup="menu.popup || null"
                     v-clipboard="menu.clipboard || null"
                     v-print="menu.print || null"
-                    @click="$event => {
-                        menu.onClick && menu.onClick($event, menu, menuIndex);
-                        onClick && onClick($event, menu, menuIndex);
-                    }"
+                    @click="(event) => handleMenuClick(event, menu, menuIndex)"
                     :key="menuIndex" 
                 >
                     <div class="left">
@@ -82,4 +107,3 @@ onUnmounted(() => {
         </div>
     </div>
 </template>
-

@@ -11,6 +11,7 @@ import RunUserDashboard from '@user_dashboard/run';
 import RunUserTeams from '@user_teams/run';
 import RunUserEvents from '@user_events/run';
 import RunUserBookings from '@user_bookings/run';
+import RunUserIntegrations from '@user_integrations/run';
 
 
 /* User Extensions */
@@ -26,7 +27,8 @@ initializeApp((app, router, stores) =>
         RunUserActivity, 
         RunUserAccount,
         RunUserTeams,
-        RunUserBookings
+        RunUserBookings,
+        RunUserIntegrations
     ];
 
     if(stores.extension.has(1))

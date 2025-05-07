@@ -4,11 +4,14 @@
     import { useRoute } from 'vue-router'
     import { storage } from '@utils/storage' 
     import { MenuStore } from '@stores/menu'
+    import { UserStore } from '@stores/user'
     import TimezoneSelector from '@global/timezone-selector/view.vue'
+    import MenusComponent from '@global/menus/view.vue'
     
-    import { PhTextOutdent } from "@phosphor-icons/vue";
+    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle } from "@phosphor-icons/vue";
     
     const menuStore = MenuStore()
+    const userStore = UserStore()
     const route = useRoute()
 
     const minimized = ref(storage.get('sidebar.minimized'))
@@ -54,26 +57,76 @@
         }
     }
 
-
     function isRouteActive(menuLink) {
         if (!menuLink || menuLink === '/') {
             return route.path === '/'
         }
         return route.path.startsWith(menuLink)
     }
+    
+    // User profile dropdown options
+    const profileMenus = [
+        {
+            label: 'Profile Settings',
+            link: '/account/settings',
+            iconComponent: PhUserCircle,
+            weight: 'bold'
+        },
+        {
+            label: 'Logout',
+            iconComponent: PhSignOut,
+            weight: 'bold',
+            onClick: () => {
+                // Clear token and redirect to login
+                storage.remove('token');
+                window.location.href = '/account/login';
+            }
+        }
+    ]
+    
+    // Get user initial for avatar
+    const userInitial = ref(userStore.getName() ? userStore.getName().charAt(0).toUpperCase() : 'U');
 </script>
 
 <template>
     <div :class="['c-sidebar', minimized, (parent ? 'children' : '')]">
         <div class="left">
-            <div class="top">
-                <div class="switcher">
-                    <div v-if="!minimized" class="name text-tx text-bold">
-                        <div class="logo"></div>
+            <!-- User Profile Section -->
+            <div class="profile-section">
+                <div class="profile-top">
+
+                    <div 
+                        class="profile-header" 
+                        v-dropdown="{ component: MenusComponent, properties: { menus: profileMenus } }"
+                    >
+                        <div class="profile-avatar">
+                            <span>{{ userInitial }}</span>
+                        </div>
+                        <div class="profile-info" v-if="!minimized">
+                            <div class="profile-name ellipsis">{{ userStore.getName() }}</div>
+                        </div>
+                        <div class="profile-dropdown-icon" v-if="!minimized">
+                            <i>expand_more</i>
+                        </div>
+
+                        
                     </div>
 
-                    <PhTextOutdent class="action" weight="bold" @click="toggle" />
+                    <div> <PhCaretDoubleLeft class="action" weight="bold" @click="toggle" /> </div>
+                    
                 </div>
+                
+
+                <div class="switcher">
+                    <div class="logo"></div>
+                    <div class="name text-tx text-bold"> Divhunt </div>
+                </div>
+
+
+            </div>
+            
+            <div class="top">
+                
 
                 <div v-if="!minimized" class="separator">
                     <p>Main menu</p>

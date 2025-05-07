@@ -9,6 +9,88 @@
     background-color: var(--background-1);
 }
 
+/* Profile Section Styles */
+.c-sidebar .profile-section {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.c-sidebar .profile-section .profile-top  {
+    display: flex;
+    justify-content: space-between;
+}
+
+.c-sidebar .profile-section .profile-top .action
+{
+    transition: 0.5s transform;
+    width: 28px;
+    opacity: 40%;
+}
+
+.c-sidebar .profile-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: background-color 0.2s ease;
+}
+
+.c-sidebar .profile-header:hover {
+    background-color: var(--background-2);
+}
+
+.c-sidebar .profile-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background-color: var(--brand-yellow);
+    color: var(--brand-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.c-sidebar .profile-info {
+    margin-left: var(--spacing-lg);
+    flex: 1;
+    min-width: 0; /* Ensures text truncation works properly */
+}
+
+.c-sidebar .profile-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 14px;
+    margin-right: 15px;
+}
+
+.c-sidebar .profile-email {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.c-sidebar .profile-dropdown-icon {
+    color: var(--black);
+    display: flex;
+    align-items: center;
+    opacity: 0.4;
+}
+
+/* Minimized state for profile section */
+
+
+
+
+.c-sidebar.minimized .profile-header {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    justify-content: center;
+}
+
 .c-sidebar .separator-top {
     width: 100%;
     height: 1px;
@@ -19,10 +101,9 @@
 .c-sidebar > .left 
 {
     display: flex;
-    justify-content: space-between;
     flex-direction: column;
     height: 100%;
-    padding: var(--spacing-4xl) 0;
+    padding-bottom: var(--spacing-4xl);
     flex: 1;
 }
 
@@ -144,36 +225,28 @@
 {
     background-color: var(--background-0);
     border-radius: 10px;
-    margin-bottom: var(--spacing-2xl);
+    margin-top: var(--spacing-2xl);
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 5px 8px 5px 5px;
     border: 1px solid var(--border);
     height: 36px;
     cursor: pointer;
+    font-weight: 500;
+    gap: 10px;
 }
 
-.c-sidebar .switcher .name
-{
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-lg);
-}
+
 
 .c-sidebar .switcher .logo 
 {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border-radius: var(--radius-md);
     background: var(--black);
 }
 
-.c-sidebar .switcher .action
-{
-    transition: 0.5s transform;
-    width: 34px;
-}
+
 
 /* Minimized */
 .c-sidebar.minimized:not(.children)
@@ -193,14 +266,7 @@
     border-right: 1px solid var(--stroke-secondary);
 }
 
-.c-sidebar.minimized .switcher
-{
-    padding: 0;
-    border: none;
-    background: transparent;
-    justify-content: center;
-    width: 42px;
-}
+
 
 .c-sidebar.minimized .switcher .action
 {
@@ -220,4 +286,7 @@
 
 .c-sidebar > .left > .top {
     padding: 0 15px;
+    flex:1;
+    padding-top: 10px;
 }
+
