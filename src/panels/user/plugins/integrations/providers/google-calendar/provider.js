@@ -15,7 +15,7 @@ export class GoogleCalendarProvider extends BaseIntegrationProvider {
             name: 'Google Calendar',
             description: 'Connect your Google Calendar to automatically manage scheduling, availability, and sync events.',
             category: 'calendar',
-            icon: 'google_calendar',
+            icon: 'https://global.divhunt.com/3858bb278694ec6c098fef9b26e059ab_2357.svg',
             scopes: [
                 'https://www.googleapis.com/auth/calendar',
                 'https://www.googleapis.com/auth/calendar.events'

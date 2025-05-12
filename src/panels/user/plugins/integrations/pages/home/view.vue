@@ -1,6 +1,6 @@
-// src/panels/user/plugins/integrations/pages/home/view.vue
 <script setup>
     import { ref, computed, onMounted } from 'vue';
+    import { api } from '@utils/api';
     import { common } from '@utils/common';
     import IntegrationProviders from '@user_integrations/providers';
     
@@ -13,27 +13,54 @@
     const providers = ref([]);
     const isLoading = ref(true);
     const activeTab = ref('installed');
+    const userIntegrations = ref([]);
     
-    // Fetch available integrations
-    async function fetchProviders() {
+    // Fetch both available providers and user's installed integrations
+    async function fetchData() {
         try {
             isLoading.value = true;
             
-            // Get all providers
+            // Get all available providers first
             const allProviders = IntegrationProviders.getAllProviders();
             
-            // Convert provider instances to integration format
-            providers.value = allProviders.map(provider => ({
-                id: provider.id,
-                name: provider.name,
-                description: provider.description,
-                icon: provider.icon,
-                category: provider.category,
-                isInstalled: provider.isConnected()
-            }));
+            // Then fetch the user's actual integrations from the backend
+            const response = await api.get('user/integrations');
+            
+            if (!response.success) {
+                throw new Error(response.message || 'Failed to fetch integrations');
+            }
+            
+            // Store user integrations for reference
+            userIntegrations.value = response.data;
+            
+            // Map provider details and attach installed status
+            providers.value = allProviders.map(provider => {
+                // Check if this provider is installed by looking at user integrations
+                const isInstalled = userIntegrations.value.some(
+                    integration => integration.provider === provider.id && integration.status === 'active'
+                );
+                
+                // Get the actual integration entity for this provider
+                const installedIntegration = userIntegrations.value.find(
+                    integration => integration.provider === provider.id && integration.status === 'active'
+                );
+                
+                return {
+                    id: provider.id,
+                    name: provider.name,
+                    description: provider.description,
+                    icon: provider.icon,
+                    category: provider.category,
+                    isInstalled: isInstalled,
+                    // Store the actual integration entity ID if installed
+                    entityId: installedIntegration ? installedIntegration.id : null,
+                    // Store any additional info from the installed integration
+                    integrationDetails: installedIntegration || null
+                };
+            });
             
         } catch (error) {
-            console.error('Error fetching providers:', error);
+            console.error('Error fetching data:', error);
             common.notification('Failed to load integrations', false);
         } finally {
             isLoading.value = false;
@@ -42,7 +69,7 @@
     
     // Handle refresh after connect/disconnect
     function handleIntegrationChange() {
-        fetchProviders();
+        fetchData();
     }
     
     // Filter integrations based on active tab
@@ -55,7 +82,7 @@
     
     // Initialize component
     onMounted(() => {
-        fetchProviders();
+        fetchData();
     });
 </script>
 

@@ -4,7 +4,7 @@ import { storage } from '@utils/storage';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
 import OAuthPopupView from '@user_integrations/components/oauth/OAuthPopupView.vue';
-
+import DisconnectService from '../services/DisconnectService';
 /**
  * Base Integration Provider class
  * Provides common functionality for all integration providers
@@ -178,45 +178,24 @@ export class BaseIntegrationProvider {
         }
     }
     
-    /**
-     * Disconnect the integration
-     * @param {Function} callback - Callback function after completion
-     * @returns {Promise<boolean>} - True if successful
-     */
-    async disconnect(callback = null) {
-        try {
-            if (!this.isDevelopmentMode) {
-                // In production, call API to revoke token
-                await api.delete(`user/integrations/${this.id}`);
-            } else {
-                // For development, simulate API call
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
-            // Remove from local storage
-            const integrations = storage.get('integrations') || {};
-            
-            if (integrations[this.id]) {
-                delete integrations[this.id];
-                storage.set('integrations', integrations);
-            }
-            
-            common.notification(`Successfully disconnected from ${this.name}`, true);
-            
-            if (callback) {
-                callback(true);
-            }
-            
-            return true;
-        } catch (error) {
-            console.error(`[${this.id}] Error disconnecting:`, error);
-            common.notification(`Failed to disconnect from ${this.name}`, false);
-            
-            if (callback) {
-                callback(false);
-            }
-            
+
+
+
+    async disconnect(entityId = null, callback = null) {
+        // We need the actual database entity ID, not just the provider type
+        if (!entityId) {
+            console.error(`[${this.id}] Error disconnecting: Missing entity ID`);
+            common.notification(`Failed to disconnect from ${this.name}: Missing entity ID`, false);
+            if (callback) callback(false);
             return false;
         }
+        
+        const result = await DisconnectService.disconnect(entityId, this.id);
+        
+        if (callback) {
+            callback(result);
+        }
+        
+        return result;
     }
 }

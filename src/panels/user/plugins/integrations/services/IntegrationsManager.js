@@ -3,7 +3,7 @@ import { api } from '@utils/api';
 import { storage } from '@utils/storage';
 import { common } from '@utils/common';
 import IntegrationProviders from '../providers';
-
+import DisconnectService from './DisconnectService';
 /**
  * Service for managing integrations and handling the OAuth flow
  */
@@ -57,18 +57,33 @@ export class IntegrationsManager {
      * @param {Function} callback - Optional callback after completion
      * @returns {Promise<boolean>} - True if successful
      */
-    static async disconnect(providerId, callback = null) {
-        const provider = IntegrationProviders.getProvider(providerId);
-        
-        if (!provider) {
-            common.notification(`Provider '${providerId}' not found`, false);
+    static async disconnect(providerId, integrationEntityId, callback = null) {
+        try {
+            // If we only have provider ID but not the entity ID, try to find it
+            if (!integrationEntityId) {
+                // This is a fallback - you should always pass the entity ID directly
+                const connection = this.getConnection(providerId);
+                if (connection && connection.id) {
+                    integrationEntityId = connection.id;
+                } else {
+                    throw new Error('Integration entity ID not found');
+                }
+            }
+            
+            const result = await DisconnectService.disconnect(integrationEntityId, providerId);
+            
+            if (callback) {
+                callback(result);
+            }
+            
+            return result;
+        } catch (error) {
+            console.error(`Error in IntegrationsManager.disconnect:`, error);
             if (callback) {
                 callback(false);
             }
             return false;
         }
-        
-        return await provider.disconnect(callback);
     }
     
     /**

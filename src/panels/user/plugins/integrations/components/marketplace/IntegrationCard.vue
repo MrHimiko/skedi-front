@@ -1,12 +1,15 @@
+
 <!-- src/panels/user/plugins/integrations/components/marketplace/IntegrationCard.vue -->
 <script setup>
-    import { ref, onMounted, watch } from 'vue';
+    import { ref, computed, onMounted, watch } from 'vue';
+    import { api } from '@utils/api';
     import { common } from '@utils/common';
+    import { storage } from '@utils/storage';
+    import { popup } from '@utils/popup';
     import IntegrationProviders from '@user_integrations/providers';
     
     import Button from '@form/button/view.vue';
     import ConfirmComponent from '@floated/confirm/view.vue';
-    import { popup } from '@utils/popup';
     
     const props = defineProps({
         integration: {
@@ -14,74 +17,99 @@
             required: true
         }
     });
+
     
     const emit = defineEmits(['connect']);
     const isConnecting = ref(false);
     const isConnected = ref(false);
+    const entityId = ref(null);
     const provider = ref(null);
     
-    // Initialize provider and check connection status
-    function initializeProvider() {
+    // Initialize provider and check connection/installation status
+    function initialize() {
         try {
-            if (props.integration && props.integration.id) {
-                provider.value = IntegrationProviders.getProvider(props.integration.id);
-                isConnected.value = provider.value ? provider.value.isConnected() : false;
-            } else {
-                provider.value = null;
-                isConnected.value = false;
+            if (!props.integration) return;
+            
+            // Get provider
+            provider.value = IntegrationProviders.getProvider(props.integration.id);
+            
+            // Check if installed based on backend data if available
+            if (props.integration.isInstalled !== undefined) {
+                isConnected.value = props.integration.isInstalled;
+                entityId.value = props.integration.entityId;
+            } 
+            // Fallback to local storage check
+            else if (provider.value) {
+                isConnected.value = provider.value.isConnected();
+                
+                // Try to get entity ID from connection
+                const connection = provider.value.getConnection();
+                if (connection && connection.id) {
+                    entityId.value = connection.id;
+                }
             }
+            
+            console.log(`Integration initialized: ${props.integration.name}`, {
+                isConnected: isConnected.value,
+                entityId: entityId.value
+            });
         } catch (error) {
-            console.error('Error initializing provider:', error);
+            console.error('Error initializing integration:', error);
             provider.value = null;
             isConnected.value = false;
+            entityId.value = null;
         }
     }
     
     // Watch for changes to the integration prop
     watch(() => props.integration, () => {
-        initializeProvider();
+        initialize();
     }, { immediate: true });
     
-    // Initial check on mount
+    // Initial setup on mount
     onMounted(() => {
-        initializeProvider();
+        initialize();
     });
     
-    // Get icon class based on integration ID
-    function getIconClass(integration) {
-        if (!integration || !integration.id) return 'default-icon';
+
+    
+    // Compute icon text based on integration
+    const iconText = computed(() => {
+        if (!props.integration) return '?';
         
-        const id = integration.id.toLowerCase();
+        const id = props.integration.id?.toLowerCase() || '';
         
-        if (id.includes('google')) {
-            return 'google-icon';
-        } else if (id.includes('zoom')) {
-            return 'zoom-icon';
-        } else if (id.includes('microsoft') || id.includes('outlook')) {
-            return 'microsoft-icon';
-        } else if (id.includes('slack')) {
-            return 'slack-icon';
-        }
+        if (id.includes('google')) return 'G';
+        if (id.includes('zoom')) return 'Z';
+        if (id.includes('microsoft')) return 'M';
         
-        return 'default-icon';
-    }
+        return props.integration.name?.[0] || '?';
+    });
     
     // Handle connect button click - OAuth process
-    function handleConnect() {
+    async function handleConnect() {
+        if (!provider.value) {
+            common.notification('Provider not available', false);
+            return;
+        }
+        
         try {
-            if (!provider.value) {
-                common.notification('Provider not available', false);
-                return;
-            }
-            
             isConnecting.value = true;
             
-            // Start the OAuth flow using the provider instance directly
-            provider.value.startOAuthFlow((success) => {
+            // Start the OAuth flow
+            provider.value.startOAuthFlow((success, data) => {
                 isConnecting.value = false;
                 
                 if (success) {
+                    // Update state
                     isConnected.value = true;
+                    
+                    // Try to extract entity ID from OAuth response
+                    if (data && data.id) {
+                        entityId.value = data.id;
+                    }
+                    
+                    // Notify parent to refresh integrations
                     emit('connect', props.integration.id);
                 }
             });
@@ -92,10 +120,16 @@
         }
     }
     
-    // Handle disconnect
+    // Handle disconnect with proper entity ID
     function handleDisconnect() {
-        if (!provider.value) {
-            common.notification('Provider not available', false);
+        // Find the entity ID to use for disconnection
+        const idToUse = entityId.value || 
+                        props.integration.entityId || 
+                        (props.integration.integrationDetails?.id);
+        
+        if (!idToUse) {
+            console.error('Missing integration entity ID for disconnect', props.integration);
+            common.notification('Cannot disconnect: Integration ID not found', false);
             return;
         }
         
@@ -108,11 +142,26 @@
                 description: `Are you sure you want to disconnect from ${props.integration.name}?`,
                 callback: async () => {
                     try {
-                        const result = await provider.value.disconnect();
+                        console.log(`Disconnecting integration with ID: ${idToUse}`);
+                        const response = await api.delete(`user/integrations/${idToUse}`);
                         
-                        if (result) {
+                        if (response.success) {
+                            // Clean up local storage
+                            const integrations = storage.get('integrations') || {};
+                            if (integrations[props.integration.id]) {
+                                delete integrations[props.integration.id];
+                                storage.set('integrations', integrations);
+                            }
+                            
+                            // Update state
                             isConnected.value = false;
+                            entityId.value = null;
+                            
+                            // Notify parent to refresh integrations
                             emit('connect', props.integration.id);
+                            common.notification('Integration disconnected successfully', true);
+                        } else {
+                            throw new Error(response.message || 'Failed to disconnect');
                         }
                         
                         popup.close();
@@ -127,7 +176,7 @@
             }
         );
     }
-    
+
     // Open details dialog
     function openDetails() {
         // TODO: Implement details view
@@ -139,11 +188,9 @@
     <div class="integration-card">
         <div class="integration-logo">
             <!-- Integration icon -->
-            <div :class="['icon', getIconClass(integration)]">
-                <span v-if="integration && integration.id && integration.id.includes('google')">G</span>
-                <span v-else-if="integration && integration.id && integration.id.includes('zoom')">Z</span>
-                <span v-else-if="integration && integration.id && integration.id.includes('microsoft')">M</span>
-                <span v-else>{{ integration && integration.name ? integration.name[0] : '?' }}</span>
+            <div>
+                <img style="width:40px" :src="integration.icon" :alt="integration.name" />
+
             </div>
         </div>
         
@@ -177,6 +224,9 @@
         </div>
     </div>
 </template>
+
+
+
 <style scoped>
 .integration-card {
     background-color: var(--background-0);
@@ -186,6 +236,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative;
 }
 
 .integration-logo {
@@ -243,6 +294,9 @@
     color: var(--text-secondary);
     margin-bottom: 10px;
     text-transform: capitalize;
+    position: absolute;
+    top:10px;
+    right:10px;
 }
 
 .description {
