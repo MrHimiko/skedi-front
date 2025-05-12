@@ -1,3 +1,5 @@
+// src/panels/user/plugins/integrations/components/oauth/OAuthPopupView.vue
+
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { common } from '@utils/common';
@@ -8,7 +10,7 @@ import Button from '@form/button/view.vue';
 
 const props = defineProps({
     provider: {
-        type: Object, // Changed from String to Object
+        type: Object,
         required: true
     },
     callback: {
@@ -21,16 +23,20 @@ const isLoading = ref(true);
 const authUrl = ref('');
 const authWindow = ref(null);
 const error = ref(null);
-const pollInterval = ref(null);
+const messageListenerRef = ref(null);
 const timeoutId = ref(null);
+const isRetrying = ref(false);
 
-// Get authentication URL from the provider instance
+// Get authentication URL from the provider
 async function getAuthUrl() {
     try {
         isLoading.value = true;
         error.value = null;
+        isRetrying.value = false;
         
+        // Use provider instance method to get the URL
         const url = await props.provider.getOAuthUrl();
+        console.log("Auth URL retrieved:", url ? "Success" : "Failed");
         
         authUrl.value = url;
         isLoading.value = false;
@@ -41,7 +47,7 @@ async function getAuthUrl() {
     }
 }
 
-// Start the OAuth flow
+// Start the OAuth flow by opening the popup
 function startOAuthFlow() {
     if (!authUrl.value) {
         error.value = 'No authentication URL available';
@@ -58,7 +64,7 @@ function startOAuthFlow() {
         // Open popup window
         authWindow.value = window.open(
             authUrl.value,
-            `${props.provider.id}_auth`,
+            'google_calendar_auth',
             `width=${width},height=${height},left=${left},top=${top}`
         );
         
@@ -66,20 +72,9 @@ function startOAuthFlow() {
             throw new Error('Popup was blocked. Please allow popups for this site.');
         }
         
-        // Start polling to check if the popup was closed
-        startPolling();
-        
         // Set a timeout to auto-close if taking too long (2 minutes)
         timeoutId.value = setTimeout(() => {
-            try {
-                if (authWindow.value && !authWindow.value.closed) {
-                    authWindow.value.close();
-                }
-            } catch (e) {
-                console.warn('Could not access window properties due to security restrictions');
-            }
-            
-            stopPolling();
+            closeAuthWindow();
             error.value = 'Authentication timed out. Please try again.';
         }, 120000);
     } catch (err) {
@@ -88,87 +83,131 @@ function startOAuthFlow() {
     }
 }
 
-// Poll to check if the popup window was closed
-function startPolling() {
-    pollInterval.value = setInterval(() => {
-        try {
-            if (authWindow.value && authWindow.value.closed) {
-                stopPolling();
-                
-                // User closed the window manually without completing auth
-                if (!error.value) {
-                    error.value = 'Authentication was cancelled';
-                }
-            }
-        } catch (e) {
-            console.warn('Could not access window.closed property due to security restrictions');
-            // Don't stop polling yet, as the window might still complete auth
-        }
-    }, 500);
-}
-
-// Stop polling
-function stopPolling() {
-    if (pollInterval.value) {
-        clearInterval(pollInterval.value);
-        pollInterval.value = null;
-    }
-    
+// Close the auth window safely
+function closeAuthWindow() {
     if (timeoutId.value) {
         clearTimeout(timeoutId.value);
         timeoutId.value = null;
     }
+    
+    if (authWindow.value) {
+        try {
+            authWindow.value.close();
+        } catch (e) {
+            console.warn('Could not close auth window:', e);
+        }
+        authWindow.value = null;
+    }
+}
+
+// Complete the authentication process with the code
+async function completeAuthentication(code, state) {
+    try {
+        // Cancel any pending timeout
+        if (timeoutId.value) {
+            clearTimeout(timeoutId.value);
+            timeoutId.value = null;
+        }
+        
+        isLoading.value = true;
+        error.value = null;
+        
+        console.log('Completing authentication with code:', code ? 'Code received' : 'No code');
+        
+        // Use the provider's completeOAuth method
+        const response = await props.provider.completeOAuth(code, state);
+        
+        if (response && response.success) {
+            // Call callback with result
+            props.callback(null, response.data, response, response.success);
+            
+            // Close the popup
+            popup.close();
+            
+            // Show success notification
+            common.notification(`Successfully connected to ${props.provider.name}`, true);
+        } else {
+            throw new Error(response?.message || 'Authentication failed');
+        }
+    } catch (err) {
+        console.error('Error completing authentication:', err);
+        error.value = err.message || 'Failed to complete authentication';
+        isLoading.value = false;
+        isRetrying.value = true;
+    }
+}
+
+// Setup message listener for OAuth callback
+function setupMessageListener() {
+    const messageHandler = (event) => {
+        console.log('Received message type:', event.data?.type);
+        
+        // Only accept messages with the right type
+        if (event.data && event.data.type === 'google_oauth_callback') {
+            const { code, state } = event.data;
+            
+            if (code) {
+                // Complete authentication with the code
+                completeAuthentication(code, state);
+            } else {
+                error.value = 'No authorization code received';
+            }
+        }
+    };
+    
+    // Add message event listener
+    window.addEventListener('message', messageHandler);
+    
+    // Store the handler reference to remove it later
+    messageListenerRef.value = messageHandler;
+    console.log('Message listener set up');
+}
+
+// Handle manual retry
+function handleRetry() {
+    getAuthUrl().then(() => {
+        // Only start OAuth flow if we successfully got a new URL
+        if (authUrl.value) {
+            startOAuthFlow();
+        }
+    });
 }
 
 // Handle manual cancel
 function handleCancel() {
-    try {
-        if (authWindow.value && !authWindow.value.closed) {
-            authWindow.value.close();
-        }
-    } catch (e) {
-        console.warn('Could not access window properties due to security restrictions');
-    }
-    
-    stopPolling();
+    closeAuthWindow();
     popup.close();
 }
 
 // Clean up on unmount
 onUnmounted(() => {
-    try {
-        if (authWindow.value && !authWindow.value.closed) {
-            authWindow.value.close();
-        }
-    } catch (e) {
-        console.warn('Could not access window properties due to security restrictions');
-    }
+    closeAuthWindow();
     
-    stopPolling();
+    if (messageListenerRef.value) {
+        window.removeEventListener('message', messageListenerRef.value);
+    }
 });
 
 // Initialize on component mount
 onMounted(() => {
+    // Setup message listener first, so it's ready before we open the auth window
+    setupMessageListener();
+    
+    // Get the auth URL
     getAuthUrl();
 });
 </script>
 
 <template>
-    <PopupLayout :title="`Connect to ${props.provider.name}`" class="h-auto">
+    <PopupLayout title="Connect to Google Calendar" class="h-auto">
         <template #content>
             <div class="oauth-popup-content">
-                <!-- Development mode notice -->
-                <div v-if="props.provider.isDevelopmentMode" class="dev-mode-notice">
-                    <i>info</i>
-                    <p>Development Mode: OAuth flow will be simulated</p>
-                </div>
-                
                 <!-- Loading state -->
                 <div v-if="isLoading" class="auth-state">
                     <div class="spinner">
                         <i class="spin">sync</i>
                     </div>
-                    <p>Preparing authentication...</p>
+                    <p>{{ isRetrying ? 'Retrying authentication...' : 'Preparing Google Calendar authentication...' }}</p>
                 </div>
                 
                 <!-- Error state -->
@@ -180,7 +219,7 @@ onMounted(() => {
                     <p>{{ error }}</p>
                     
                     <div class="actions">
-                        <Button label="Try Again" @click="getAuthUrl" />
+                        <Button label="Try Again" @click="handleRetry" />
                         <Button label="Cancel" as="tertiary" @click="handleCancel" />
                     </div>
                 </div>
@@ -188,19 +227,13 @@ onMounted(() => {
                 <!-- Ready to authenticate state -->
                 <div v-else class="auth-state">
                     <div class="icon-container">
-                        <div :class="['provider-icon', props.provider.id]">
-                            <span v-if="props.provider.id.includes('google')">G</span>
-                            <span v-else-if="props.provider.id.includes('microsoft')">M</span>
-                            <span v-else>{{ props.provider.name[0] }}</span>
-                        </div>
+                        <div class="provider-icon google">G</div>
                     </div>
                     
-                    <h3>Connect to {{ props.provider.name }}</h3>
+                    <h3>Connect to Google Calendar</h3>
                     <p class="description">
-                        {{ props.provider.isDevelopmentMode 
-                            ? 'In development mode, this will simulate connecting to ' + props.provider.name 
-                            : "You'll be redirected to the provider's authentication page. Please sign in and grant the required permissions." 
-                        }}
+                        You'll be redirected to Google to authorize access to your calendar. 
+                        Please sign in and grant the required permissions.
                     </p>
                     
                     <div class="permissions">
@@ -213,7 +246,10 @@ onMounted(() => {
                     </div>
                     
                     <div class="actions">
-                        <Button label="Authorize" @click="startOAuthFlow" />
+                        <Button 
+                            label="Authorize with Google" 
+                            @click="startOAuthFlow" 
+                        />
                         <Button label="Cancel" as="tertiary" @click="handleCancel" />
                     </div>
                 </div>
@@ -221,3 +257,120 @@ onMounted(() => {
         </template>
     </PopupLayout>
 </template>
+
+<style scoped>
+.oauth-popup-content {
+    min-width: 450px;
+    max-width: 500px;
+    padding: 10px 0;
+}
+
+.auth-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.icon-container {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: var(--background-1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.auth-state.error .icon-container {
+    color: var(--red-default);
+}
+
+.provider-icon {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: white;
+}
+
+.provider-icon.google {
+    background-color: #4285F4;
+}
+
+.spinner {
+    margin-bottom: 20px;
+}
+
+.spinner i.spin {
+    font-size: 40px;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+h3 {
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 18px;
+}
+
+p {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    max-width: 400px;
+}
+
+.description {
+    margin-bottom: 20px;
+}
+
+.permissions {
+    background-color: var(--background-1);
+    padding: 15px;
+    border-radius: 8px;
+    text-align: left;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.permissions h4 {
+    font-weight: 500;
+    font-size: 14px;
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+}
+
+.permissions ul {
+    list-style: none;
+    padding: 0;
+}
+
+.permissions li {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.permissions li i {
+    color: var(--green-default);
+    font-size: 16px;
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+</style>
