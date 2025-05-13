@@ -5,7 +5,11 @@ import ButtonComponent from '@form/button/view.vue';
 import { common } from '@utils/common';
 import { BookingsService } from '@user_bookings/services/bookings';
 import { api } from '@utils/api';
-import { PhCalendar, PhClock, PhUser, PhVideo, PhLink, PhDotsThree, PhCheck, PhTrash } from "@phosphor-icons/vue";
+import { 
+  PhCalendar, PhClock, PhMapPin, PhUsers, 
+  PhVideoCamera, PhClipboard, PhX, PhCheck, PhTrash,
+  PhDotsThree
+} from "@phosphor-icons/vue";
 import MenusComponent from '@global/menus/view.vue';
 import BookingDetailView from '@user_bookings/components/detail/view.vue';
 import { popup } from '@utils/popup';
@@ -30,39 +34,48 @@ const emit = defineEmits(['refresh']);
 
 // Format date for headers
 function formatDate(date) {
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
+  if (!date) return 'Unknown Date';
   
-  if (date.toDateString() === today.toDateString()) {
-    return 'Today';
-  } else if (date.toDateString() === tomorrow.toDateString()) {
-    return 'Tomorrow';
-  } else {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
+  try {
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return 'Tomorrow';
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid Date';
   }
 }
 
 // Get booking actions based on status
 function getBookingActions(booking) {
+  if (!booking) return [];
+  
   const baseActions = [];
   
   // Only add these options for active or upcoming bookings (not canceled)
   if (booking.status !== 'canceled') {
     baseActions.push({ 
       label: 'Join Meeting',
-      iconComponent: PhVideo,
+      iconComponent: PhVideoCamera,
       weight: 'bold'
     });
     
     baseActions.push({ 
       label: 'Copy Booking Link', 
-      iconComponent: PhLink,
+      iconComponent: PhClipboard,
       weight: 'bold'
     });
   }
@@ -77,7 +90,7 @@ function getBookingActions(booking) {
     
     baseActions.push({ 
       label: 'Cancel',
-      iconComponent: PhClock,
+      iconComponent: PhX,
       weight: 'bold'
     });
   } else {
@@ -143,8 +156,11 @@ async function changeBookingStatus(booking, status) {
     throw error;
   }
 }
+
 // Handle booking action clicks
 async function handleBookingAction(event, action, booking) {
+  if (!action || !action.label || !booking) return;
+  
   switch(action.label) {
     case 'Join Meeting':
       if (booking.conference_url) {
@@ -156,8 +172,13 @@ async function handleBookingAction(event, action, booking) {
       
     case 'Copy Booking Link':
       if (booking.booking_url) {
-        await navigator.clipboard.writeText(booking.booking_url);
-        common.notification('Link copied to clipboard', true);
+        try {
+          await navigator.clipboard.writeText(booking.booking_url);
+          common.notification('Link copied to clipboard', true);
+        } catch (error) {
+          console.error('Error copying to clipboard:', error);
+          common.notification('Failed to copy link', false);
+        }
       } else {
         common.notification('No booking link available', false);
       }
@@ -218,8 +239,35 @@ async function handleBookingAction(event, action, booking) {
   }
 }
 
+// Handle external event actions
+async function handleExternalEventAction(event, action, externalEvent) {
+  if (!action || !action.label || !externalEvent) return;
+  
+  if (action.label === 'View in Calendar' || action.label === 'Open Link') {
+    if (externalEvent.html_link) {
+      window.open(externalEvent.html_link, '_blank');
+    } else {
+      common.notification('No event link available', false);
+    }
+  } else if (action.label === 'Copy Link') {
+    if (externalEvent.html_link) {
+      try {
+        await navigator.clipboard.writeText(externalEvent.html_link);
+        common.notification('Link copied to clipboard', true);
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        common.notification('Failed to copy link', false);
+      }
+    } else {
+      common.notification('No event link available', false);
+    }
+  }
+}
+
 // Confirm a pending booking
 async function confirmBooking(booking) {
+  if (!booking) return;
+  
   try {
     await changeBookingStatus(booking, 'confirmed');
     common.notification('Booking confirmed successfully', true);
@@ -232,6 +280,8 @@ async function confirmBooking(booking) {
 
 // Open booking detail popup
 function openBookingDetail(booking) {
+  if (!booking) return;
+  
   popup.open(
     'booking-detail',
     null,
@@ -252,24 +302,59 @@ function openBookingDetail(booking) {
   );
 }
 
-// Get meeting platform icon/label
-function getMeetingPlatform(booking) {
-  if (!booking.location) return { name: 'No location', icon: null };
+// Open external event in its original calendar
+function openExternalEvent(event) {
+  if (!event) return;
   
-  const location = booking.location.toLowerCase();
-  
-  if (location.includes('zoom')) {
-    return { name: 'Zoom', icon: 'zoom' };
-  } else if (location.includes('google meet') || location.includes('gmeet')) {
-    return { name: 'Google Meet', icon: 'google_meet' };
-  } else if (location.includes('teams')) {
-    return { name: 'MS Teams', icon: 'teams' };
-  } else if (location.includes('skype')) {
-    return { name: 'Skype', icon: 'skype' };
+  if (event.html_link) {
+    window.open(event.html_link, '_blank');
   } else {
-    return { name: booking.location, icon: null };
+    common.notification('No event link available', false);
   }
 }
+
+// Get calendar source icon for external events
+function getCalendarIcon(source) {
+  if (!source) return 'calendar';
+  
+  switch(source.toLowerCase()) {
+    case 'google_calendar':
+      return 'google-calendar';
+    case 'outlook':
+      return 'outlook-calendar';
+    case 'apple_calendar':
+      return 'apple-calendar';
+    default:
+      return 'calendar';
+  }
+}
+
+// Get safe formatted calendar name
+function getCalendarName(event) {
+  if (!event) return 'Calendar';
+  
+  // If calendar_name is available, use it
+  if (event.calendar_name) return event.calendar_name;
+  
+  // Otherwise, use source with some formatting
+  if (event.source) {
+    switch(event.source.toLowerCase()) {
+      case 'google_calendar':
+        return 'Google Calendar';
+      case 'outlook':
+        return 'Outlook';
+      case 'apple_calendar':
+        return 'Apple Calendar';
+      default:
+        return event.source || 'Calendar';
+    }
+  }
+  
+  return 'Calendar';
+}
+
+
+
 </script>
 
 <template>
@@ -278,7 +363,7 @@ function getMeetingPlatform(booking) {
       <p>Loading bookings...</p>
     </div>
     
-    <div v-else-if="bookings.length === 0" class="empty-state">
+    <div v-else-if="!bookings || bookings.length === 0" class="empty-state">
       <p>No bookings found</p>
     </div>
     
@@ -286,15 +371,15 @@ function getMeetingPlatform(booking) {
       <div 
         v-for="(item, index) in bookings" 
         :key="index"
-        :class="['booking-item', item.type, item.status]"
+        :class="['booking-item', item ? item.type : '', item ? item.status : '']"
       >
         <!-- Date Header -->
-        <div v-if="item.type === 'header'" class="date-header">
+        <div v-if="item && item.type === 'header'" class="date-header">
           {{ formatDate(item.date) }}
         </div>
         
         <!-- Booking Item -->
-        <div v-else class="booking-card">
+        <div v-else-if="item && item.type === 'booking'" class="booking-card">
           <!-- Time indicator and color bar -->
           <div class="time-indicator">
             <div class="clr-box" :style="{ backgroundColor: item.color || '#FFDE0E' }"> </div>
@@ -305,7 +390,7 @@ function getMeetingPlatform(booking) {
           <div class="booking-details">
             <div class="booking-title">
               {{ item.title }}
-              {{ item.booking_id }}
+              
               <!-- Status badge for pending or canceled -->
               <span v-if="item.status === 'pending'" class="status-badge pending">
                 Pending
@@ -317,7 +402,7 @@ function getMeetingPlatform(booking) {
             
             <div class="booking-attendees">
               <span class="attendee-label">
-                <PhUser weight="bold" size="14" />
+                <PhUsers weight="bold" size="14" />
                 You and {{ item.attendees?.[0]?.name || 'Guest' }}
               </span>
             </div>
@@ -327,7 +412,7 @@ function getMeetingPlatform(booking) {
           <div class="booking-actions">
             <!-- Meeting platform -->
             <div class="meeting-platform">
-              {{ getMeetingPlatform(item).name }}
+              {{ item.location || 'No location' }}
             </div>
             
             <!-- Buttons section -->
@@ -363,12 +448,58 @@ function getMeetingPlatform(booking) {
             </div>
           </div>
         </div>
+        
+        <!-- External Event Item -->
+        <div v-else-if="item && item.type === 'external_event'" class="booking-card external-event">
+          <!-- Time indicator with icon instead of color box -->
+          <div class="time-indicator">
+            <div class="source-icon">
+
+              <img 
+                v-if="item.source === 'google_calendar'"
+                src="https://global.divhunt.com/3858bb278694ec6c098fef9b26e059ab_2357.svg" 
+                alt="Google Calendar"
+                class="calendar-icon"
+              />
+              
+            </div>
+            {{ item.formattedStart || '--:--' }} - {{ item.formattedEnd || '--:--' }}
+          </div>
+          
+          <!-- Event details -->
+          <div class="booking-details">
+            <div class="booking-title">
+              {{ item.title || 'Untitled Event' }}
+              
+              <!-- Status badge if not confirmed -->
+              <span v-if="item.status && item.status !== 'confirmed'" class="status-badge">
+                {{ item.status }}
+              </span>
+              
+
+            </div>
+            
+            <div class="external-source">
+              <span class="source-label">
+                {{ getCalendarName(item) }}
+              </span>
+            </div>
+          </div>
+          
+          <!-- Actions -->
+          <div class="booking-actions">
+            <ButtonComponent 
+              label="Go to Details" 
+              as="tertiary"
+              @click="openExternalEvent(item)"
+            />
+            
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
-
-
 
 <style scoped>
 .bookings-list {
@@ -414,14 +545,27 @@ function getMeetingPlatform(booking) {
   min-width: 120px;
   display: flex;
   align-items: center;
-  gap:15px;
+  gap: 15px;
   text-align: center;
 }
 
-.time-indicator > div {
+.time-indicator > .clr-box {
   width: 24px;
   height: 10px;
   border-radius: 100px;
+}
+
+/* Calendar icon for external events */
+.source-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+}
+
+.calendar-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .booking-details {
@@ -444,6 +588,7 @@ function getMeetingPlatform(booking) {
   font-weight: 500;
   padding: 2px 8px;
   border-radius: 10px;
+  text-transform: capitalize;
 }
 
 .status-badge.pending {
@@ -456,6 +601,15 @@ function getMeetingPlatform(booking) {
   color: #c62828;
 }
 
+.busy-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: #ffebee;
+  color: #c62828;
+}
+
 .booking-attendees {
   color: var(--text-secondary);
   font-size: 13px;
@@ -464,6 +618,18 @@ function getMeetingPlatform(booking) {
 }
 
 .attendee-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* External event source styling */
+.external-source {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.source-label {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -503,5 +669,14 @@ function getMeetingPlatform(booking) {
 
 .booking-item.pending .booking-card {
   border-left: 3px solid #ff9800;
+}
+
+/* External event styling */
+.external-event {
+  background-color: var(--background-0);
+}
+
+.external-event:hover {
+  background-color: var(--background-1);
 }
 </style>

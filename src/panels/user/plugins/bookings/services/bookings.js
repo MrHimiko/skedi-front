@@ -478,4 +478,92 @@ export class BookingsService {
 			}
 		});
 	}
+	
+
+
+
+	/* EXTRENAL / INTEGRAITONS EVENTS SUCH AS GOOGLE / OUTLOOK CALENDARs */
+
+	static async getExternalEvents({
+		startTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+		endTime = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+		sync = 'auto',
+		useCache = true
+	}) {
+		try {
+			// Generate cache key
+			const cacheKey = 'external_events';
+			const now = Date.now();
+			
+			// Check cache first
+			if (
+				useCache && 
+				this.bookingsCache[cacheKey]?.data?.events?.length > 0 &&
+				now - this.bookingsCache[cacheKey].timestamp < this.CACHE_EXPIRY
+			) {
+				console.log(`Using cached external events`);
+				return this.bookingsCache[cacheKey].data;
+			}
+			
+			// Build query params
+			const queryParams = new URLSearchParams();
+			queryParams.append('start_date', startTime);
+			queryParams.append('end_date', endTime);
+			queryParams.append('sync', sync);
+			
+			// Fetch external events from integrations API
+			const response = await api.get(`user/integrations/events?${queryParams.toString()}`);
+			
+			if (response && response.success && response.data) {
+				// Process events with timezone handling
+				if (response.data.events && Array.isArray(response.data.events)) {
+					response.data.events = this.handleTimezoneConversion(response.data.events);
+				}
+				
+				// Store in cache
+				this.bookingsCache[cacheKey] = {
+					data: response.data,
+					timestamp: now
+				};
+				
+				return response.data;
+			}
+			
+			throw new Error(response?.message || 'Failed to fetch external events');
+		} catch (error) {
+			console.error('Error fetching external events:', error);
+			throw error;
+		}
+	}
+
+
+	static getSourceIcon(source, calendarName) {
+		const iconMap = {
+			'google_calendar': {
+				name: 'Google Calendar',
+				icon: 'google_calendar'
+			},
+			'outlook': {
+				name: 'Outlook',
+				icon: 'outlook'
+			},
+			'apple_calendar': {
+				name: 'Apple Calendar',
+				icon: 'apple_calendar'
+			}
+		};
+		
+		const baseInfo = iconMap[source] || {
+			name: 'Calendar',
+			icon: 'calendar'
+		};
+		
+		// Include calendar name if available
+		if (calendarName) {
+			baseInfo.name = `${baseInfo.name} (${calendarName})`;
+		}
+		
+		return baseInfo;
+	}
+
 }
