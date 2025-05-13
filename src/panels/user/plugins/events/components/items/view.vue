@@ -209,29 +209,29 @@
             case 'Add routing form':
                 console.log('Add routing form to event', selectedEventId);
                 break;
-                case 'Remove':
-                    popup.open(
-                        'remove-event-confirm',
-                        null,
-                        ConfirmComponent,
-                        {
-                            as: 'red',
-                            description: `Are you sure you want to remove "${eventData.name}"?`,
-                            endpoint: `events/${selectedEventId}?organization_id=${orgId}`,
-                            type: 'DELETE',
-                            callback: (event, data, response, success) => {
-                                if (success) {
-                                    reloadData();
-                                    popup.close();
-                                    console.log('Event removed (soft delete)', response);
-                                }
+            case 'Remove':
+                popup.open(
+                    'remove-event-confirm',
+                    null,
+                    ConfirmComponent,
+                    {
+                        as: 'red',
+                        description: `Are you sure you want to remove "${eventData.name}"?`,
+                        endpoint: `events/${selectedEventId}?organization_id=${orgId}`,
+                        type: 'DELETE',
+                        callback: (event, data, response, success) => {
+                            if (success) {
+                                reloadData();
+                                popup.close();
+                                console.log('Event removed (soft delete)', response);
                             }
-                        },
-                        {
-                            position: 'center'
                         }
-                    );
-                    break;
+                    },
+                    {
+                        position: 'center'
+                    }
+                );
+                break;
             default:
                 break;
         }

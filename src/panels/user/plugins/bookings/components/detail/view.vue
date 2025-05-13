@@ -156,8 +156,12 @@ function cancelBooking() {
       callback: async (event, data, response, success) => {
         if (success) {
           try {
+
+          
             const updatedBooking = await changeBookingStatus(booking.value, 'canceled');
             common.notification('Booking canceled successfully', true);
+
+            document.querySelector('.i-popup-close').click();
             
             // Update local booking data with server response
             if (updatedBooking) {
@@ -172,6 +176,7 @@ function cancelBooking() {
               props.callback(true);
             }
           } catch (error) {
+
             common.notification('Error canceling booking: ' + (error.message || 'Unknown error'), false);
           }
         }

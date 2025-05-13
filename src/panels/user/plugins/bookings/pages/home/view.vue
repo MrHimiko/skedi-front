@@ -124,11 +124,15 @@ async function fetchExternalEvents(startTime, endTime) {
             
             for (const event of response.data.events) {
                 try {
-                    // Make sure startTime is a valid date string
+                    // Skip events we've already processed (prevent duplicates)
+                    if (bookings.value.some(item => item && item.id === event.id)) {
+                        continue;
+                    }
+                    
+                    // Skip if missing required data
                     if (!event.start_time) continue;
                     
                     // Extract date and time parts - handle both formats
-                    // Server might return "2025-05-15 09:30:00" or ISO format
                     let startDateTime, endDateTime;
                     
                     if (event.start_time.includes('T')) {
@@ -136,7 +140,7 @@ async function fetchExternalEvents(startTime, endTime) {
                         startDateTime = new Date(event.start_time);
                         endDateTime = new Date(event.end_time || event.start_time);
                     } else {
-                        // It's in the format "2025-05-15 09:30:00"
+                        // Format: "2025-05-15 09:30:00"
                         const [startDatePart, startTimePart] = event.start_time.split(' ');
                         const [endDatePart, endTimePart] = event.end_time ? event.end_time.split(' ') : [startDatePart, "00:00:00"];
                         
@@ -145,7 +149,7 @@ async function fetchExternalEvents(startTime, endTime) {
                         endDateTime = new Date(`${endDatePart}T${endTimePart}Z`);
                     }
                     
-                    // Format time in user's timezone
+                    // Format time consistently in user's timezone
                     const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
                         hour: '2-digit',
                         minute: '2-digit',
@@ -153,7 +157,7 @@ async function fetchExternalEvents(startTime, endTime) {
                         timeZone: userTimezone
                     });
                     
-                    // Format date in user's timezone
+                    // Format date consistently in user's timezone
                     const userDateFormatter = new Intl.DateTimeFormat('en-US', {
                         year: 'numeric',
                         month: 'long',
@@ -162,13 +166,21 @@ async function fetchExternalEvents(startTime, endTime) {
                         timeZone: userTimezone
                     });
                     
+                    // Create a consistent dateKey based on the date in user's timezone
+                    const dateInUserTZ = new Date(userDateFormatter.format(startDateTime));
+                    const dateKey = userDateFormatter.format(startDateTime);
+                    
                     // Create the needed properties with timezone-adjusted values
                     const processedEvent = {
                         ...event,
                         type: 'external_event',
                         formattedStart: userTimeFormatter.format(startDateTime),
                         formattedEnd: userTimeFormatter.format(endDateTime),
-                        dateKey: userDateFormatter.format(startDateTime)
+                        dateKey,
+                        // Add these fields to track the event better
+                        uniqueId: `ext_${event.source}_${event.source_id}`,
+                        startTimeMs: startDateTime.getTime(),
+                        endTimeMs: endDateTime.getTime()
                     };
                     
                     processedEvents.push(processedEvent);
@@ -271,134 +283,154 @@ function processBookingsData(data) {
 
 // Add external events to the bookings list with proper date headers
 function addExternalEventsToBookings(events) {
-    if (!Array.isArray(events) || events.length === 0) return;
-    if (!Array.isArray(bookings.value)) {
-        bookings.value = []; // Ensure bookings.value is an array
+  if (!Array.isArray(events) || events.length === 0) return;
+  if (!Array.isArray(bookings.value)) {
+    bookings.value = []; // Ensure bookings.value is an array
+  }
+  
+  // Create a map to track which events have already been added
+  // This prevents duplicate events
+  const processedEventIds = new Set();
+  
+  // Create a map of all date headers
+  const dateHeaders = {};
+  const bookingsList = [...bookings.value];
+  
+  // First find all existing date headers
+  bookingsList.forEach((item, index) => {
+    if (item && item.type === 'header') {
+      dateHeaders[item.formattedDate] = index;
+    }
+  });
+  
+  // Group events by dateKey
+  const eventsByDate = {};
+  events.forEach(event => {
+    if (!event || !event.dateKey || processedEventIds.has(event.id)) return;
+    
+    // Mark this event as processed
+    processedEventIds.add(event.id);
+    
+    if (!eventsByDate[event.dateKey]) {
+      eventsByDate[event.dateKey] = [];
     }
     
-    // Create a map of all date headers
-    const dateHeaders = {};
-    const bookingsList = [...bookings.value];
-    
-    // First find all existing date headers
-    bookingsList.forEach((item, index) => {
-        if (item && item.type === 'header') {
-            dateHeaders[item.formattedDate] = index;
-        }
-    });
-    
-    // Group events by dateKey
-    const eventsByDate = {};
-    events.forEach(event => {
-        if (!event || !event.dateKey) return;
-        
-        if (!eventsByDate[event.dateKey]) {
-            eventsByDate[event.dateKey] = [];
-        }
-        
-        eventsByDate[event.dateKey].push(event);
-    });
-    
-    // For each date group, either add to existing header or create new one
-    Object.entries(eventsByDate).forEach(([dateKey, dateEvents]) => {
-        // If we have a header for this date already
-        if (dateHeaders[dateKey] !== undefined) {
-            const headerIndex = dateHeaders[dateKey];
-            
-            // Find all events already under this header
-            let nextHeaderIndex = -1;
-            for (let i = headerIndex + 1; i < bookingsList.length; i++) {
-                if (bookingsList[i] && bookingsList[i].type === 'header') {
-                    nextHeaderIndex = i;
-                    break;
-                }
-            }
-            
-            // Insert at appropriate position
-            if (nextHeaderIndex === -1) {
-                // No next header, append to the end
-                bookingsList.push(...dateEvents);
-            } else {
-                // Insert before the next header
-                bookingsList.splice(nextHeaderIndex, 0, ...dateEvents);
-            }
-        } else {
-            // We don't have this date yet, create a new header and add events
-            
-            // Find where to insert this date (in chronological order)
-            const headerDate = new Date(dateKey);
-            let insertIndex = bookingsList.length;
-            
-            // Find the correct position to insert
-            for (let i = 0; i < bookingsList.length; i++) {
-                if (bookingsList[i] && bookingsList[i].type === 'header' && 
-                    new Date(bookingsList[i].formattedDate) > headerDate) {
-                    insertIndex = i;
-                    break;
-                }
-            }
-            
-            // Insert the new header
-            const newHeader = {
-                type: 'header',
-                date: headerDate,
-                formattedDate: dateKey
-            };
-            
-            // Insert header and events at the correct position
-            bookingsList.splice(insertIndex, 0, newHeader, ...dateEvents);
-        }
-    });
-    
-    // Sort events within each date by start time
-    const finalBookings = [];
-    let currentHeader = null;
-    let currentEvents = [];
-    
-    // Group by headers
-    bookingsList.forEach(item => {
-        if (!item) return;
-        
-        if (item.type === 'header') {
-            // If we have a previous header, add it and its events
-            if (currentHeader) {
-                finalBookings.push(currentHeader);
-                
-                // Sort events by start time
-                currentEvents.sort((a, b) => {
-                    if (!a || !a.start_time) return 1;
-                    if (!b || !b.start_time) return -1;
-                    return new Date(a.start_time) - new Date(b.start_time);
-                });
-                
-                finalBookings.push(...currentEvents);
-            }
-            
-            // Start a new header group
-            currentHeader = item;
-            currentEvents = [];
-        } else {
-            // Add to current event group
-            currentEvents.push(item);
-        }
-    });
-    
-    // Add the last header and its events
-    if (currentHeader) {
-        finalBookings.push(currentHeader);
-        
-        // Sort events by start time
-        currentEvents.sort((a, b) => {
-            if (!a || !a.start_time) return 1;
-            if (!b || !b.start_time) return -1;
-            return new Date(a.start_time) - new Date(b.start_time);
-        });
-        
-        finalBookings.push(...currentEvents);
+    eventsByDate[event.dateKey].push(event);
+  });
+  
+  // Process each date group
+  const finalBookings = [];
+  let hasAddedEvents = false;
+  
+  // First collect all existing headers
+  const existingHeaders = new Set();
+  bookingsList.forEach(item => {
+    if (item && item.type === 'header') {
+      existingHeaders.add(item.formattedDate);
     }
+  });
+  
+  // For each date group, add to the list
+  Object.entries(eventsByDate).forEach(([dateKey, dateEvents]) => {
+    hasAddedEvents = true;
     
-    // Update the bookings array
-    bookings.value = finalBookings;
+    // Process only if we don't already have events for this date
+    if (!existingHeaders.has(dateKey)) {
+      const headerDate = new Date(dateKey);
+      
+      // Create the new header
+      const newHeader = {
+        type: 'header',
+        date: headerDate,
+        formattedDate: dateKey
+      };
+      
+      // Add header and its events
+      finalBookings.push(newHeader);
+      finalBookings.push(...dateEvents);
+    } else {
+      // Find the index of this header
+      const headerIndex = bookingsList.findIndex(item => 
+        item && item.type === 'header' && item.formattedDate === dateKey
+      );
+      
+      if (headerIndex !== -1) {
+        // Find the next header index
+        let nextHeaderIndex = bookingsList.findIndex((item, i) => 
+          i > headerIndex && item && item.type === 'header'
+        );
+        
+        if (nextHeaderIndex === -1) nextHeaderIndex = bookingsList.length;
+        
+        // Insert events before the next header
+        const eventsToInsert = dateEvents.filter(event => 
+          !bookingsList.some(item => item && item.id === event.id)
+        );
+        
+        if (eventsToInsert.length > 0) {
+          bookingsList.splice(nextHeaderIndex, 0, ...eventsToInsert);
+        }
+      }
+    }
+  });
+  
+  // If we added new events, we need to rebuild the list
+  if (hasAddedEvents) {
+    // Combine existing and new items
+    const combinedList = [...bookingsList, ...finalBookings];
+    
+    // Sort all items by date
+    const sortedHeaders = [];
+    const itemsByHeader = {};
+    
+    // Collect headers and group items
+    combinedList.forEach(item => {
+      if (!item) return;
+      
+      if (item.type === 'header') {
+        // Avoid duplicate headers
+        if (!sortedHeaders.some(h => h.formattedDate === item.formattedDate)) {
+          sortedHeaders.push(item);
+          itemsByHeader[item.formattedDate] = [];
+        }
+      } else if (item.dateKey) {
+        // Add item to its date group
+        if (!itemsByHeader[item.dateKey]) {
+          itemsByHeader[item.dateKey] = [];
+        }
+        
+        // Avoid duplicates
+        if (!itemsByHeader[item.dateKey].some(i => i.id === item.id)) {
+          itemsByHeader[item.dateKey].push(item);
+        }
+      }
+    });
+    
+    // Sort headers chronologically
+    sortedHeaders.sort((a, b) => new Date(a.formattedDate) - new Date(b.formattedDate));
+    
+    // Build final sorted list
+    const result = [];
+    sortedHeaders.forEach(header => {
+      result.push(header);
+      
+      // Sort events by start time
+      const events = itemsByHeader[header.formattedDate] || [];
+      events.sort((a, b) => {
+        if (!a || !a.start_time) return 1;
+        if (!b || !b.start_time) return -1;
+        return new Date(a.start_time) - new Date(b.start_time);
+      });
+      
+      result.push(...events);
+    });
+    
+    // Update bookings
+    bookings.value = result;
+  } else {
+    // No new events were added
+    bookings.value = bookingsList;
+  }
 }
 
 // Toggle external events visibility

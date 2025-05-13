@@ -45,10 +45,15 @@ onUnmounted(() => {
 
 // Handle menu item click
 function handleMenuClick(event, menu, menuIndex) {
-    // Close dropdown
-    const dropdownClose = document.querySelector('.i-dropdown-close');
-    if (dropdownClose) {
-        dropdownClose.click();
+
+    if (event && event.preventRecursion) {
+        return;
+    }
+
+    const dropdownContainer = document.querySelector('.c-dropdown');
+    if (dropdownContainer) {
+        dropdownContainer.classList.add('hidden');
+        dropdownContainer.dispatchEvent(new CustomEvent('close-dropdown'));
     }
 
     // If it has an onClick handler, call it
@@ -67,6 +72,7 @@ function handleMenuClick(event, menu, menuIndex) {
         props.onClick(event, menu, menuIndex);
     }
 }
+
 </script>
 
 <template>

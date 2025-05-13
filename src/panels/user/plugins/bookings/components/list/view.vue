@@ -37,16 +37,28 @@ function formatDate(date) {
   if (!date) return 'Unknown Date';
   
   try {
+    // Ensure we have a valid Date object
+    const itemDate = date instanceof Date ? date : new Date(date);
+    if (isNaN(itemDate.getTime())) return 'Invalid Date';
+    
+    // Get today and tomorrow at midnight for consistent comparison
     const today = new Date();
-    const tomorrow = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
     
-    if (date.toDateString() === today.toDateString()) {
+    // Reset time components of itemDate for comparison
+    const compareDate = new Date(itemDate);
+    compareDate.setHours(0, 0, 0, 0);
+    
+    // Compare the dates
+    if (compareDate.getTime() === today.getTime()) {
       return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
+    } else if (compareDate.getTime() === tomorrow.getTime()) {
       return 'Tomorrow';
     } else {
-      return date.toLocaleDateString('en-US', { 
+      return itemDate.toLocaleDateString('en-US', { 
         weekday: 'long',
         day: 'numeric',
         month: 'long',
@@ -160,6 +172,10 @@ async function changeBookingStatus(booking, status) {
 // Handle booking action clicks
 async function handleBookingAction(event, action, booking) {
   if (!action || !action.label || !booking) return;
+
+
+
+  console.log("ACTION", action.label);
   
   switch(action.label) {
     case 'Join Meeting':
@@ -200,8 +216,10 @@ async function handleBookingAction(event, action, booking) {
           callback: async (event, data, response, success) => {
             if (success) {
               try {
+                
                 await changeBookingStatus(booking, 'canceled');
                 common.notification('Booking canceled successfully', true);
+                document.querySelector('.i-popup-close').click();
                 // Emit event to refresh the bookings list
                 emit('refresh');
               } catch (error) {
@@ -226,6 +244,7 @@ async function handleBookingAction(event, action, booking) {
               try {
                 await changeBookingStatus(booking, 'removed');
                 common.notification('Booking removed successfully', true);
+                document.querySelector('.i-popup-close').click();
                 // Emit event to refresh the bookings list
                 emit('refresh');
               } catch (error) {
@@ -239,30 +258,7 @@ async function handleBookingAction(event, action, booking) {
   }
 }
 
-// Handle external event actions
-async function handleExternalEventAction(event, action, externalEvent) {
-  if (!action || !action.label || !externalEvent) return;
-  
-  if (action.label === 'View in Calendar' || action.label === 'Open Link') {
-    if (externalEvent.html_link) {
-      window.open(externalEvent.html_link, '_blank');
-    } else {
-      common.notification('No event link available', false);
-    }
-  } else if (action.label === 'Copy Link') {
-    if (externalEvent.html_link) {
-      try {
-        await navigator.clipboard.writeText(externalEvent.html_link);
-        common.notification('Link copied to clipboard', true);
-      } catch (error) {
-        console.error('Error copying to clipboard:', error);
-        common.notification('Failed to copy link', false);
-      }
-    } else {
-      common.notification('No event link available', false);
-    }
-  }
-}
+
 
 // Confirm a pending booking
 async function confirmBooking(booking) {
@@ -313,21 +309,7 @@ function openExternalEvent(event) {
   }
 }
 
-// Get calendar source icon for external events
-function getCalendarIcon(source) {
-  if (!source) return 'calendar';
-  
-  switch(source.toLowerCase()) {
-    case 'google_calendar':
-      return 'google-calendar';
-    case 'outlook':
-      return 'outlook-calendar';
-    case 'apple_calendar':
-      return 'apple-calendar';
-    default:
-      return 'calendar';
-  }
-}
+
 
 // Get safe formatted calendar name
 function getCalendarName(event) {
