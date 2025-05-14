@@ -36,6 +36,16 @@ export default class
             }
         })
 
+        this.router.addRoute(
+        {
+            path: '/oauth/outlook/callback',
+            name: 'outlook-oauth-callback',
+            component: () => import('./pages/outlook/callback.vue'),
+            beforeEnter: (to, from, next) => 
+            {
+                next();
+            }
+        })
     }
 
     sidebar() 
