@@ -21,7 +21,6 @@ export default class
             beforeEnter: (to, from, next) => 
             {
                 next();
-                //this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
             }
         })
 
@@ -41,6 +40,17 @@ export default class
             path: '/oauth/outlook/callback',
             name: 'outlook-oauth-callback',
             component: () => import('./pages/outlook/callback.vue'),
+            beforeEnter: (to, from, next) => 
+            {
+                next();
+            }
+        })
+
+        this.router.addRoute(
+        {
+            path: '/oauth/google-meet/callback',
+            name: 'google-meet-oauth-callback',
+            component: () => import('./pages/google-meet/callback.vue'),
             beforeEnter: (to, from, next) => 
             {
                 next();

@@ -1,4 +1,4 @@
-
+<!-- src/panels/user/plugins/integrations/providers/google-meet/oauth-view.vue -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { common } from '@utils/common';
@@ -63,7 +63,7 @@ function startOAuthFlow() {
         // Open popup window
         authWindow.value = window.open(
             authUrl.value,
-            'google_calendar_auth',
+            'google_meet_auth',
             `width=${width},height=${height},left=${left},top=${top}`
         );
         
@@ -139,18 +139,32 @@ async function completeAuthentication(code, state) {
 // Setup message listener for OAuth callback
 function setupMessageListener() {
     const messageHandler = (event) => {
-        console.log('Received message type:', event.data?.type);
+        console.log('Received postMessage event:', event);
+        console.log('Event origin:', event.origin);
+        console.log('Expected origin:', window.location.origin);
+        console.log('Event data:', event.data);
+        
+        // Validate the origin - only accept messages from our own domain
+        if (event.origin !== window.location.origin) {
+            console.error('Rejected message from unauthorized origin:', event.origin);
+            return;
+        }
         
         // Only accept messages with the right type
-        if (event.data && event.data.type === 'google_oauth_callback') {
+        if (event.data && (event.data.type === 'google_meet_oauth_callback' || event.data.type === 'google_oauth_callback')) {
+            console.log('Received OAuth callback message', event.data);
             const { code, state } = event.data;
             
             if (code) {
+                console.log('OAuth code received, completing authentication');
                 // Complete authentication with the code
                 completeAuthentication(code, state);
             } else {
+                console.error('No authorization code in message');
                 error.value = 'No authorization code received';
             }
+        } else {
+            console.log('Ignoring message with type:', event.data?.type);
         }
     };
     
@@ -159,7 +173,7 @@ function setupMessageListener() {
     
     // Store the handler reference to remove it later
     messageListenerRef.value = messageHandler;
-    console.log('Message listener set up');
+    console.log('Message listener set up for google_meet_oauth_callback');
 }
 
 // Handle manual retry
@@ -198,7 +212,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <PopupLayout title="Connect to Google Calendar" class="h-auto">
+    <PopupLayout title="Connect to Google Meet" class="h-auto">
         <template #content>
             <div class="oauth-popup-content">
                 <!-- Loading state -->
@@ -206,7 +220,7 @@ onMounted(() => {
                     <div class="spinner">
                         <i class="spin">sync</i>
                     </div>
-                    <p>{{ isRetrying ? 'Retrying authentication...' : 'Preparing Google Calendar authentication...' }}</p>
+                    <p>{{ isRetrying ? 'Retrying authentication...' : 'Preparing Google Meet authentication...' }}</p>
                 </div>
                 
                 <!-- Error state -->
@@ -226,12 +240,15 @@ onMounted(() => {
                 <!-- Ready to authenticate state -->
                 <div v-else class="auth-state">
                     <div class="icon-container">
-                        <div class="provider-icon google">G</div>
+                        <div class="provider-icon google">
+                            <img src="https://lh3.googleusercontent.com/SX4rDfgRgQdufwQrDwQlUxwCNG-sSj4JkKe4DAz5zzYUTNAZgwsqxlCDdHUbzYy_kIX5uyEB=w128-h128-e365-rj-sc0x00ffffff" 
+                                alt="Google Meet" style="width: 32px; height: 32px;" />
+                        </div>
                     </div>
                     
-                    <h3>Connect to Google Calendar</h3>
+                    <h3>Connect to Google Meet</h3>
                     <p class="description">
-                        You'll be redirected to Google to authorize access to your calendar. 
+                        You'll be redirected to Google to authorize access to Google Meet. 
                         Please sign in and grant the required permissions.
                     </p>
                     
@@ -297,10 +314,11 @@ onMounted(() => {
     font-size: 24px;
     font-weight: 600;
     color: white;
+    overflow: hidden;
 }
 
 .provider-icon.google {
-    background-color: #4285F4;
+    background-color: #ffffff;
 }
 
 .spinner {

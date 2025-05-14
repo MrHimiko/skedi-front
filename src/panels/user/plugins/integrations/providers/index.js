@@ -1,5 +1,6 @@
 import GoogleCalendarProvider from './google-calendar';
 import OutlookCalendarProvider from './outlook-calendar';
+import GoogleMeetProvider from './google-meet';
 
 /**
  * Map of all available integration providers
@@ -8,8 +9,9 @@ import OutlookCalendarProvider from './outlook-calendar';
 const PROVIDERS = {
     google_calendar: GoogleCalendarProvider,
     outlook_calendar: OutlookCalendarProvider,
+    google_meet: GoogleMeetProvider,
     // For future implementation:
-    // microsoft_calendar: MicrosoftCalendarProvider,
+    // microsoft_teams: MicrosoftTeamsProvider,
     // zoom: ZoomProvider
 };
 

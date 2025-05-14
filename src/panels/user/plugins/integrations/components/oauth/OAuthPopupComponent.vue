@@ -1,4 +1,3 @@
-
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { common } from '@utils/common';
@@ -15,6 +14,30 @@ const props = defineProps({
     callback: {
         type: Function,
         required: true
+    },
+    title: {
+        type: String,
+        default: 'Connect Integration'
+    },
+    icon: {
+        type: String,
+        default: null
+    },
+    iconBgColor: {
+        type: String,
+        default: '#4285F4'
+    },
+    iconComponent: {
+        type: Object,
+        default: null
+    },
+    messageType: {
+        type: String,
+        default: 'oauth_callback'
+    },
+    authButtonText: {
+        type: String,
+        default: 'Authorize'
     }
 });
 
@@ -63,7 +86,7 @@ function startOAuthFlow() {
         // Open popup window
         authWindow.value = window.open(
             authUrl.value,
-            'google_calendar_auth',
+            `${props.provider.id}_auth`,
             `width=${width},height=${height},left=${left},top=${top}`
         );
         
@@ -142,7 +165,7 @@ function setupMessageListener() {
         console.log('Received message type:', event.data?.type);
         
         // Only accept messages with the right type
-        if (event.data && event.data.type === 'google_oauth_callback') {
+        if (event.data && event.data.type === props.messageType) {
             const { code, state } = event.data;
             
             if (code) {
@@ -198,7 +221,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <PopupLayout title="Connect to Google Calendar" class="h-auto">
+    <PopupLayout :title="title" class="h-auto">
         <template #content>
             <div class="oauth-popup-content">
                 <!-- Loading state -->
@@ -206,7 +229,7 @@ onMounted(() => {
                     <div class="spinner">
                         <i class="spin">sync</i>
                     </div>
-                    <p>{{ isRetrying ? 'Retrying authentication...' : 'Preparing Google Calendar authentication...' }}</p>
+                    <p>{{ isRetrying ? 'Retrying authentication...' : `Preparing ${provider.name} authentication...` }}</p>
                 </div>
                 
                 <!-- Error state -->
@@ -226,19 +249,30 @@ onMounted(() => {
                 <!-- Ready to authenticate state -->
                 <div v-else class="auth-state">
                     <div class="icon-container">
-                        <div class="provider-icon google">G</div>
+                        <!-- Custom icon component if provided -->
+                        <component v-if="iconComponent" :is="iconComponent" />
+                        
+                        <!-- Image icon if URL provided -->
+                        <div v-else-if="icon" class="provider-icon" :style="{ backgroundColor: iconBgColor }">
+                            <img :src="icon" :alt="provider.name" style="width: 32px; height: 32px;" />
+                        </div>
+                        
+                        <!-- Text icon (first letter) as fallback -->
+                        <div v-else class="provider-icon" :style="{ backgroundColor: iconBgColor }">
+                            {{ provider.name.charAt(0) }}
+                        </div>
                     </div>
                     
-                    <h3>Connect to Google Calendar</h3>
+                    <h3>Connect to {{ provider.name }}</h3>
                     <p class="description">
-                        You'll be redirected to Google to authorize access to your calendar. 
+                        You'll be redirected to authorize access. 
                         Please sign in and grant the required permissions.
                     </p>
                     
                     <div class="permissions">
                         <h4>This will allow us to:</h4>
                         <ul>
-                            <li v-for="(permission, index) in props.provider.permissions" :key="index">
+                            <li v-for="(permission, index) in provider.permissions" :key="index">
                                 <i>check</i> {{ permission }}
                             </li>
                         </ul>
@@ -246,7 +280,7 @@ onMounted(() => {
                     
                     <div class="actions">
                         <Button 
-                            label="Authorize with Google" 
+                            :label="authButtonText"
                             @click="startOAuthFlow" 
                         />
                         <Button label="Cancel" as="tertiary" @click="handleCancel" />
@@ -281,6 +315,7 @@ onMounted(() => {
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
+    overflow: hidden;
 }
 
 .auth-state.error .icon-container {
@@ -297,10 +332,6 @@ onMounted(() => {
     font-size: 24px;
     font-weight: 600;
     color: white;
-}
-
-.provider-icon.google {
-    background-color: #4285F4;
 }
 
 .spinner {
