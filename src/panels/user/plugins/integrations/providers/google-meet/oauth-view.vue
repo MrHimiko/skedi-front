@@ -241,7 +241,7 @@ onMounted(() => {
                 <div v-else class="auth-state">
                     <div class="icon-container">
                         <div class="provider-icon google">
-                            <img src="https://lh3.googleusercontent.com/SX4rDfgRgQdufwQrDwQlUxwCNG-sSj4JkKe4DAz5zzYUTNAZgwsqxlCDdHUbzYy_kIX5uyEB=w128-h128-e365-rj-sc0x00ffffff" 
+                            <img src="https://global.divhunt.com/6dea696e910d70e2925a5c3e453a69ff_644.svg" 
                                 alt="Google Meet" style="width: 32px; height: 32px;" />
                         </div>
                     </div>

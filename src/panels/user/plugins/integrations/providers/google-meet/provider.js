@@ -15,7 +15,7 @@ export class GoogleMeetProvider extends BaseIntegrationProvider {
             name: 'Google Meet',
             description: 'Integrate with Google Meet to create and manage video conference links for your meetings.',
             category: 'conferencing',
-            icon: 'https://lh3.googleusercontent.com/SX4rDfgRgQdufwQrDwQlUxwCNG-sSj4JkKe4DAz5zzYUTNAZgwsqxlCDdHUbzYy_kIX5uyEB=w128-h128-e365-rj-sc0x00ffffff',
+            icon: 'https://global.divhunt.com/6dea696e910d70e2925a5c3e453a69ff_644.svg',
             scopes: [
                 'https://www.googleapis.com/auth/meetings.space.created',
                 'https://www.googleapis.com/auth/meetings.space.readonly',

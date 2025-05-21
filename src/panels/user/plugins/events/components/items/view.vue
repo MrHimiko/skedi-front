@@ -19,7 +19,7 @@
     
     import EventCreateForm from '@user_events/components/form/eventCreate.vue';
     import OrganizationEditForm from '@user_teams/components/form/organizationEdit.vue';
-
+    import EventEditLocation from '@user_events/components/form/eventEditLocation.vue';
     import ConfirmComponent from '@floated/confirm/view.vue';
 
     // Icon imports
@@ -173,32 +173,48 @@
                 );
                 break;
 
-                case 'Edit hosts':
-                    popup.open(
-                        'edit-event-assignees',
-                        null,
-                        EventEditAssignees,
-                        {
-                            endpoint: `events/${selectedEventId}/assignees?organization_id=${orgId}`,
-                            type: 'PUT',
-                            eventId: selectedEventId,
-                            organizationId: orgId,
-                            callback: (event, data, response, success) => {
-                                if (success) {
-                                    reloadData();
-                                }
-                            },
-                            class: 'h-auto event-assignees',
-                            title: `Edit Hosts for ${eventData.name}`,
+            case 'Edit hosts':
+                popup.open(
+                    'edit-event-assignees',
+                    null,
+                    EventEditAssignees,
+                    {
+                        endpoint: `events/${selectedEventId}/assignees?organization_id=${orgId}`,
+                        type: 'PUT',
+                        eventId: selectedEventId,
+                        organizationId: orgId,
+                        callback: (event, data, response, success) => {
+                            if (success) {
+                                reloadData();
+                            }
                         },
-                        {
-                            position: 'center'
-                        }
-                    );
-                    break;
+                        class: 'h-auto event-assignees',
+                        title: `Edit Hosts for ${eventData.name}`,
+                    },
+                    {
+                        position: 'center'
+                    }
+                );
+                break;
 
             case 'Edit location':
-                console.log('Edit location for event', selectedEventId);
+                popup.open(
+                    'edit-event-location',
+                    null,
+                    EventEditLocation,
+                    {
+                        eventId: selectedEventId,
+                        organizationId: orgId,
+                        callback: (event, data, response, success) => {
+                            if (success) {
+                                reloadData();
+                            }
+                        }
+                    },
+                    {
+                        position: 'center'
+                    }
+                );
                 break;
             case 'Duplicate':
                 console.log('Duplicate event', selectedEventId);

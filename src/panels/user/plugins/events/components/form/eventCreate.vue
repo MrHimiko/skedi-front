@@ -9,6 +9,7 @@ import Button from '@form/button/view.vue';
 import InputComponent from '@form/input/view.vue';
 import SelectComponent from '@form/select/view.vue';
 import { common } from '@utils/common';
+import LocationSelect from '@user_events/components/form/locationSelect/view.vue';
 
 const userStore = UserStore();
 const currentTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -21,6 +22,7 @@ const organizationId = ref('');
 const showOrgSelection = ref(true);
 const scheduleData = ref(null);
 const durationData = ref(null);
+const locationData = ref(null);
 const isSubmitting = ref(false);
 
 // Reference to duration component
@@ -124,6 +126,12 @@ function extractDurationDataFromDOM() {
     return extractedData.length > 0 ? extractedData : null;
 }
 
+// Handle location update
+const updateLocation = (data) => {
+    locationData.value = data;
+    console.log('Updated location data:', locationData.value);
+};
+
 const nextStep = () => {
     if (currentStep.value === 1 && !canProceedToStep2.value) {
         common.notification('Please enter an event name and select an organization', false);
@@ -207,7 +215,8 @@ const handleSubmit = async () => {
     // Prepare data for API submission
     const apiData = {
         name: eventName.value,
-        schedule: {}
+        schedule: {},
+        location: locationData.value || ''
     };
     
     // Include durations if available
@@ -292,6 +301,15 @@ const handleSubmit = async () => {
                                 placeholder="e.g., Consultation Call"
                                 required
                                 @onInput="updateEventName"
+                            />
+                        </div>
+                        
+                        <!-- Location component -->
+                        <div class="form-group">
+                            <LocationSelect
+                                :initialValue="locationData"
+                                @update:value="updateLocation"
+                                :callback="updateLocation"
                             />
                         </div>
                         
