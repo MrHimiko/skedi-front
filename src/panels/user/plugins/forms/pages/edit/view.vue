@@ -12,7 +12,7 @@ import BuilderView from '@user_forms/components/builder/view.vue';
 import FormSettingsPopup from '@user_forms/components/builder/form-settings-popup.vue';
 import { popup } from '@utils/popup';
 
-import { PhFloppyDisk, PhEye } from "@phosphor-icons/vue";
+import { PhFloppyDisk, PhEye, PhGearSix } from "@phosphor-icons/vue";
 
 const route = useRoute();
 const formId = route.params.id;

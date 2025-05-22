@@ -134,8 +134,15 @@ const columnOptions = [
                         
                         <Select
                             label="Field Width"
-                            :value="localField.colSpan || 12"
-                            :options="columnOptions"
+                            :value="localField.colSpan?.toString() || '12'"
+                            :options="[
+                                { label: 'Full Width (12/12)', value: '12' },
+                                { label: 'Three-Quarters (9/12)', value: '9' },
+                                { label: 'Two-Thirds (8/12)', value: '8' },
+                                { label: 'Half (6/12)', value: '6' },
+                                { label: 'One-Third (4/12)', value: '4' },
+                                { label: 'Quarter (3/12)', value: '3' }
+                            ]"
                             @change="(value) => updateProperty('colSpan', parseInt(value))"
                         />
                         
@@ -266,6 +273,61 @@ const columnOptions = [
                                 @onInput="(e, value) => updateProperty('maxRating', parseInt(value) || 5)"
                             />
                         </div>
+
+
+                        <div v-else-if="localField.type === 'step'" class="field-specific-settings">
+                            <Input
+                            label="Step Title"
+                            :value="localField.label || ''"
+                            @onInput="(e, value) => updateProperty('label', value)"
+                            />
+                            
+                            <Textarea
+                            label="Step Description"
+                            :value="localField.description || ''"
+                            @onInput="(value) => updateProperty('description', value)"
+                            />
+                            
+                            <Select
+                            label="Button Text"
+                            :value="localField.buttonText || 'Next'"
+                            :options="[
+                                { label: 'Next', value: 'Next' },
+                                { label: 'Continue', value: 'Continue' },
+                                { label: 'Submit', value: 'Submit' },
+                                { label: 'Proceed', value: 'Proceed' }
+                            ]"
+                            @change="(value) => updateProperty('buttonText', value)"
+                            />
+                        </div>
+                        
+                        <!-- Group field settings -->
+                        <div v-else-if="localField.type === 'group'" class="field-specific-settings">
+                            <Input
+                            label="Group Title"
+                            :value="localField.label || ''"
+                            @onInput="(e, value) => updateProperty('label', value)"
+                            />
+                            
+                            <Textarea
+                            label="Group Description"
+                            :value="localField.description || ''"
+                            @onInput="(value) => updateProperty('description', value)"
+                            />
+                            
+                            <Toggle
+                            label="Collapsible Group"
+                            :value="localField.collapsible || false"
+                            @update:value="(value) => updateProperty('collapsible', value)"
+                            />
+                            
+                            <Toggle
+                            v-if="localField.collapsible"
+                            label="Collapsed by Default"
+                            :value="localField.collapsed || false"
+                            @update:value="(value) => updateProperty('collapsed', value)"
+                            />
+                        </div>
                         
                         <!-- Image field settings -->
                         <div v-else-if="localField.type === 'image'" class="field-specific-settings">
@@ -347,7 +409,7 @@ const columnOptions = [
 
 <style scoped>
 .field-settings-content {
-    width: 100%;
+    width: 100vw;
     max-width: 600px;
 }
 

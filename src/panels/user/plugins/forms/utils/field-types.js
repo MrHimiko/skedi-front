@@ -4,7 +4,7 @@
 import { 
     PhTextT, PhTextbox, PhRadioButton, PhCheckSquare,
     PhTextColumns, PhListDashes, PhCalendarBlank, 
-    PhImage, PhVideo, PhFile, PhStar, PhCursor, PhMinus
+    PhImage, PhVideo, PhFile, PhStar, PhCursor, PhMinus, PhSteps, PhFolders
 } from "@phosphor-icons/vue";
 
 // Field types configuration
@@ -130,7 +130,26 @@ export const fieldTypes = [
         defaultProps: {
             style: "solid"
         }
+    },
+    {
+        type: "step",
+        label: "Form Step",
+        icon: { component: PhSteps, weight: "bold" },
+        defaultProps: {
+            label: "New Step",
+            description: "Enter step description here"
+        }
+    },
+    {
+        type: "group",
+        label: "Field Group",
+        icon: { component: PhFolders, weight: "bold" },
+        defaultProps: {
+            label: "Field Group",
+            description: "Group related fields together"
+        }
     }
+    
 ];
 
 // Get a field type by type name
@@ -138,18 +157,25 @@ export function getFieldType(type) {
     return fieldTypes.find(fieldType => fieldType.type === type);
 }
 
-// Create a new field of a specific type
 export function createField(type) {
     const fieldType = getFieldType(type);
-    if (!fieldType) return null;
+    if (!fieldType) {
+      console.error(`Unknown field type: ${type}`);
+      return null;
+    }
     
-    return {
-        id: `field-${Date.now()}`,
-        type: fieldType.type,
-        ...fieldType.defaultProps,
-        visibility: {
-            conditions: [],
-            logic: "all"
-        }
+    let defaultColSpan = 12;
+
+    const newField = {
+      id: `field-${Date.now()}`,
+      type: fieldType.type,
+      ...JSON.parse(JSON.stringify(fieldType.defaultProps)),
+      colSpan: defaultColSpan
     };
-}
+    
+    if (fieldType.type === 'step' || fieldType.type === 'group') {
+      newField.children = [];
+    }
+    
+    return newField;
+  }
