@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { common } from '@utils/common';
+import { FormsService } from '@user_forms/services/forms';
 
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
@@ -9,51 +10,44 @@ import Button from '@form/button/view.vue';
 import TableComponent from '@global/table/view.vue';
 import Notice from '@global/notice/view.vue';
 
-import { PhPlus, PhPencil, PhTrash, PhCopy } from "@phosphor-icons/vue";
+import { PhPlus, PhPencil, PhTrash, PhCopy, PhCalendar } from "@phosphor-icons/vue";
 
 const router = useRouter();
 const forms = ref([]);
 const isLoading = ref(true);
 
-// Sample table headings and keys
-const tableHeadings = ['Name', 'Created', 'Updated', 'Status', 'Actions'];
-const tableKeys = ['name', 'created_at', 'updated_at', 'status', 'actions'];
+// Table configuration
+const tableHeadings = ['Name', 'Events', 'Created', 'Updated', 'Status', 'Actions'];
+const tableKeys = ['name', 'events', 'created_at', 'updated_at', 'status', 'actions'];
 
 // Load forms from API
-onMounted(async () => {
+const loadForms = async () => {
     try {
         isLoading.value = true;
+        const formsData = await FormsService.getForms(false); // Don't use cache for initial load
         
-        // In production, this would be an API call
-        // const response = await api.get('forms');
-        // if (response.success) {
-        //     forms.value = response.data;
-        // }
+        // Process forms data to add computed properties
+        const processedForms = formsData.map((form) => {
+            return {
+                ...form,
+                events: form.events_count || 0,
+                created_at: new Date(form.created).toLocaleDateString(),
+                updated_at: new Date(form.updated).toLocaleDateString(),
+                status: form.is_active ? 'Published' : 'Draft'
+            };
+        });
         
-        // For now, use sample data
-        setTimeout(() => {
-            forms.value = [
-                {
-                    id: 'form-1',
-                    name: 'Contact Form',
-                    created_at: '2023-06-15',
-                    updated_at: '2023-06-20',
-                    status: 'Published'
-                },
-                {
-                    id: 'form-2',
-                    name: 'Event Registration',
-                    created_at: '2023-07-10',
-                    updated_at: '2023-07-12',
-                    status: 'Draft'
-                }
-            ];
-            isLoading.value = false;
-        }, 500);
+        forms.value = processedForms;
     } catch (error) {
         console.error('Failed to load forms:', error);
+        common.notification('Failed to load forms', false);
+    } finally {
         isLoading.value = false;
     }
+};
+
+onMounted(() => {
+    loadForms();
 });
 
 // Create a new form
@@ -67,19 +61,13 @@ const editForm = (id) => {
 };
 
 // Delete a form
-const deleteForm = async (id) => {
-    if (confirm('Are you sure you want to delete this form?')) {
+const deleteForm = async (form) => {
+    if (confirm(`Are you sure you want to delete "${form.name}"? This action cannot be undone.`)) {
         try {
-            // In production, this would be an API call
-            // const response = await api.delete(`forms/${id}`);
-            // if (response.success) {
-            //     forms.value = forms.value.filter(form => form.id !== id);
-            //     common.notification('Form deleted successfully', true);
-            // }
-            
-            // For now, simulate deletion
-            forms.value = forms.value.filter(form => form.id !== id);
+            await FormsService.deleteForm(form.id);
             common.notification('Form deleted successfully', true);
+            // Reload forms
+            await loadForms();
         } catch (error) {
             console.error('Failed to delete form:', error);
             common.notification('Failed to delete form', false);
@@ -88,32 +76,36 @@ const deleteForm = async (id) => {
 };
 
 // Duplicate a form
-const duplicateForm = async (id) => {
+const duplicateForm = async (form) => {
     try {
-        // In production, this would be an API call
-        // const response = await api.post(`forms/${id}/duplicate`);
-        // if (response.success) {
-        //     forms.value.push(response.data);
-        //     common.notification('Form duplicated successfully', true);
-        // }
-        
-        // For now, simulate duplication
-        const formToDuplicate = forms.value.find(form => form.id === id);
-        if (formToDuplicate) {
-            const duplicatedForm = {
-                ...formToDuplicate,
-                id: `form-${Date.now()}`,
-                name: `${formToDuplicate.name} (Copy)`,
-                created_at: new Date().toLocaleDateString(),
-                updated_at: new Date().toLocaleDateString()
-            };
-            forms.value.push(duplicatedForm);
-            common.notification('Form duplicated successfully', true);
-        }
+        await FormsService.duplicateForm(form.id);
+        common.notification('Form duplicated successfully', true);
+        // Reload forms
+        await loadForms();
     } catch (error) {
         console.error('Failed to duplicate form:', error);
         common.notification('Failed to duplicate form', false);
     }
+};
+
+// Format events display
+const formatEventsDisplay = (form) => {
+    if (form.events === 0) {
+        return 'No events';
+    } else if (form.events === 1) {
+        return '1 event';
+    } else {
+        return `${form.events} events`;
+    }
+};
+
+// Get events tooltip content
+const getEventsTooltip = (form) => {
+    if (form.events === 0) {
+        return 'No events attached to this form';
+    }
+    
+    return `${form.events} events attached`;
 };
 </script>
 
@@ -153,9 +145,20 @@ const duplicateForm = async (id) => {
                     sticky
                 >
                     <template #cell="{ row, key, keyIndex, cell }">
+                        <!-- Events column -->
+                        <span 
+                            v-if="key === 'events'" 
+                            class="events-cell"
+                            :class="{ 'has-events': row.events > 0 }"
+                            v-tooltip="{ content: getEventsTooltip(row) }"
+                        >
+                            <PhCalendar :weight="row.events > 0 ? 'bold' : 'regular'" size="16" />
+                            {{ formatEventsDisplay(row) }}
+                        </span>
+                        
                         <!-- Status column with badge -->
                         <span 
-                            v-if="key === 'status'" 
+                            v-else-if="key === 'status'" 
                             class="status-badge"
                             :class="cell.toLowerCase()"
                         >
@@ -173,16 +176,25 @@ const duplicateForm = async (id) => {
                             <Button 
                                 as="tertiary icon" 
                                 :iconLeft="{ component: PhCopy, weight: 'bold' }" 
-                                @click="duplicateForm(row.id)"
+                                @click="duplicateForm(row)"
                                 v-tooltip="{ content: 'Duplicate' }"
                             />
                             <Button 
                                 as="tertiary icon" 
                                 :iconLeft="{ component: PhTrash, weight: 'bold' }" 
-                                @click="deleteForm(row.id)"
+                                @click="deleteForm(row)"
                                 v-tooltip="{ content: 'Delete' }"
                             />
                         </div>
+                        
+                        <!-- Name column (make clickable) -->
+                        <span 
+                            v-else-if="key === 'name'" 
+                            class="form-name-cell"
+                            @click="editForm(row.id)"
+                        >
+                            {{ cell }}
+                        </span>
                         
                         <!-- Default cell content -->
                         <template v-else>
@@ -224,5 +236,27 @@ const duplicateForm = async (id) => {
 .actions-cell {
     display: flex;
     gap: 4px;
+}
+
+.events-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.events-cell.has-events {
+    color: var(--text-primary);
+}
+
+.form-name-cell {
+    cursor: pointer;
+    color: var(--brand-default);
+    font-weight: 500;
+}
+
+.form-name-cell:hover {
+    text-decoration: underline;
 }
 </style>
