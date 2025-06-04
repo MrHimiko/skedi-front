@@ -1,14 +1,12 @@
-// Field types definitions for the form builder
-
-// Icons for field types
 import { 
     PhTextT, PhTextbox, PhRadioButton, PhCheckSquare,
-    PhTextColumns, PhListDashes, PhCalendarBlank, 
-    PhImage, PhVideo, PhFile, PhStar, PhCursor, PhMinus, PhSteps, PhFolders
+    PhListDashes, PhCalendarBlank, PhFile, PhStar, 
+    PhMinus, PhSteps, PhFolders, PhUserList
 } from "@phosphor-icons/vue";
 
-// Field types configuration
+// Field types that users can add from the sidebar
 export const fieldTypes = [
+    
     {
         type: "input",
         label: "Text Input",
@@ -17,7 +15,8 @@ export const fieldTypes = [
             label: "Text Input",
             placeholder: "Enter text...",
             required: false,
-            type: "text"
+            type: "text",
+            colSpan: 12
         }
     },
     {
@@ -28,7 +27,8 @@ export const fieldTypes = [
             label: "Text Area",
             placeholder: "Enter long text...",
             required: false,
-            rows: 4
+            rows: 4,
+            colSpan: 12
         }
     },
     {
@@ -39,10 +39,8 @@ export const fieldTypes = [
             label: "Dropdown",
             placeholder: "Select an option",
             required: false,
-            options: [
-                { label: "Option 1", value: "option_1" },
-                { label: "Option 2", value: "option_2" }
-            ]
+            options: [],
+            colSpan: 12
         }
     },
     {
@@ -52,10 +50,8 @@ export const fieldTypes = [
         defaultProps: {
             label: "Radio Buttons",
             required: false,
-            options: [
-                { label: "Option 1", value: "option_1" },
-                { label: "Option 2", value: "option_2" }
-            ]
+            options: [],
+            colSpan: 12
         }
     },
     {
@@ -65,10 +61,8 @@ export const fieldTypes = [
         defaultProps: {
             label: "Checkboxes",
             required: false,
-            options: [
-                { label: "Option 1", value: "option_1" },
-                { label: "Option 2", value: "option_2" }
-            ]
+            options: [],
+            colSpan: 12
         }
     },
     {
@@ -78,28 +72,8 @@ export const fieldTypes = [
         defaultProps: {
             label: "Date",
             required: false,
-            placeholder: "Select a date"
-        }
-    },
-    {
-        type: "image",
-        label: "Image",
-        icon: { component: PhImage, weight: "bold" },
-        defaultProps: {
-            label: "Image",
-            alt: "Image",
-            src: ""
-        }
-    },
-    {
-        type: "video",
-        label: "Video",
-        icon: { component: PhVideo, weight: "bold" },
-        defaultProps: {
-            label: "Video",
-            src: "",
-            thumbnail: "",
-            autoplay: false
+            placeholder: "Select a date",
+            colSpan: 12
         }
     },
     {
@@ -109,8 +83,9 @@ export const fieldTypes = [
         defaultProps: {
             label: "File Upload",
             acceptedFileTypes: "",
-            maxFileSize: 5, // MB
-            multiple: false
+            maxFileSize: 5,
+            multiple: false,
+            colSpan: 12
         }
     },
     {
@@ -120,7 +95,8 @@ export const fieldTypes = [
         defaultProps: {
             label: "Rating",
             maxRating: 5,
-            required: false
+            required: false,
+            colSpan: 12
         }
     },
     {
@@ -128,7 +104,7 @@ export const fieldTypes = [
         label: "Divider",
         icon: { component: PhMinus, weight: "bold" },
         defaultProps: {
-            style: "solid"
+            colSpan: 12
         }
     },
     {
@@ -137,7 +113,7 @@ export const fieldTypes = [
         icon: { component: PhSteps, weight: "bold" },
         defaultProps: {
             label: "New Step",
-            description: "Enter step description here"
+            colSpan: 12
         }
     },
     {
@@ -146,36 +122,127 @@ export const fieldTypes = [
         icon: { component: PhFolders, weight: "bold" },
         defaultProps: {
             label: "Field Group",
-            description: "Group related fields together"
+            colSpan: 12
         }
-    }
-    
+    },
+    {
+        type: "system_contact_guests",
+        label: "Guest List",
+        icon: { component: PhUserList, weight: "bold" },
+        system: true,
+        maxCount: 1,
+        defaultProps: {
+            name: "system_contact_guests",
+            type: "guest_repeater",
+            label: "Add Guests",
+            required: false,
+            deletable: true,
+            max_guests: 10,
+            system_field: false,
+            colSpan: 12
+        }
+    },
 ];
 
-// Get a field type by type name
+// System field types (not shown in sidebar but used internally)
+export const systemFieldTypes = [
+    {
+        type: "system_contact_name",
+        label: "Name (Required)",
+        icon: { component: PhTextT, weight: "bold" },
+        system: true,
+        defaultProps: {
+            name: "system_contact_name",
+            type: "text",
+            label: "Your Name",
+            placeholder: "Enter your name",
+            required: true,
+            deletable: false,
+            system_field: true,
+            colSpan: 12
+        }
+    },
+    {
+        type: "system_contact_email",
+        label: "Email (Required)",
+        icon: { component: PhTextT, weight: "bold" },
+        system: true,
+        defaultProps: {
+            name: "system_contact_email",
+            type: "email",
+            label: "Email Address",
+            placeholder: "your@email.com",
+            required: true,
+            deletable: false,
+            system_field: true,
+            colSpan: 12
+        }
+    }
+];
+
+// Get all field types (for internal use)
+export const allFieldTypes = [...fieldTypes, ...systemFieldTypes];
+
 export function getFieldType(type) {
-    return fieldTypes.find(fieldType => fieldType.type === type);
+    return allFieldTypes.find(fieldType => fieldType.type === type);
 }
 
-export function createField(type) {
+export function createField(type, order = null) {
     const fieldType = getFieldType(type);
     if (!fieldType) {
-      console.error(`Unknown field type: ${type}`);
-      return null;
+        console.error(`Unknown field type: ${type}`);
+        return null;
     }
     
-    let defaultColSpan = 12;
-
     const newField = {
-      id: `field-${Date.now()}`,
-      type: fieldType.type,
-      ...JSON.parse(JSON.stringify(fieldType.defaultProps)),
-      colSpan: defaultColSpan
+        ...JSON.parse(JSON.stringify(fieldType.defaultProps))
     };
     
+    // For system fields, use predefined properties
+    if (fieldType.system) {
+        if (order !== null) {
+            newField.order = order;
+        }
+        return newField;
+    }
+    
+    // For regular fields
+    newField.id = `field-${Date.now()}`;
+    newField.type = fieldType.type;
+    
     if (fieldType.type === 'step' || fieldType.type === 'group') {
-      newField.children = [];
+        newField.children = [];
     }
     
     return newField;
-  }
+}
+
+// Convert label to slug for option values
+export function labelToValue(label) {
+    return label
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '_')
+        .replace(/-+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+// Convert text to options array
+export function textToOptions(text) {
+    if (!text) return [];
+    
+    return text
+        .split('\n')
+        .filter(line => line.trim())
+        .map((line, index) => {
+            const label = line.trim();
+            const value = labelToValue(label) || `option_${index + 1}`;
+            return { label, value };
+        });
+}
+
+// Convert options array to text
+export function optionsToText(options) {
+    if (!options || !Array.isArray(options)) return '';
+    return options.map(option => option.label).join('\n');
+}

@@ -23,7 +23,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:field', 'update:value']);
 
-// Update the field value
 const updateValue = (event, value) => {
     emit('update:value', value);
 };
@@ -31,8 +30,49 @@ const updateValue = (event, value) => {
 
 <template>
     <div class="field-renderer" :class="{ preview: isPreview }">
+        <!-- System Name Field -->
+        <div v-if="field.name === 'system_contact_name' || field.type === 'text'" class="field-wrapper">
+            <Input
+                :label="field.label"
+                :placeholder="field.placeholder || ''"
+                :required="field.required"
+                :value="value"
+                :type="field.inputType || 'text'"
+                :disabled="isPreview"
+                @onInput="updateValue"
+            />
+            <p v-if="field.description" class="field-description">{{ field.description }}</p>
+        </div>
+        
+        <!-- System Email Field -->
+        <div v-else-if="field.name === 'system_contact_email' || field.type === 'email'" class="field-wrapper">
+            <Input
+                :label="field.label"
+                :placeholder="field.placeholder || ''"
+                :required="field.required"
+                :value="value"
+                type="email"
+                :disabled="isPreview"
+                @onInput="updateValue"
+            />
+            <p v-if="field.description" class="field-description">{{ field.description }}</p>
+        </div>
+        
+        <!-- Guest Repeater Field -->
+        <div v-else-if="field.type === 'guest_repeater'" class="field-wrapper">
+            <label class="field-label">{{ field.label }}</label>
+            <div class="guest-repeater">
+                <div class="guest-repeater-placeholder">
+                    <i>group_add</i>
+                    <span>Guest management interface</span>
+                    <p class="text-xs text-secondary">Max {{ field.max_guests || 10 }} guests</p>
+                </div>
+            </div>
+            <p v-if="field.description" class="field-description">{{ field.description }}</p>
+        </div>
+        
         <!-- Input Field -->
-        <div v-if="field.type === 'input'" class="field-wrapper">
+        <div v-else-if="field.type === 'input'" class="field-wrapper">
             <Input
                 :label="field.label"
                 :placeholder="field.placeholder || ''"
@@ -74,7 +114,10 @@ const updateValue = (event, value) => {
         
         <!-- Radio Buttons -->
         <div v-else-if="field.type === 'radio'" class="field-wrapper">
-            <label class="field-label">{{ field.label }}</label>
+            <label class="field-label">
+                {{ field.label }}
+                <span v-if="field.required" class="required-mark">*</span>
+            </label>
             <div class="radio-options">
                 <div 
                     v-for="(option, index) in field.options" 
@@ -83,7 +126,7 @@ const updateValue = (event, value) => {
                 >
                     <input 
                         type="radio" 
-                        :name="field.id" 
+                        :name="field.id || field.name" 
                         :value="option.value"
                         :checked="value === option.value"
                         :disabled="isPreview"
@@ -97,7 +140,10 @@ const updateValue = (event, value) => {
         
         <!-- Checkboxes -->
         <div v-else-if="field.type === 'checkbox'" class="field-wrapper">
-            <label class="field-label">{{ field.label }}</label>
+            <label class="field-label">
+                {{ field.label }}
+                <span v-if="field.required" class="required-mark">*</span>
+            </label>
             <div class="checkbox-options">
                 <div 
                     v-for="(option, index) in field.options" 
@@ -139,56 +185,32 @@ const updateValue = (event, value) => {
         
         <!-- Divider -->
         <div v-else-if="field.type === 'divider'" class="field-wrapper">
-            <Separator :title="field.label" />
-        </div>
-        
-        <!-- Image -->
-        <div v-else-if="field.type === 'image'" class="field-wrapper">
-            <label v-if="field.label" class="field-label">{{ field.label }}</label>
-            <div class="image-container">
-                <img 
-                    v-if="field.src" 
-                    :src="field.src" 
-                    :alt="field.alt || field.label || 'Image'" 
-                    class="field-image"
-                />
-                <div v-else class="image-placeholder">
-                    <i>image</i>
-                    <span>Image Preview</span>
-                </div>
-            </div>
-            <p v-if="field.description" class="field-description">{{ field.description }}</p>
-        </div>
-        
-        <!-- Video -->
-        <div v-else-if="field.type === 'video'" class="field-wrapper">
-            <label v-if="field.label" class="field-label">{{ field.label }}</label>
-            <div class="video-container">
-                <div v-if="field.src" class="video-player">
-                    <i>play_circle</i>
-                    <span>Video Player</span>
-                </div>
-                <div v-else class="video-placeholder">
-                    <i>videocam</i>
-                    <span>Video Preview</span>
-                </div>
-            </div>
-            <p v-if="field.description" class="field-description">{{ field.description }}</p>
+            <Separator />
         </div>
         
         <!-- File Upload -->
         <div v-else-if="field.type === 'file'" class="field-wrapper">
-            <label class="field-label">{{ field.label }}</label>
+            <label class="field-label">
+                {{ field.label }}
+                <span v-if="field.required" class="required-mark">*</span>
+            </label>
             <div class="file-upload">
                 <i>file_upload</i>
                 <span>{{ field.multiple ? 'Upload Files' : 'Upload File' }}</span>
+                <p class="text-xs text-secondary">
+                    Max {{ field.maxFileSize || 5 }}MB
+                    <span v-if="field.acceptedFileTypes">• {{ field.acceptedFileTypes }}</span>
+                </p>
             </div>
             <p v-if="field.description" class="field-description">{{ field.description }}</p>
         </div>
         
         <!-- Rating -->
         <div v-else-if="field.type === 'rating'" class="field-wrapper">
-            <label class="field-label">{{ field.label }}</label>
+            <label class="field-label">
+                {{ field.label }}
+                <span v-if="field.required" class="required-mark">*</span>
+            </label>
             <div class="rating-stars">
                 <div 
                     v-for="i in (field.maxRating || 5)" 
@@ -235,6 +257,11 @@ const updateValue = (event, value) => {
     margin-bottom: 8px;
 }
 
+.required-mark {
+    color: var(--red-default);
+    margin-left: 2px;
+}
+
 .field-renderer.preview .field-wrapper {
     pointer-events: none;
 }
@@ -251,48 +278,40 @@ const updateValue = (event, value) => {
     gap: 8px;
 }
 
-.image-container, .video-container {
-    width: 100%;
-    height: 160px;
+.guest-repeater {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 20px;
     background-color: var(--background-1);
 }
 
-.field-image {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-}
-
-.image-placeholder, .video-placeholder, .video-player {
+.guest-repeater-placeholder {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     color: var(--text-tertiary);
     gap: 8px;
+    text-align: center;
 }
 
-.image-placeholder i, .video-placeholder i, .video-player i {
+.guest-repeater-placeholder i {
     font-size: 32px;
 }
 
 .file-upload {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    padding: 20px;
     border: 1px dashed var(--border);
     border-radius: var(--radius-md);
     background-color: var(--background-1);
     color: var(--text-secondary);
     gap: 8px;
     cursor: pointer;
+    text-align: center;
 }
 
 .rating-stars {
@@ -303,9 +322,14 @@ const updateValue = (event, value) => {
 .rating-star {
     color: var(--text-tertiary);
     cursor: pointer;
+    transition: color 0.2s;
 }
 
 .rating-star.active {
+    color: var(--brand-yellow);
+}
+
+.rating-star:hover {
     color: var(--brand-yellow);
 }
 

@@ -1,18 +1,22 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { common } from '@utils/common';
 import TabsComponent from '@global/tabs/view.vue';
+import { fieldTypes } from '@user_forms/utils/field-types';
 
 const props = defineProps({
     fieldTypes: {
         type: Array,
         required: true
+    },
+    existingFields: {
+        type: Array,
+        default: () => []
     }
 });
 
 const emit = defineEmits(['add-field']);
 
-// Tab management
 const activeTab = ref('fields');
 
 const tabs = [
@@ -24,10 +28,39 @@ const handleTabClick = (event, tab) => {
     activeTab.value = tab.value;
 };
 
-// Add a field to the form
+// Check if guest repeater can be added
+const canAddGuestRepeater = computed(() => {
+    const guestRepeaters = props.existingFields.filter(f => 
+        f.type === 'guest_repeater' || f.name === 'system_contact_guests'
+    );
+    return guestRepeaters.length === 0;
+});
+
+// Filter field types
+const availableFieldTypes = computed(() => {
+    return props.fieldTypes.filter(fieldType => {
+        // Skip system name and email fields
+        if (['system_contact_name', 'system_contact_email'].includes(fieldType.type)) {
+            return false;
+        }
+        
+        // Check guest repeater limit
+        if (fieldType.type === 'system_contact_guests' && !canAddGuestRepeater.value) {
+            return false;
+        }
+        
+        return true;
+    });
+});
+
 const addField = (fieldType) => {
     emit('add-field', fieldType);
-    common.notification(`Added ${fieldType.label} field`, true);
+    
+    if (fieldType.type === 'system_contact_guests') {
+        common.notification('Added Guest List field', true);
+    } else {
+        common.notification(`Added ${fieldType.label} field`, true);
+    }
 };
 </script>
 
@@ -47,9 +80,12 @@ const addField = (fieldType) => {
             <!-- Fields Tab -->
             <div v-if="activeTab === 'fields'" class="fields-list">
                 <div 
-                    v-for="fieldType in fieldTypes" 
+                    v-for="fieldType in availableFieldTypes" 
                     :key="fieldType.type"
                     class="field-type-item"
+                    :class="{ 
+                        'disabled': fieldType.type === 'system_contact_guests' && !canAddGuestRepeater
+                    }"
                     @click="addField(fieldType)"
                 >
                     <div class="field-type-icon">
@@ -59,6 +95,19 @@ const addField = (fieldType) => {
                         />
                     </div>
                     <div class="field-type-label">{{ fieldType.label }}</div>
+                    <div 
+                        v-if="fieldType.system && fieldType.maxCount" 
+                        class="field-type-badge"
+                    >
+                        Max 1
+                    </div>
+                </div>
+                
+                <div 
+                    v-if="!canAddGuestRepeater" 
+                    class="field-type-note"
+                >
+                    Guest List field already added
                 </div>
             </div>
             
@@ -110,10 +159,16 @@ const addField = (fieldType) => {
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: background-color 0.2s;
+    position: relative;
 }
 
-.field-type-item:hover {
+.field-type-item:hover:not(.disabled) {
     background-color: var(--background-1);
+}
+
+.field-type-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .field-type-icon {
@@ -128,6 +183,23 @@ const addField = (fieldType) => {
 .field-type-label {
     font-size: 14px;
     font-weight: 500;
+    flex: 1;
+}
+
+.field-type-badge {
+    font-size: 10px;
+    background-color: var(--background-2);
+    color: var(--text-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.field-type-note {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 8px;
+    font-style: italic;
 }
 
 .templates-coming-soon {

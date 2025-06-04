@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import PopupLayout from '@layouts/popup/view.vue';
 import TabsComponent from '@global/tabs/view.vue';
 import Input from '@form/input/view.vue';
@@ -8,6 +8,7 @@ import Toggle from '@form/toggle/view.vue';
 import Select from '@form/select/view.vue';
 import Button from '@form/button/view.vue';
 import ConditionBuilder from '@user_forms/components/conditional-logic/condition-builder.vue';
+import { textToOptions, optionsToText } from '@user_forms/utils/field-types';
 
 const props = defineProps({
     field: {
@@ -24,26 +25,60 @@ const props = defineProps({
     }
 });
 
-// Local copy of field
 const localField = ref({...props.field});
 const activeTab = ref('general');
 
-// Update local field when props change
+// Check if field is a system field
+const isSystemField = computed(() => localField.value.system_field === true);
+
+// Check if field supports certain features
+const supportsWidth = computed(() => 
+    localField.value.type !== 'divider'
+);
+
+const supportsRequired = computed(() => 
+    !['divider', 'group', 'step'].includes(localField.value.type) && !isSystemField.value
+);
+
+const supportsAdvanced = computed(() => 
+    localField.value.type !== 'divider' && !isSystemField.value
+);
+
+const supportsLogic = computed(() => 
+    !['divider'].includes(localField.value.type) && !isSystemField.value
+);
+
+// Determine available tabs
+const availableTabs = computed(() => {
+    const tabs = [];
+    
+    if (localField.value.type !== 'divider') {
+        tabs.push({ title: 'General', active: activeTab.value === 'general' });
+    }
+    
+    if (supportsAdvanced.value) {
+        tabs.push({ title: 'Advanced', active: activeTab.value === 'advanced' });
+    }
+    
+    if (supportsLogic.value) {
+        tabs.push({ title: 'Logic', active: activeTab.value === 'logic' });
+    }
+    
+    return tabs;
+});
+
 watch(() => props.field, (newField) => {
     localField.value = {...newField};
 }, { immediate: true });
 
-// Handle tab changes
 const handleTabChange = (event, tab) => {
     activeTab.value = tab.title.toLowerCase();
 };
 
-// Update field and notify parent
 const updateField = () => {
     props.onUpdate({...localField.value});
 };
 
-// Update a simple field property
 const updateProperty = (key, value) => {
     localField.value = {
         ...localField.value,
@@ -51,88 +86,45 @@ const updateProperty = (key, value) => {
     };
 };
 
-// Process textarea options for radio/checkbox fields
-const processOptions = (optionsText) => {
-    if (!optionsText) return [];
-    
-    return optionsText.split('\n')
-        .filter(line => line.trim())
-        .map((line, index) => {
-            // If line contains : then split into label:value
-            if (line.includes(':')) {
-                const [label, value] = line.split(':').map(part => part.trim());
-                return { label, value: value || `option_${index}` };
-            }
-            // Otherwise use the line as both label and value
-            return { 
-                label: line.trim(), 
-                value: `option_${index}` 
-            };
-        });
-};
-
-// Convert options array to textarea text
-const optionsToText = (options) => {
-    if (!options || !Array.isArray(options)) return '';
-    
-    return options.map(option => 
-        `${option.label}:${option.value}`
-    ).join('\n');
-};
-
-// Update options from textarea
 const updateOptionsFromText = (text) => {
-    const options = processOptions(text);
+    const options = textToOptions(text);
     updateProperty('options', options);
 };
 
-// Update conditional logic
 const updateConditionalLogic = (conditions, logic) => {
     localField.value.visibility = {
         conditions,
         logic
     };
 };
-
-
-
-const columnOptions = [
-    { label: 'Full Width (12/12)', value: 12 },
-    { label: 'Three-Quarters (9/12)', value: 9 },
-    { label: 'Two-Thirds (8/12)', value: 8 },
-    { label: 'Half (6/12)', value: 6 },
-    { label: 'One-Third (4/12)', value: 4 },
-    { label: 'Quarter (3/12)', value: 3 }
-];
-
-
 </script>
 
 <template>
-    <popup-layout :title="`Edit ${localField.type} Field`" customClass="h-auto">
+    <popup-layout :title="`Edit ${localField.label || localField.type} Field`" customClass="h-auto">
         <template #content>
             <div class="field-settings-content">
-                <div class="settings-tabs">
+                <div v-if="availableTabs.length > 1" class="settings-tabs">
                     <TabsComponent 
-                        :tabs="[
-                            { title: 'General', active: activeTab === 'general' },
-                            { title: 'Advanced', active: activeTab === 'advanced' },
-                            { title: 'Logic', active: activeTab === 'logic' }
-                        ]"
+                        :tabs="availableTabs"
                         :onClick="handleTabChange"
                     />
                 </div>
                 
                 <div class="settings-content scrollbar">
                     <!-- General tab -->
-                    <div v-if="activeTab === 'general'" class="settings-tab">
+                    <div v-if="activeTab === 'general' && localField.type !== 'divider'" class="settings-tab">
+                        <!-- Label (not for divider) -->
                         <Input
+                            v-if="!['divider'].includes(localField.type)"
                             label="Field Label"
                             :value="localField.label"
                             @onInput="(e, value) => updateProperty('label', value)"
+                            :disabled="isSystemField"
                         />
                         
+                        <!-- Width (not for divider, group, step) -->
                         <Select
+                            v-if="supportsWidth && !['group', 'step'].includes(localField.type)"
                             label="Field Width"
                             :value="localField.colSpan?.toString() || '12'"
                             :options="[
@@ -146,8 +138,9 @@ const columnOptions = [
                             @change="(value) => updateProperty('colSpan', parseInt(value))"
                         />
                         
+                        <!-- Required (not for divider, group, step) -->
                         <Toggle
-                            v-if="localField.type !== 'divider'"
+                            v-if="supportsRequired"
                             label="Required Field"
                             :value="localField.required || false"
                             @update:value="(value) => updateProperty('required', value)"
@@ -155,15 +148,17 @@ const columnOptions = [
                         
                         <!-- Field type specific settings -->
                         
-                        <!-- Input field settings -->
-                        <div v-if="localField.type === 'input'" class="field-specific-settings">
+                        <!-- Input field -->
+                        <div v-if="localField.type === 'input' || localField.type === 'text'" class="field-specific-settings">
                             <Input
                                 label="Placeholder"
                                 :value="localField.placeholder || ''"
                                 @onInput="(e, value) => updateProperty('placeholder', value)"
+                                :disabled="isSystemField"
                             />
                             
                             <Select
+                                v-if="!isSystemField"
                                 label="Input Type"
                                 :value="localField.inputType || 'text'"
                                 :options="[
@@ -171,20 +166,23 @@ const columnOptions = [
                                     { label: 'Email', value: 'email' },
                                     { label: 'Number', value: 'number' },
                                     { label: 'Phone', value: 'tel' },
-                                    { label: 'URL', value: 'url' },
-                                    { label: 'Password', value: 'password' }
+                                    { label: 'URL', value: 'url' }
                                 ]"
                                 @change="(value) => updateProperty('inputType', value)"
                             />
-                            
+                        </div>
+                        
+                        <!-- Email field -->
+                        <div v-else-if="localField.type === 'email'" class="field-specific-settings">
                             <Input
-                                label="Validation Pattern (Regex)"
-                                :value="localField.validationPattern || ''"
-                                @onInput="(e, value) => updateProperty('validationPattern', value)"
+                                label="Placeholder"
+                                :value="localField.placeholder || ''"
+                                @onInput="(e, value) => updateProperty('placeholder', value)"
+                                :disabled="isSystemField"
                             />
                         </div>
                         
-                        <!-- Textarea field settings -->
+                        <!-- Textarea -->
                         <div v-else-if="localField.type === 'textarea'" class="field-specific-settings">
                             <Input
                                 label="Placeholder"
@@ -200,33 +198,25 @@ const columnOptions = [
                             />
                         </div>
                         
-                        <!-- Select field settings -->
-                        <div v-else-if="localField.type === 'select'" class="field-specific-settings">
+                        <!-- Select/Radio/Checkbox -->
+                        <div v-else-if="['select', 'radio', 'checkbox'].includes(localField.type)" class="field-specific-settings">
                             <Input
+                                v-if="localField.type === 'select'"
                                 label="Placeholder"
                                 :value="localField.placeholder || ''"
                                 @onInput="(e, value) => updateProperty('placeholder', value)"
                             />
                             
                             <Textarea
-                                label="Options (one per line, format: label:value)"
+                                label="Options (one per line)"
                                 :value="optionsToText(localField.options)"
                                 @onInput="updateOptionsFromText"
-                                placeholder="Option 1:option_1&#10;Option 2:option_2&#10;Option 3:option_3"
+                                placeholder="Option 1&#10;Option 2&#10;Option 3"
+                                :rows="5"
                             />
                         </div>
                         
-                        <!-- Radio & Checkbox fields settings -->
-                        <div v-else-if="['radio', 'checkbox'].includes(localField.type)" class="field-specific-settings">
-                            <Textarea
-                                label="Options (one per line, format: label:value)"
-                                :value="optionsToText(localField.options)"
-                                @onInput="updateOptionsFromText"
-                                placeholder="Option 1:option_1&#10;Option 2:option_2&#10;Option 3:option_3"
-                            />
-                        </div>
-                        
-                        <!-- Date field settings -->
+                        <!-- Date -->
                         <div v-else-if="localField.type === 'date'" class="field-specific-settings">
                             <Input
                                 label="Placeholder"
@@ -241,7 +231,7 @@ const columnOptions = [
                             />
                         </div>
                         
-                        <!-- File field settings -->
+                        <!-- File -->
                         <div v-else-if="localField.type === 'file'" class="field-specific-settings">
                             <Toggle
                                 label="Allow Multiple Files"
@@ -264,7 +254,7 @@ const columnOptions = [
                             />
                         </div>
                         
-                        <!-- Rating field settings -->
+                        <!-- Rating -->
                         <div v-else-if="localField.type === 'rating'" class="field-specific-settings">
                             <Input
                                 label="Max Rating"
@@ -273,98 +263,54 @@ const columnOptions = [
                                 @onInput="(e, value) => updateProperty('maxRating', parseInt(value) || 5)"
                             />
                         </div>
-
-
+                        
+                        <!-- Guest Repeater -->
+                        <div v-else-if="localField.type === 'guest_repeater'" class="field-specific-settings">
+                            <Input
+                                label="Maximum Guests"
+                                :value="localField.max_guests?.toString() || '10'"
+                                type="number"
+                                @onInput="(e, value) => updateProperty('max_guests', parseInt(value) || 10)"
+                            />
+                        </div>
+                        
+                        <!-- Step -->
                         <div v-else-if="localField.type === 'step'" class="field-specific-settings">
-                            <Input
-                            label="Step Title"
-                            :value="localField.label || ''"
-                            @onInput="(e, value) => updateProperty('label', value)"
-                            />
-                            
-                            <Textarea
-                            label="Step Description"
-                            :value="localField.description || ''"
-                            @onInput="(value) => updateProperty('description', value)"
-                            />
-                            
                             <Select
-                            label="Button Text"
-                            :value="localField.buttonText || 'Next'"
-                            :options="[
-                                { label: 'Next', value: 'Next' },
-                                { label: 'Continue', value: 'Continue' },
-                                { label: 'Submit', value: 'Submit' },
-                                { label: 'Proceed', value: 'Proceed' }
-                            ]"
-                            @change="(value) => updateProperty('buttonText', value)"
+                                label="Button Text"
+                                :value="localField.buttonText || 'Next'"
+                                :options="[
+                                    { label: 'Next', value: 'Next' },
+                                    { label: 'Continue', value: 'Continue' },
+                                    { label: 'Submit', value: 'Submit' },
+                                    { label: 'Proceed', value: 'Proceed' }
+                                ]"
+                                @change="(value) => updateProperty('buttonText', value)"
                             />
                         </div>
                         
-                        <!-- Group field settings -->
+                        <!-- Group -->
                         <div v-else-if="localField.type === 'group'" class="field-specific-settings">
-                            <Input
-                            label="Group Title"
-                            :value="localField.label || ''"
-                            @onInput="(e, value) => updateProperty('label', value)"
-                            />
-                            
-                            <Textarea
-                            label="Group Description"
-                            :value="localField.description || ''"
-                            @onInput="(value) => updateProperty('description', value)"
+                            <Toggle
+                                label="Collapsible Group"
+                                :value="localField.collapsible || false"
+                                @update:value="(value) => updateProperty('collapsible', value)"
                             />
                             
                             <Toggle
-                            label="Collapsible Group"
-                            :value="localField.collapsible || false"
-                            @update:value="(value) => updateProperty('collapsible', value)"
-                            />
-                            
-                            <Toggle
-                            v-if="localField.collapsible"
-                            label="Collapsed by Default"
-                            :value="localField.collapsed || false"
-                            @update:value="(value) => updateProperty('collapsed', value)"
-                            />
-                        </div>
-                        
-                        <!-- Image field settings -->
-                        <div v-else-if="localField.type === 'image'" class="field-specific-settings">
-                            <Input
-                                label="Image URL"
-                                :value="localField.src || ''"
-                                @onInput="(e, value) => updateProperty('src', value)"
-                            />
-                            
-                            <Input
-                                label="Alt Text"
-                                :value="localField.alt || ''"
-                                @onInput="(e, value) => updateProperty('alt', value)"
-                            />
-                        </div>
-                        
-                        <!-- Video field settings -->
-                        <div v-else-if="localField.type === 'video'" class="field-specific-settings">
-                            <Input
-                                label="Video URL"
-                                :value="localField.src || ''"
-                                @onInput="(e, value) => updateProperty('src', value)"
-                            />
-                            
-                            <Toggle
-                                label="Autoplay"
-                                :value="localField.autoplay || false"
-                                @update:value="(value) => updateProperty('autoplay', value)"
+                                v-if="localField.collapsible"
+                                label="Collapsed by Default"
+                                :value="localField.collapsed || false"
+                                @update:value="(value) => updateProperty('collapsed', value)"
                             />
                         </div>
                     </div>
                     
                     <!-- Advanced tab -->
-                    <div v-else-if="activeTab === 'advanced'" class="settings-tab">
+                    <div v-else-if="activeTab === 'advanced' && supportsAdvanced" class="settings-tab">
                         <Input
                             label="Field ID"
-                            :value="localField.id"
+                            :value="localField.id || localField.name || 'System Field'"
                             disabled
                         />
                         
@@ -375,12 +321,14 @@ const columnOptions = [
                         />
                         
                         <Toggle
+                            v-if="!['group', 'step'].includes(localField.type)"
                             label="Hide Label"
                             :value="localField.hideLabel || false"
                             @update:value="(value) => updateProperty('hideLabel', value)"
                         />
                         
                         <Toggle
+                            v-if="!['group', 'step'].includes(localField.type)"
                             label="Read Only"
                             :value="localField.readOnly || false"
                             @update:value="(value) => updateProperty('readOnly', value)"
@@ -388,7 +336,7 @@ const columnOptions = [
                     </div>
                     
                     <!-- Logic tab -->
-                    <div v-else-if="activeTab === 'logic'" class="settings-tab">
+                    <div v-else-if="activeTab === 'logic' && supportsLogic" class="settings-tab">
                         <ConditionBuilder
                             :conditions="localField.visibility?.conditions || []"
                             :logic="localField.visibility?.logic || 'all'"

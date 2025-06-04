@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { common } from '@utils/common';
 import { createEmptyForm } from '@user_forms/utils/form-schema';
@@ -8,11 +8,13 @@ import { FormsService } from '@user_forms/services/forms';
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
 import Button from '@form/button/view.vue';
+
 import BuilderView from '@user_forms/components/builder/view.vue';
 import InlineTitleEditor from '@user_forms/components/inline-title-editor.vue';
 
 import FormSettingsPopup from '@user_forms/components/builder/form-settings-popup.vue';
 import { popup } from '@utils/popup';
+import { fieldTypes } from '@user_forms/utils/field-types';
 
 import { PhFloppyDisk, PhEye, PhGearSix, PhArrowLeft } from "@phosphor-icons/vue";
 
@@ -27,7 +29,81 @@ const hasUnsavedChanges = ref(false);
 
 let initialFormDataString = '';
 
-// Watch for form changes to track unsaved changes
+// Clean form data helper
+const cleanFormData = (data) => {
+    // First, normalize system field names
+    const normalizedFields = data.fields.map(field => {
+        // Normalize old system field names to new format
+        if (field.name === 'name' && field.system_field) {
+            return { ...field, name: 'system_contact_name' };
+        }
+        if (field.name === 'email' && field.system_field) {
+            return { ...field, name: 'system_contact_email' };
+        }
+        return field;
+    });
+    
+    // Remove duplicate system fields and fields that shouldn't exist
+    const cleanedFields = [];
+    const seenSystemFields = new Set();
+    const fieldsToSkip = ['image', 'video']; // Field types we no longer support
+    
+    normalizedFields.forEach(field => {
+        // Skip unsupported field types
+        if (fieldsToSkip.includes(field.type)) {
+            return;
+        }
+        
+        // Handle system fields
+        if (field.system_field) {
+            const key = field.name;
+            if (!seenSystemFields.has(key)) {
+                seenSystemFields.add(key);
+                cleanedFields.push(field);
+            }
+        } else {
+            cleanedFields.push(field);
+        }
+    });
+    
+    // Now fix container children references
+    cleanedFields.forEach(field => {
+        if (field.children && Array.isArray(field.children)) {
+            // Clean children array
+            field.children = field.children
+                .filter(childId => childId != null) // Remove nulls
+                .map(childId => {
+                    // Handle old system field references
+                    if (childId === 'name') return 'system_contact_name';
+                    if (childId === 'email') return 'system_contact_email';
+                    return childId;
+                })
+                .filter(childId => {
+                    // Check if the referenced field exists
+                    const exists = cleanedFields.some(f => 
+                        (f.id === childId) || (f.name === childId)
+                    );
+                    return exists;
+                });
+            
+            // Remove duplicates
+            field.children = [...new Set(field.children)];
+        }
+    });
+    
+    // Ensure system fields are at the beginning
+    const systemFields = cleanedFields.filter(f => f.system_field);
+    const regularFields = cleanedFields.filter(f => !f.system_field);
+    
+    // Sort system fields by order
+    systemFields.sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    return {
+        ...data,
+        fields: [...systemFields, ...regularFields]
+    };
+};
+
 watch(formData, (newData) => {
     if (initialFormDataString && !isLoading.value) {
         const currentDataString = JSON.stringify(newData);
@@ -35,21 +111,17 @@ watch(formData, (newData) => {
     }
 }, { deep: true });
 
-// Load form data
 const loadFormData = async () => {
     try {
         isLoading.value = true;
         
         if (isNewForm.value) {
-            // Create a new empty form
             formData.value = createEmptyForm();
             initialFormDataString = JSON.stringify(formData.value);
         } else {
-            // Load existing form from API
             const data = await FormsService.getForm(formId);
             
-            // Transform API data to match frontend structure
-            formData.value = {
+            const loadedFormData = {
                 id: data.id,
                 name: data.name || 'Untitled Form',
                 description: data.description || '',
@@ -57,29 +129,26 @@ const loadFormData = async () => {
                 layout: data.settings?.layout || {
                     type: "standard",
                     settings: {
-                        showProgressBar: true,
-                        showFieldNumbers: false,
                         autoSave: true,
                         surveyMode: false
                     }
                 },
                 submission: data.settings?.submission || {
                     successMessage: "Thank you for submitting!",
-                    redirectUrl: null,
-                    allowMultiple: true,
-                    requireLogin: false
+                    redirectUrl: null
                 },
-                notifications: data.settings?.notifications || {},
                 advanced: data.settings?.advanced || {},
                 enabled: data.is_active !== false
             };
+            
+            // Clean the loaded data
+            formData.value = cleanFormData(loadedFormData);
             
             initialFormDataString = JSON.stringify(formData.value);
         }
     } catch (error) {
         console.error("Failed to load form:", error);
         common.notification("Failed to load form", false);
-        // Redirect back to forms list on error
         router.push('/forms');
     } finally {
         isLoading.value = false;
@@ -88,31 +157,29 @@ const loadFormData = async () => {
 
 onMounted(() => {
     loadFormData();
+    window.addEventListener('beforeunload', beforeUnloadHandler);
 });
 
-// Handle title update from inline editor
+onUnmounted(() => {
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
+});
+
 const handleTitleUpdate = (newTitle) => {
     formData.value.name = newTitle;
 };
 
-// Handle title save from inline editor
 const handleTitleSave = async (newTitle) => {
     try {
-        // Update the form data
         formData.value.name = newTitle;
-        
-        // Save to API immediately
         await saveFormToAPI();
-        
         common.notification('Form name updated successfully', true);
     } catch (error) {
         console.error('Error saving form name:', error);
         common.notification('Failed to save form name', false);
-        throw error; // Re-throw so the inline editor can handle it
+        throw error;
     }
 };
 
-// Open form settings popup
 const openFormSettings = () => {
     popup.open(
         'form-settings',
@@ -121,12 +188,9 @@ const openFormSettings = () => {
         {
             formData: formData.value,
             'update:form': (updatedForm) => {
-                console.log('Form settings updated:', updatedForm);
                 formData.value = { ...formData.value, ...updatedForm };
             },
             onSave: async (updatedForm) => {
-                // This callback will save the settings to the API
-                console.log('Saving form settings to API via popup:', updatedForm);
                 formData.value = { ...formData.value, ...updatedForm };
                 await saveFormToAPI();
                 common.notification('Form settings saved successfully', true);
@@ -138,41 +202,36 @@ const openFormSettings = () => {
     );
 };
 
-// Extract the save logic into a reusable function
 const saveFormToAPI = async () => {
-    // Prepare data for API
+    // Clean the form data before saving
+    const cleanedFormData = cleanFormData(formData.value);
+    
     const saveData = {
-        name: formData.value.name || 'Untitled Form',
-        description: formData.value.description || '',
-        fields: formData.value.fields || [],
+        name: cleanedFormData.name || 'Untitled Form',
+        description: cleanedFormData.description || '',
+        fields: cleanedFormData.fields || [],
         settings: {
-            layout: formData.value.layout || {},
-            submission: formData.value.submission || {},
-            notifications: formData.value.notifications || {},
-            advanced: formData.value.advanced || {}
+            layout: cleanedFormData.layout || {},
+            submission: cleanedFormData.submission || {},
+            advanced: cleanedFormData.advanced || {}
         },
-        is_active: formData.value.enabled !== false,
-        allow_multiple_submissions: formData.value.submission?.allowMultiple !== false,
-        requires_authentication: formData.value.submission?.requireLogin === true
+        is_active: cleanedFormData.enabled !== false,
+        allow_multiple_submissions: true,
+        requires_authentication: false
     };
     
-    console.log('Data being sent to API:', saveData);
+    console.log('Cleaned data being sent to API:', saveData);
     
     let savedForm;
     
     if (isNewForm.value) {
-        // Create new form
         savedForm = await FormsService.createForm(saveData);
-        
-        // Update URL to reflect the new form ID
         router.replace(`/forms/${savedForm.id}/edit`);
         isNewForm.value = false;
     } else {
-        // Update existing form
         savedForm = await FormsService.updateForm(formId, saveData);
     }
     
-    // Update form data with server response if needed
     if (savedForm) {
         formData.value.id = savedForm.id;
         if (savedForm.name) {
@@ -180,26 +239,17 @@ const saveFormToAPI = async () => {
         }
     }
     
-    // Update initial data to current state
     initialFormDataString = JSON.stringify(formData.value);
     hasUnsavedChanges.value = false;
     
     return savedForm;
 };
 
-// Save the form data
 const saveForm = async () => {
     try {
         isSaving.value = true;
-        
         await saveFormToAPI();
-        
-        if (isNewForm.value) {
-            common.notification("Form created successfully", true);
-        } else {
-            common.notification("Form saved successfully", true);
-        }
-        
+        common.notification("Form saved successfully", true);
     } catch (error) {
         console.error("Failed to save form:", error);
         common.notification("Failed to save form", false);
@@ -208,13 +258,20 @@ const saveForm = async () => {
     }
 };
 
-// Handle form changes from builder
 const handleFormChange = (updatedForm) => {
-    console.log('Form changed in builder:', updatedForm);
     formData.value = { ...updatedForm };
 };
 
-// Go back to forms list
+const handleAddField = (fieldType) => {
+    // Emit to builder to add field
+    const builder = document.querySelector('.form-builder');
+    if (builder) {
+        builder.dispatchEvent(new CustomEvent('add-field-type', { 
+            detail: { fieldType: fieldType.type } 
+        }));
+    }
+};
+
 const goBack = () => {
     if (hasUnsavedChanges.value) {
         if (confirm('You have unsaved changes. Are you sure you want to leave?')) {
@@ -225,35 +282,22 @@ const goBack = () => {
     }
 };
 
-// Preview form (placeholder)
 const previewForm = () => {
     common.notification('Preview functionality coming soon', true);
 };
 
-// Prevent navigation with unsaved changes
 const beforeUnloadHandler = (event) => {
     if (hasUnsavedChanges.value) {
         event.preventDefault();
         event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
     }
 };
-
-onMounted(() => {
-    window.addEventListener('beforeunload', beforeUnloadHandler);
-});
-
-// Clean up on unmount
-import { onUnmounted } from 'vue';
-onUnmounted(() => {
-    window.removeEventListener('beforeunload', beforeUnloadHandler);
-});
 </script>
 
 <template>
     <main-layout>
         <template #content>
             <div class="container-xl">
-                <!-- Custom Header with Inline Title Editor -->
                 <div class="custom-header">
                     <div class="header-left">
                         <Button 
@@ -273,7 +317,6 @@ onUnmounted(() => {
                     
                     <div class="header-right">
                         <div class="flex gap-lg align-center">
-                            <!-- Unsaved changes indicator -->
                             <div v-if="hasUnsavedChanges" class="unsaved-indicator">
                                 <span class="unsaved-dot"></span>
                                 <span class="unsaved-text">Unsaved changes</span>
@@ -310,11 +353,15 @@ onUnmounted(() => {
                     <p>Loading form builder...</p>
                 </div>
                 
-                <div v-else>
-                    <BuilderView 
-                        :formData="formData"
-                        @update:form="handleFormChange"
-                    />
+                <div v-else class="builder-layout">
+
+                    
+                    <div class="builder-main">
+                        <BuilderView 
+                            :formData="formData"
+                            @update:form="handleFormChange"
+                        />
+                    </div>
                 </div>
             </div>
         </template>
@@ -367,6 +414,21 @@ onUnmounted(() => {
     font-style: italic;
 }
 
+.builder-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+.builder-sidebar {
+    height: 100%;
+}
+
+.builder-main {
+    height: 100%;
+    overflow: hidden;
+}
+
 @keyframes pulse {
     0% {
         opacity: 1;
@@ -379,8 +441,23 @@ onUnmounted(() => {
     }
 }
 
-/* Remove default padding from container since we have custom header */
 :deep(.container-xl) {
     padding-top: 0;
+}
+
+@media (max-width: 1024px) {
+    .builder-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+    
+    .builder-sidebar {
+        order: 2;
+        height: 400px;
+    }
+    
+    .builder-main {
+        order: 1;
+    }
 }
 </style>
