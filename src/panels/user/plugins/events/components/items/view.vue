@@ -16,7 +16,7 @@
     import EventEditSchedule from '@user_events/components/form/eventEditSchedule.vue';
     import EventEditDuration from '@user_events/components/form/eventEditDuration.vue';
     import EventEditAssignees from '@user_events/components/form/eventEditAssignees.vue';
-    
+    import EventFormSettings from '@user_events/components/form/eventFormSettings.vue';
     import EventCreateForm from '@user_events/components/form/eventCreate.vue';
     import OrganizationEditForm from '@user_teams/components/form/organizationEdit.vue';
     import EventEditLocation from '@user_events/components/form/eventEditLocation.vue';
@@ -103,6 +103,7 @@
         { label: 'Edit availability', icon: null, iconComponent: PhCalendar, weight: 'regular' },
         { label: 'Edit location', icon: null, iconComponent: PhMapPin, weight: 'regular' },
         { label: 'Edit hosts', icon: null, iconComponent: PhUsers, weight: 'regular' },
+        { label: 'Form Settings', icon: null, iconComponent: PhTable, weight: 'regular' },
         { label: 'Add workflow', icon: null, iconComponent: PhFlowArrow, weight: 'regular' },
         { label: 'Add routing form', icon: null, iconComponent: PhTable, weight: 'regular' },
         { label: 'Duplicate', icon: null, iconComponent: PhCopy, weight: 'regular' },
@@ -168,6 +169,26 @@
                         
                     },
                     {                          
+                        position: 'center'
+                    }
+                );
+                break;
+
+            case 'Form Settings':
+                popup.open(
+                    'event-form-settings',
+                    null,
+                    EventFormSettings,
+                    {
+                        eventId: selectedEventId,
+                        organizationId: orgId,
+                        callback: (event, data, response, success) => {
+                            if (success) {
+                                reloadData();
+                            }
+                        }
+                    },
+                    {
                         position: 'center'
                     }
                 );
