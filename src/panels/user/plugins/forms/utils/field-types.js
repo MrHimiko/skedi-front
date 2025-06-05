@@ -139,7 +139,8 @@ export const fieldTypes = [
             deletable: true,
             max_guests: 10,
             system_field: false,
-            colSpan: 12
+            colSpan: 12,
+            unique: true
         }
     },
 ];
@@ -198,8 +199,12 @@ export function createField(type, order = null) {
         ...JSON.parse(JSON.stringify(fieldType.defaultProps))
     };
     
-    // For system fields, use predefined properties
-    if (fieldType.system) {
+    // For system fields and guest repeater, ensure they have consistent identifiers
+    if (fieldType.system || type === 'system_contact_guests') {
+        // Always give guest repeater an id
+        if (type === 'system_contact_guests') {
+            newField.id = newField.name || 'system_contact_guests';
+        }
         if (order !== null) {
             newField.order = order;
         }

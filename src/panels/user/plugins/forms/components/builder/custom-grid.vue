@@ -45,13 +45,12 @@ const visibleFields = computed(() => {
     sortedFields.value.forEach(field => {
         if ((field.type === 'group' || field.type === 'step') && field.children && Array.isArray(field.children)) {
             field.children.forEach(childId => {
-                // Don't hide system fields that are referenced in containers
                 const childField = sortedFields.value.find(f => 
                     (f.id === childId) || (f.name === childId)
                 );
                 
-                // Only hide non-system fields that are in containers
-                if (childField && !childField.system_field) {
+                // Hide fields that are in containers (except when viewing the container itself)
+                if (childField) {
                     fieldsInGroups.add(childId);
                 }
             });
@@ -66,9 +65,21 @@ const visibleFields = computed(() => {
 
 const getFieldById = (fieldId) => {
     if (!fieldId) return null;
-    return props.fields.find(f => 
-        (f.id && f.id === fieldId) || (f.name && f.name === fieldId)
-    );
+    
+    // Find by id first
+    let field = props.fields.find(f => f.id && f.id === fieldId);
+    
+    // If not found by id, try by name
+    if (!field) {
+        field = props.fields.find(f => f.name && f.name === fieldId);
+    }
+    
+    // Special case for guest repeater - also check by type
+    if (!field && fieldId === 'system_contact_guests') {
+        field = props.fields.find(f => f.type === 'guest_repeater');
+    }
+    
+    return field;
 };
 
 const openFieldSettings = (field, event) => {
@@ -104,12 +115,12 @@ const openManageFieldsPopup = (container, event) => {
     
     const containerType = container.type;
     
+    // Show all fields that can go in this container type
     const availableFields = props.fields.filter(field => {
+        // Don't include the container itself
         if (field.id === container.id || field.name === container.id) return false;
         
-        // Include system fields for containers
-        // System fields can be added to any container
-        
+        // Apply container type restrictions
         if (containerType === 'step') {
             return field.type !== 'step';
         }

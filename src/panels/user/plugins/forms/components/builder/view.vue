@@ -50,7 +50,8 @@ const openAddFieldPopup = () => {
     );
 };
 
-// Add a new field
+
+
 const addField = (fieldType) => {
     const order = getNextOrder();
     const newField = createField(fieldType, order);
@@ -60,14 +61,23 @@ const addField = (fieldType) => {
         return;
     }
     
-    // Check if it's a guest repeater and we already have one
-    if (fieldType === 'system_contact_guests') {
-        const existingGuestRepeater = form.value.fields.find(f => 
-            f.type === 'guest_repeater' || f.name === 'system_contact_guests'
+    // For guest repeater, ensure it has an id if it doesn't already
+    if (fieldType === 'system_contact_guests' && !newField.id) {
+        newField.id = newField.name || `field-${Date.now()}`;
+    }
+    
+    // Check for unique fields
+    const uniqueFieldName = newField.name || newField.type;
+    const uniqueFields = ['system_contact_name', 'system_contact_email', 'system_contact_guests'];
+    
+    if (uniqueFields.includes(uniqueFieldName)) {
+        const existingField = form.value.fields.find(f => 
+            f.name === uniqueFieldName || 
+            (uniqueFieldName === 'system_contact_guests' && f.type === 'guest_repeater')
         );
         
-        if (existingGuestRepeater) {
-            common.notification('You can only have one Guest List field per form', false);
+        if (existingField) {
+            common.notification(`You can only have one ${newField.label} field per form`, false);
             return;
         }
     }
@@ -81,13 +91,13 @@ const addField = (fieldType) => {
     
     emit('update:form', form.value);
     
-    // Open settings for non-system fields
     if (!newField.system_field && fieldType !== 'divider') {
         setTimeout(() => {
             openFieldSettings(newField);
         }, 100);
     }
 };
+
 
 // Open field settings
 const openFieldSettings = (field) => {
@@ -356,7 +366,7 @@ const addFieldToContainer = (containerId) => {
                 const children = container.children || [];
                 const updatedContainer = {
                     ...container,
-                    children: [...children, newField.id || newField.name]
+                    children: [...children, newField.id || newField.name]  // <-- THIS IS THE KEY!
                 };
                 
                 updatedFields[containerIndex] = updatedContainer;
@@ -384,19 +394,53 @@ const addFieldToContainer = (containerId) => {
     );
 };
 
-// Manage container fields
+
+
+
 const manageContainerFields = (containerId, selectedFieldIds) => {
     const containerIndex = form.value.fields.findIndex(field => field.id === containerId);
     if (containerIndex === -1) return;
     
-    // Clean selected field IDs - no duplicates, no nulls
+    // Debug logging
+    console.log('Managing container fields:');
+    console.log('Container ID:', containerId);
+    console.log('Selected field IDs:', selectedFieldIds);
+    
+    // Log all fields to see their identifiers
+    form.value.fields.forEach(field => {
+        console.log(`Field: id="${field.id}", name="${field.name}", type="${field.type}"`);
+    });
+    
+    // Clean selected field IDs
     const cleanedSelectedIds = [...new Set(selectedFieldIds.filter(id => id != null))];
     
-    const updatedFields = [...form.value.fields];
-    updatedFields[containerIndex] = {
-        ...updatedFields[containerIndex],
-        children: cleanedSelectedIds
-    };
+    // Update all containers at once
+    const updatedFields = form.value.fields.map(field => {
+        if (field.type === 'step' || field.type === 'group') {
+            if (field.id === containerId) {
+                console.log(`Updating container ${field.id} with children:`, cleanedSelectedIds);
+                return {
+                    ...field,
+                    children: cleanedSelectedIds
+                };
+            } else if (field.children && field.children.length > 0) {
+                const remainingChildren = field.children.filter(childId => 
+                    !cleanedSelectedIds.includes(childId)
+                );
+                
+                if (remainingChildren.length !== field.children.length) {
+                    console.log(`Removing children from container ${field.id}:`, 
+                        field.children.filter(id => cleanedSelectedIds.includes(id)));
+                }
+                
+                return {
+                    ...field,
+                    children: remainingChildren
+                };
+            }
+        }
+        return field;
+    });
     
     form.value = {
         ...form.value,
@@ -405,7 +449,7 @@ const manageContainerFields = (containerId, selectedFieldIds) => {
     
     emit('update:form', form.value);
     
-    common.notification(`Updated fields in ${updatedFields[containerIndex].type}`, true);
+    common.notification(`Updated fields in ${updatedFields[containerIndex].label}`, true);
 };
 </script>
 

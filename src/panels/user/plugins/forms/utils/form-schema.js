@@ -164,44 +164,59 @@ export function ensureSystemFieldsOrder(fields) {
 
 // Clean up form data before saving
 export function cleanFormData(formData) {
-    // Remove duplicate system fields
     const cleanedFields = [];
-    const seenSystemFields = new Set();
+    const seenFieldIds = new Set();
+    const seenSystemNames = new Set();
+    
+    // Track unique fields by both id and name
+    const uniqueFieldTypes = new Set(['system_contact_name', 'system_contact_email', 'system_contact_guests']);
     
     formData.fields.forEach(field => {
-        // Handle system fields
-        if (field.system_field) {
-            const key = field.name || `${field.type}_${field.order}`;
-            if (!seenSystemFields.has(key)) {
-                seenSystemFields.add(key);
-                cleanedFields.push(field);
+        // Check for duplicates by ID
+        if (field.id && seenFieldIds.has(field.id)) {
+            return; // Skip duplicate
+        }
+        
+        // Check for unique field types (system fields and guest repeater)
+        const fieldIdentifier = field.name || field.type;
+        if (uniqueFieldTypes.has(fieldIdentifier)) {
+            if (seenSystemNames.has(fieldIdentifier)) {
+                return; // Skip duplicate
             }
-        } else {
-            cleanedFields.push(field);
+            seenSystemNames.add(fieldIdentifier);
+        }
+        
+        // Add to seen IDs
+        if (field.id) {
+            seenFieldIds.add(field.id);
+        }
+        
+        cleanedFields.push(field);
+    });
+    
+    // Clean up container children references
+    cleanedFields.forEach(field => {
+        if (field.children && Array.isArray(field.children)) {
+            field.children = field.children
+                .filter(childId => childId != null)
+                .filter(childId => {
+                    // Check if referenced field exists
+                    return cleanedFields.some(f => 
+                        (f.id === childId) || (f.name === childId)
+                    );
+                })
+                .filter((childId, index, array) => array.indexOf(childId) === index); // Remove duplicates
         }
     });
     
-    // Clean up container children - remove nulls and invalid references
-    cleanedFields.forEach(field => {
-        if (field.children && Array.isArray(field.children)) {
-            field.children = field.children.filter(childId => {
-                if (!childId) return false; // Remove nulls
-                
-                // Check if the referenced field exists
-                const exists = cleanedFields.some(f => 
-                    (f.id === childId) || (f.name === childId)
-                );
-                
-                return exists;
-            });
-            
-            // Remove duplicates
-            field.children = [...new Set(field.children)];
-        }
-    });
+    // Ensure system fields are at the beginning
+    const systemFields = cleanedFields.filter(f => f.system_field);
+    const regularFields = cleanedFields.filter(f => !f.system_field);
+    
+    systemFields.sort((a, b) => (a.order || 0) - (b.order || 0));
     
     return {
         ...formData,
-        fields: cleanedFields
+        fields: [...systemFields, ...regularFields]
     };
 }
