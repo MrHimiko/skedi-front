@@ -27,6 +27,12 @@ const isLoadingExternalEvents = ref(false);
 const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
+
+const isExternalEventsEnabled = computed(() => {
+    return currentTab.value === 'upcoming' || currentTab.value === 'past';
+});
+
+
 // Sync calendar events
 async function handleSyncClick() {
     isLoadingExternalEvents.value = true;
@@ -355,14 +361,26 @@ function addExternalEventsToBookings(events) {
 
 // Toggle external events visibility
 function toggleExternalEvents() {
+    if (!isExternalEventsEnabled.value) {
+        showExternalEvents.value = false;
+        storage.set('user.showExternalEvents', false);
+        return;
+    }
+    
     showExternalEvents.value = !showExternalEvents.value;
     storage.set('user.showExternalEvents', showExternalEvents.value);
     fetchBookings();
 }
-
 // Handle tab changes
 function handleTabChange(event, tab) {
     currentTab.value = tab.title.toLowerCase();
+    
+    // Disable external events for pending/canceled tabs
+    if (!isExternalEventsEnabled.value && showExternalEvents.value) {
+        showExternalEvents.value = false;
+        storage.set('user.showExternalEvents', false);
+    }
+    
     fetchBookings();
 }
 
@@ -440,8 +458,11 @@ onMounted(() => {
     fetchBookings();
 });
 
-watch(refreshCounter, () => {
-    fetchBookings();
+watch(isExternalEventsEnabled, (newValue) => {
+    if (!newValue && showExternalEvents.value) {
+        showExternalEvents.value = false;
+        storage.set('user.showExternalEvents', false);
+    }
 });
 
 const tabs = [
@@ -507,6 +528,7 @@ const tabs = [
                             v-model="showExternalEvents"
                             @change="toggleExternalEvents"
                             label="Show External Events"
+                            :disabled="!isExternalEventsEnabled"
                         />
                     </div>
 
@@ -516,6 +538,7 @@ const tabs = [
                         :iconLeft="{ component: PhArrowsClockwise, weight: 'bold' }"
                         @click="handleSyncClick"
                         :disabled="isLoadingExternalEvents"
+                        title="Force sync all connected calendar integrations to show external events in this list"
                     />
                 </div>
                 
@@ -626,5 +649,11 @@ const tabs = [
 
 .top-wrapper .c-toggle > .holder {
     order: -1;
+}
+
+.toggle-container .c-toggle[disabled='true'] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events:none;
 }
 </style>

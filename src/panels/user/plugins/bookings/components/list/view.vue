@@ -35,6 +35,15 @@ const emit = defineEmits(['refresh']);
 
 // Get menu actions with icons
 function getMenuActions(booking) {
+    // For past pending bookings, only show remove
+    if (booking.status === 'pending' && isBookingInPast(booking)) {
+        return [{
+            label: 'Remove',
+            iconComponent: PhTrash,
+            weight: 'bold'
+        }];
+    }
+    
     const actions = getBookingActions(booking);
     return actions.map(action => {
         const iconMap = {
@@ -51,6 +60,16 @@ function getMenuActions(booking) {
             weight: 'bold'
         };
     });
+}
+
+
+function isBookingInPast(booking) {
+    if (!booking || !booking.start_time) return false;
+    
+    const bookingStartTime = new Date(booking.start_time);
+    const now = new Date();
+    
+    return bookingStartTime < now;
 }
 
 // Utility function to change booking status
@@ -317,13 +336,13 @@ function getCalendarName(event) {
                         <div class="actions-buttons">
                             <!-- Confirm button for pending bookings -->
                             <ButtonComponent 
-                                v-if="item.status === 'pending'"
+                                v-if="item.status === 'pending' && !isBookingInPast(item)"
                                 label="Confirm" 
                                 as="secondary"
                                 :iconLeft="{ component: PhCheck, weight: 'bold' }"
                                 @click="confirmBooking(item)"
                             />
-                            
+                                                        
                             <!-- Details button for all bookings -->
                             <ButtonComponent 
                                 label="Details" 

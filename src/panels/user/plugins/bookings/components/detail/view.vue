@@ -1,5 +1,3 @@
-// Location: src/panels/user/plugins/bookings/components/detail/view.vue
-
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { BookingsService } from '@user_bookings/services/bookings';
@@ -9,6 +7,7 @@ import { UserStore } from '@stores/user';
 import { getLocationIcon } from '@user_bookings/config/locationIcons';
 import PopupView from '@layouts/popup/view.vue';
 import Button from '@form/button/view.vue';
+import TabsComponent from '@global/tabs/view.vue';
 import { 
     PhCalendarCheck, PhClock, PhMapPin, PhUsers, 
     PhVideoCamera, PhClipboard, PhX, PhCheck, PhTrash,
@@ -33,6 +32,7 @@ const props = defineProps({
 // State management
 const booking = ref(null);
 const isLoading = ref(true);
+const currentTab = ref('general');
 
 // Get location info
 const locationInfo = computed(() => {
@@ -51,6 +51,39 @@ const locationInfo = computed(() => {
         meetingLink: booking.value.meeting_link
     };
 });
+
+// Check if form data has custom fields
+const hasCustomFields = computed(() => {
+    if (!booking.value || !booking.value.form_data) return false;
+    
+    try {
+        const formData = typeof booking.value.form_data === 'string' 
+            ? JSON.parse(booking.value.form_data) 
+            : booking.value.form_data;
+        return formData.custom_fields && formData.custom_fields.length > 0;
+    } catch (e) {
+        return false;
+    }
+});
+
+// Parse form data
+const parsedFormData = computed(() => {
+    if (!booking.value || !booking.value.form_data) return null;
+    
+    try {
+        return typeof booking.value.form_data === 'string' 
+            ? JSON.parse(booking.value.form_data) 
+            : booking.value.form_data;
+    } catch (e) {
+        console.error('Error parsing form data:', e);
+        return null;
+    }
+});
+
+// Handle tab changes
+function handleTabChange(event, tab) {
+    currentTab.value = tab.title.toLowerCase().replace(' ', '_');
+}
 
 // Format date for display
 function formatDate(dateString) {
@@ -79,6 +112,16 @@ function getDuration(startTime, endTime) {
     const durationMs = end - start;
     return Math.round(durationMs / (1000 * 60));
 }
+
+
+const isBookingInPast = computed(() => {
+    if (!booking.value || !booking.value.start_time) return false;
+    
+    const bookingStartTime = new Date(booking.value.start_time);
+    const now = new Date();
+    
+    return bookingStartTime < now;
+});
 
 // Utility function to change booking status
 async function changeBookingStatus(booking, status) {
@@ -288,8 +331,20 @@ onMounted(() => {
                     </div>
                 </div>
                 
-                <!-- Booking Information -->
-                <div class="info-section">
+                <!-- Tabs if custom fields exist -->
+                <div v-if="hasCustomFields" class="tabs-wrapper">
+                    <TabsComponent 
+                        :tabs="[
+                            { title: 'General', active: currentTab === 'general' },
+                            { title: 'Form Data', active: currentTab === 'form_data' }
+                        ]" 
+                        :active="currentTab" 
+                        :onClick="handleTabChange"
+                    />
+                </div>
+                
+                <!-- General Tab Content -->
+                <div v-show="!hasCustomFields || currentTab === 'general'" class="info-section">
                     <!-- Date and time -->
                     <div class="info-item">
                         <div class="info-icon">
@@ -387,22 +442,77 @@ onMounted(() => {
                     </div>
                 </div>
                 
+                <!-- Form Data Tab Content -->
+                <div v-if="hasCustomFields && currentTab === 'form_data'" class="form-data-section">
+                    <!-- Primary Contact -->
+                    <div v-if="parsedFormData.primary_contact" class="form-section">
+                        <h3 class="form-section-title">Primary Contact</h3>
+                        <div class="form-field">
+                            <span class="form-label">Name:</span>
+                            <span class="form-value">{{ parsedFormData.primary_contact.name }}</span>
+                        </div>
+                        <div class="form-field">
+                            <span class="form-label">Email:</span>
+                            <span class="form-value">{{ parsedFormData.primary_contact.email }}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Standard Fields -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">Booking Details</h3>
+                        <div v-if="parsedFormData.duration" class="form-field">
+                            <span class="form-label">Duration:</span>
+                            <span class="form-value">{{ parsedFormData.duration }} minutes</span>
+                        </div>
+                        <div v-if="parsedFormData.timezone" class="form-field">
+                            <span class="form-label">Timezone:</span>
+                            <span class="form-value">{{ parsedFormData.timezone }}</span>
+                        </div>
+                        <div v-if="parsedFormData.notes" class="form-field">
+                            <span class="form-label">Notes:</span>
+                            <span class="form-value">{{ parsedFormData.notes || 'No notes provided' }}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Custom Fields -->
+                    <div v-if="parsedFormData.custom_fields && parsedFormData.custom_fields.length > 0" class="form-section">
+                        <h3 class="form-section-title">Custom Information</h3>
+                        <div v-for="field in parsedFormData.custom_fields" :key="field.field_id" class="form-field">
+                            <span class="form-label">{{ field.label }}:</span>
+                            <span class="form-value">{{ field.value || 'Not provided' }}</span>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Actions - conditionally show based on booking status -->
                 <div class="actions-section">
                     <!-- Pending booking actions -->
                     <template v-if="booking.status === 'pending'">
-                        <Button 
-                            label="Confirm Booking" 
-                            :iconLeft="{ component: PhCheck, weight: 'bold' }"
-                            @click="confirmBooking"
-                        />
+                        <!-- Past pending bookings - only allow remove -->
+                        <template v-if="isBookingInPast">
+                            <Button 
+                                label="Remove Booking" 
+                                as="tertiary"
+                                :iconLeft="{ component: PhTrash, weight: 'bold' }"
+                                @click="removeBooking"
+                            />
+                        </template>
                         
-                        <Button 
-                            label="Cancel" 
-                            as="tertiary"
-                            :iconLeft="{ component: PhX, weight: 'bold' }"
-                            @click="cancelBooking"
-                        />
+                        <!-- Future pending bookings - normal actions -->
+                        <template v-else>
+                            <Button 
+                                label="Confirm Booking" 
+                                :iconLeft="{ component: PhCheck, weight: 'bold' }"
+                                @click="confirmBooking"
+                            />
+                            
+                            <Button 
+                                label="Cancel" 
+                                as="tertiary"
+                                :iconLeft="{ component: PhX, weight: 'bold' }"
+                                @click="cancelBooking"
+                            />
+                        </template>
                     </template>
                     
                     <!-- Upcoming or active booking actions -->
@@ -448,10 +558,9 @@ onMounted(() => {
 <style scoped>
 
 .booking-detail {
-  width: 100vw;
-  max-width: 600px;
+    width: 100vw;
+    max-width: 600px;
 }
-
 
 .booking-detail-content {
     padding: 10px 0;
@@ -615,5 +724,48 @@ onMounted(() => {
     gap: 10px;
     padding-top: 15px;
     border-top: 1px solid var(--border);
+}
+
+.tabs-wrapper {
+    margin-bottom: 20px;
+}
+
+.form-data-section {
+    padding: 10px 0;
+}
+
+.form-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.form-section:last-child {
+    border-bottom: none;
+}
+
+.form-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+}
+
+.form-field {
+    display: flex;
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+
+.form-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    min-width: 120px;
+    margin-right: 15px;
+}
+
+.form-value {
+    color: var(--text-primary);
+    flex: 1;
 }
 </style>
