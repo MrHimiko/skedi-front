@@ -336,6 +336,7 @@ export class BookingsService {
         const userTimezone = storage.get('user.timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone;
         
         return bookings.map(booking => {
+
             try {
                 // Extract date and time parts from ISO string
                 // Server format: "2025-04-21 05:30:00"
@@ -489,4 +490,125 @@ export class BookingsService {
         
         return baseInfo;
     }
+
+
+
+    /**
+     * Check if two bookings/events are duplicates
+     * For 500K users, this needs to be efficient
+     */
+    static areEventsDuplicate(event1, event2) {
+        if (!event1 || !event2) return false;
+        
+        // Quick checks first (most performant)
+        if (event1.id === event2.id) return true;
+        
+        // Extract timestamps for comparison
+        const getTimestamp = (timeStr) => {
+            if (!timeStr) return null;
+            // Handle both ISO and space-separated formats
+            if (timeStr.includes('T')) {
+                return new Date(timeStr).getTime();
+            } else {
+                const [date, time] = timeStr.split(' ');
+                return new Date(`${date}T${time}Z`).getTime();
+            }
+        };
+        
+        const start1 = getTimestamp(event1.start_time);
+        const start2 = getTimestamp(event2.start_time);
+        const end1 = getTimestamp(event1.end_time);
+        const end2 = getTimestamp(event2.end_time);
+        
+        // If times don't match exactly, not duplicate
+        if (start1 !== start2 || end1 !== end2) return false;
+        
+        // Normalize titles for comparison
+        const normalizeTitle = (title) => {
+            if (!title) return '';
+            return title.toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/[^\w\s]/g, '')
+                .trim();
+        };
+        
+        const title1 = normalizeTitle(event1.title || event1.event_name || '');
+        const title2 = normalizeTitle(event2.title || event2.event_name || '');
+        
+        // Check for exact match or containment
+        if (title1 === title2) return true;
+        if (title1.includes(title2) || title2.includes(title1)) return true;
+        
+        // Check if one is a variation of the other (e.g., "Meeting - Booking" vs "Meeting")
+        const cleanTitle1 = title1.replace(/\s*[-–—]\s*booking\s*$/i, '').trim();
+        const cleanTitle2 = title2.replace(/\s*[-–—]\s*booking\s*$/i, '').trim();
+        if (cleanTitle1 === cleanTitle2) return true;
+        
+        // Check attendee overlap for same time slots
+        const getEmails = (event) => {
+            const emails = new Set();
+            if (event.guests) event.guests.forEach(g => g.email && emails.add(g.email.toLowerCase()));
+            if (event.hosts) event.hosts.forEach(h => h.email && emails.add(h.email.toLowerCase()));
+            if (event.attendees) event.attendees.forEach(a => a.email && emails.add(a.email.toLowerCase()));
+            return emails;
+        };
+        
+        const emails1 = getEmails(event1);
+        const emails2 = getEmails(event2);
+        
+        // If same time and any attendee overlap, likely duplicate
+        if (emails1.size > 0 && emails2.size > 0) {
+            for (const email of emails1) {
+                if (emails2.has(email)) return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Filter out duplicate external events
+     * Prioritize internal bookings over external events
+     */
+    static filterDuplicateEvents(internalBookings, externalEvents) {
+        // Create lookup map for O(1) performance at scale
+        const bookingTimeMap = new Map();
+        
+        // Index internal bookings by start time
+        internalBookings.forEach(booking => {
+            if (!booking || booking.type === 'header') return;
+            
+            const timeKey = `${booking.start_time}_${booking.end_time}`;
+            if (!bookingTimeMap.has(timeKey)) {
+                bookingTimeMap.set(timeKey, []);
+            }
+            bookingTimeMap.get(timeKey).push(booking);
+        });
+        
+        // Filter external events
+        return externalEvents.filter(extEvent => {
+            if (!extEvent) return false;
+            
+            // Check against all internal bookings at same time
+            const timeKey = `${extEvent.start_time}_${extEvent.end_time}`;
+            const sameTimeBookings = bookingTimeMap.get(timeKey) || [];
+            
+            // If any booking at same time is duplicate, exclude external event
+            for (const booking of sameTimeBookings) {
+                if (this.areEventsDuplicate(booking, extEvent)) {
+                    return false; // Filter out this external event
+                }
+            }
+            
+            // Also check all bookings (slower but thorough)
+            for (const booking of internalBookings) {
+                if (booking && booking.type !== 'header' && this.areEventsDuplicate(booking, extEvent)) {
+                    return false;
+                }
+            }
+            
+            return true; // Keep this external event
+        });
+    }
+
 }

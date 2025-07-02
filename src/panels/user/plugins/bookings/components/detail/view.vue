@@ -54,6 +54,9 @@ const locationInfo = computed(() => {
 
 // Check if form data has custom fields
 const hasCustomFields = computed(() => {
+
+    console.log(booking.value, "xx");
+
     if (!booking.value || !booking.value.form_data) return false;
     
     try {
@@ -336,7 +339,7 @@ onMounted(() => {
                     <TabsComponent 
                         :tabs="[
                             { title: 'General', active: currentTab === 'general' },
-                            { title: 'Form Data', active: currentTab === 'form_data' }
+                            { title: 'Form', active: currentTab === 'form_data' }
                         ]" 
                         :active="currentTab" 
                         :onClick="handleTabChange"
@@ -443,7 +446,7 @@ onMounted(() => {
                 </div>
                 
                 <!-- Form Data Tab Content -->
-                <div v-if="hasCustomFields && currentTab === 'form_data'" class="form-data-section">
+                <div v-if="hasCustomFields && currentTab === 'form'" class="form-data-section">
                     <!-- Primary Contact -->
                     <div v-if="parsedFormData.primary_contact" class="form-section">
                         <h3 class="form-section-title">Primary Contact</h3>

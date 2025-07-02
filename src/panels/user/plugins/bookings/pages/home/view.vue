@@ -108,7 +108,7 @@ async function fetchExternalEvents(startTime, endTime) {
         const params = new URLSearchParams({
             start_date: startDate,
             end_date: endDate,
-            sync: 'auto'
+            sync: 'force'
         });
         
         const response = await api.get(`user/integrations/events?${params.toString()}`);
@@ -131,13 +131,27 @@ function processExternalEvents(events) {
     const processedEvents = [];
     const userTimezone = storage.get('user.timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone;
     
+    console.log("WOW", events);
+    // Get all internal bookings for duplicate checking
+    const internalBookings = bookings.value.filter(item => 
+        item && item.type === 'booking'
+    );
+    
     for (const event of events) {
         try {
-            if (bookings.value.some(item => item && item.id === event.id)) {
-                continue;
+            if (!event.start_time) continue;
+            
+            // Check if this external event is a duplicate of any internal booking
+            let isDuplicate = false;
+            for (const booking of internalBookings) {
+                if (BookingsService.areEventsDuplicate(booking, event)) {
+                    isDuplicate = true;
+                    break;
+                }
             }
             
-            if (!event.start_time) continue;
+            // Skip if duplicate
+            if (isDuplicate) continue;
             
             let startDateTime, endDateTime;
             
