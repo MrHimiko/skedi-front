@@ -5,7 +5,6 @@ import RunUser from '@/panels/user/run';
 
 /* User Plugins */
 import RunUserShared from '@user_shared/run';
-import RunUserActivity from '@user_activity/run';
 import RunUserAccount from '@user_account/run';
 import RunUserDashboard from '@user_dashboard/run';
 import RunUserTeams from '@user_teams/run';
@@ -27,7 +26,6 @@ initializeApp((app, router, stores) =>
         RunUserShared,
         RunUserEvents,
         RunUserDashboard,
-        RunUserActivity, 
         RunUserAccount,
         RunUserTeams,
         RunUserBookings,

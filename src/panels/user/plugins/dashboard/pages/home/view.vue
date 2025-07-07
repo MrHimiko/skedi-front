@@ -7,7 +7,6 @@
     import HeadingComponent from '@global/heading/view.vue'
     import NoticeComponent from '@global/notice/view.vue'
 
-    import LogsComponent from '@activity/components/logs/view.vue';
 
     import CalendarComponent from '@user_dashboard/components/calendar/view.vue';
     
