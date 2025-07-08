@@ -131,29 +131,56 @@ export const ContactsService = {
     },
 
     /**
-     * Toggle favorite status for a contact
+     * Get contacts where current user is the host
      */
-    async toggleFavorite(organizationId, contactId) {
-        if (!organizationId || !contactId) {
-            throw new Error('Organization ID and Contact ID are required');
-        }
+    async getMyContacts(options = {}) {
+        const {
+            page = 1,
+            limit = 50,
+            search = '',
+            useCache = false
+        } = options;
 
         try {
-            const response = await api.put(`user/organizations/${organizationId}/contacts/${contactId}/favorite`);
+            const params = new URLSearchParams({
+                page: page.toString(),
+                limit: limit.toString()
+            });
+
+            if (search) {
+                params.append('search', search);
+            }
+
+            const response = await api.get(`user/contacts/my-contacts?${params}`);
+
+            if (response && response.success && response.data) {
+                return response.data;
+            }
+
+            return { data: [], count: 0 };
+        } catch (error) {
+            console.error('Failed to fetch my contacts:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Toggle favorite for host contact
+     */
+    async toggleHostFavorite(contactId) {
+        try {
+            const response = await api.put(`user/contacts/${contactId}/host-favorite`);
             
             if (response && response.success) {
-                // Clear cache
-                storage.remove(CACHE_KEY);
                 return response.data;
             }
 
             throw new Error(response?.message || 'Failed to update favorite status');
         } catch (error) {
-            console.error('Failed to toggle favorite:', error);
+            console.error('Failed to toggle host favorite:', error);
             throw error;
         }
     },
-
 
     /**
      * Clear contacts cache

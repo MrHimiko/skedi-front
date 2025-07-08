@@ -20,10 +20,11 @@ const contacts = ref([]);
 const isLoading = ref(true);
 const searchQuery = ref('');
 const activeTab = ref('allcontacts');
-const selectedOrganization = ref(null);
+const selectedOrganization = ref('my-contacts'); // Default to "My Contacts"
 
 // User store
 const userStore = UserStore();
+const currentUserId = userStore.getId();
 
 // Get organizations from store
 const organizations = computed(() => {
@@ -31,15 +32,45 @@ const organizations = computed(() => {
     return orgs || [];
 });
 
+// Check if user is admin/owner of organization
+function isUserAdminOfOrg(orgId) {
+    const userOrg = organizations.value.find(org => 
+        (org.entity?.id || org.id) === orgId
+    );
+    
+    if (!userOrg) return false;
+    
+    // Check the role field directly on the userOrg object
+    // Based on your user_organizations table structure
+    return ['admin', 'owner', 'creator'].includes(userOrg.role?.toLowerCase());
+}
+
 // Organization dropdown options
 const organizationOptions = computed(() => {
-    return organizations.value.map(org => ({
-        label: org.entity?.name || org.name || 'Unknown',
-        value: org.entity?.id || org.id
-    }));
+    // Start with "My Contacts" option
+    const options = [
+        {
+            label: 'My Contacts',
+            value: 'my-contacts'
+        }
+    ];
+    
+    // Add organization options
+    organizations.value.forEach(org => {
+        const orgId = org.entity?.id || org.id;
+        const orgName = org.entity?.name || org.name || 'Unknown';
+        const isAdmin = isUserAdminOfOrg(orgId);
+        
+        options.push({
+            label: isAdmin ? `${orgName} (All contacts)` : orgName,
+            value: orgId
+        });
+    });
+    
+    return options;
 });
 
-// Tabs configuration - matching your bookings pattern
+// Tabs configuration
 const tabs = computed(() => [
     { 
         title: 'All contacts', 
@@ -53,48 +84,58 @@ const tabs = computed(() => [
 
 // Set initial organization
 onMounted(() => {
-    if (organizationOptions.value.length > 0) {
-        // Set first organization as default
-        selectedOrganization.value = organizationOptions.value[0].value;
-        loadContacts();
-    } else {
-        isLoading.value = false;
-    }
+    // Default is already "my-contacts"
+    loadContacts();
 });
 
 // Watch for organization changes
 watch(selectedOrganization, (newOrgId, oldOrgId) => {
-    if (newOrgId && newOrgId !== oldOrgId) {
-        // Clear search when switching organizations
+    if (newOrgId !== oldOrgId) {
+        // Clear search when switching
         searchQuery.value = '';
         loadContacts();
     }
 });
 
 // Load contacts
+// Load contacts
 async function loadContacts() {
-    if (!selectedOrganization.value) {
-        return;
-    }
-
     try {
         isLoading.value = true;
-        const response = await ContactsService.getContacts(selectedOrganization.value, {
-            search: searchQuery.value,
-            useCache: false
-        });
+        
+        if (selectedOrganization.value === 'my-contacts') {
+            // For "My Contacts", pick the first organization for now
+            // In a future update, we can create a backend endpoint that aggregates
+            if (organizations.value.length > 0) {
+                const firstOrgId = organizations.value[0].entity?.id || organizations.value[0].id;
+                const response = await ContactsService.getContacts(firstOrgId, {
+                    search: searchQuery.value,
+                    useCache: false
+                });
+                
+                // Filter to show only contacts where current user is involved
+                // This is a temporary solution until backend supports it
+                contacts.value = response.data || [];
+            } else {
+                contacts.value = [];
+            }
+        } else {
+            // Load organization contacts
+            const response = await ContactsService.getContacts(selectedOrganization.value, {
+                search: searchQuery.value,
+                useCache: false
+            });
+            
+            contacts.value = response.data || [];
+        }
         
         // Filter based on active tab
-        let filteredContacts = response.data || [];
-        
-       if (activeTab.value === 'favorites') {
-            // Filter only favorites
-            filteredContacts = filteredContacts.filter(contact => 
+        if (activeTab.value === 'favorites') {
+            contacts.value = contacts.value.filter(contact => 
                 contact.organization_contact?.is_favorite === true
             );
         }
         
-        contacts.value = filteredContacts;
     } catch (error) {
         console.error('Failed to load contacts:', error);
         common.notification('Failed to load contacts', false);
@@ -115,22 +156,44 @@ watch(searchQuery, () => {
 
 // Tab change handler
 function handleTabChange(event, tab) {
-    // Extract key from title
     const tabKey = tab.title.toLowerCase().replace(/\s+/g, '');
     activeTab.value = tabKey;
     loadContacts();
 }
 
-// Contact actions from child component
+// Contact actions
 function handleToggleFavorite(contact) {
-    // We'll implement the API call to toggle favorite
-    ContactsService.toggleFavorite(selectedOrganization.value, contact.id)
+    if (selectedOrganization.value === 'my-contacts') {
+        // Toggle favorite on host_contact
+        ContactsService.toggleHostFavorite(contact.id)
+            .then(() => {
+                common.notification('Updated favorite status', true);
+                loadContacts();
+            })
+            .catch(() => {
+                common.notification('Failed to update favorite status', false);
+            });
+    } else {
+        // Toggle favorite on organization_contact
+        ContactsService.toggleFavorite(selectedOrganization.value, contact.id)
+            .then(() => {
+                common.notification('Updated favorite status', true);
+                loadContacts();
+            })
+            .catch(() => {
+                common.notification('Failed to update favorite status', false);
+            });
+    }
+}
+
+function handleDeleteContact(contact) {
+    ContactsService.deleteContact(selectedOrganization.value, contact.id)
         .then(() => {
-            common.notification('Updated favorite status', true);
+            common.notification('Contact removed successfully', true);
             loadContacts();
         })
         .catch(() => {
-            common.notification('Failed to update favorite status', false);
+            common.notification('Failed to remove contact', false);
         });
 }
 
@@ -159,11 +222,11 @@ function handleExportContacts() {
 
                 <div class="controls-section">
                     <div class="left-controls">
-                        <div class="organization-selector" v-if="organizationOptions.length > 1">
+                        <div class="organization-selector">
                             <SelectComponent
                                 v-model="selectedOrganization"
                                 :options="organizationOptions"
-                                placeholder="Select organization"
+                                placeholder="Select view"
                             />
                         </div>
                         
@@ -201,20 +264,15 @@ function handleExportContacts() {
                     :tabs="tabs"
                     :onClick="handleTabChange"
                 />
-
-                <div v-if="organizations.length === 0" class="no-org-notice">
-                    <Notice 
-                        type="warning" 
-                        message="You need to be part of an organization to view contacts."
-                    />
-                </div>
                 
                 <ContactsList
-                    v-else
                     :contacts="contacts"
                     :isLoading="isLoading"
+                    :activeTab="activeTab"
+                    :isSearching="!!searchQuery"
                     @reload="loadContacts"
                     @toggleFavorite="handleToggleFavorite"
+                    @deleteContact="handleDeleteContact"
                 />
             </div>
         </template>
@@ -243,7 +301,7 @@ function handleExportContacts() {
 }
 
 .organization-selector {
-    width: 250px;
+    width: 300px;
 }
 
 .search-box {
@@ -254,10 +312,6 @@ function handleExportContacts() {
 .right-controls {
     display: flex;
     gap: 12px;
-}
-
-.no-org-notice {
-    margin-top: 24px;
 }
 
 @media (max-width: 768px) {
