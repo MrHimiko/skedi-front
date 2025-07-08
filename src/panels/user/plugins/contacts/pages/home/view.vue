@@ -62,7 +62,7 @@ const organizationOptions = computed(() => {
         const isAdmin = isUserAdminOfOrg(orgId);
         
         options.push({
-            label: isAdmin ? `${orgName} (All contacts)` : orgName,
+            label: isAdmin ? `${orgName} (admin)` : orgName,
             value: orgId
         });
     });
@@ -97,6 +97,14 @@ watch(selectedOrganization, (newOrgId, oldOrgId) => {
     }
 });
 
+
+function handleOrganizationChange(value) {
+    console.log('Organization changed to:', value);
+    selectedOrganization.value = value;
+    // The watcher will trigger loadContacts()
+}
+
+
 // Load contacts
 // Load contacts
 async function loadContacts() {
@@ -104,8 +112,8 @@ async function loadContacts() {
         isLoading.value = true;
         
         if (selectedOrganization.value === 'my-contacts') {
-            // For "My Contacts", pick the first organization for now
-            // In a future update, we can create a backend endpoint that aggregates
+            // For "My Contacts", we need to fetch contacts differently
+            // For now, let's just get from the first organization and filter
             if (organizations.value.length > 0) {
                 const firstOrgId = organizations.value[0].entity?.id || organizations.value[0].id;
                 const response = await ContactsService.getContacts(firstOrgId, {
@@ -113,14 +121,14 @@ async function loadContacts() {
                     useCache: false
                 });
                 
-                // Filter to show only contacts where current user is involved
-                // This is a temporary solution until backend supports it
+                // We would need backend support to properly filter host contacts
+                // For now, just show all contacts from first org
                 contacts.value = response.data || [];
             } else {
                 contacts.value = [];
             }
         } else {
-            // Load organization contacts
+            // Load organization contacts normally
             const response = await ContactsService.getContacts(selectedOrganization.value, {
                 search: searchQuery.value,
                 useCache: false
@@ -224,9 +232,10 @@ function handleExportContacts() {
                     <div class="left-controls">
                         <div class="organization-selector">
                             <SelectComponent
-                                v-model="selectedOrganization"
+                                :value="selectedOrganization"
                                 :options="organizationOptions"
                                 placeholder="Select view"
+                                @change="handleOrganizationChange"
                             />
                         </div>
                         

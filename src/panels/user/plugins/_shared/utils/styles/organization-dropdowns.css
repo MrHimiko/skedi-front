@@ -130,9 +130,12 @@
 }
 
 
-.teams-c-item .team .bottom {
+
+.teams-c-item .team .bottom, .teams-c-item .team .bottom > div, .teams-c-item .team .bottom > div .links {
     display: flex;
     justify-content: space-between;
+    gap:5px;
+    align-items: flex-start;
 }
 
 .teams-c-item .team .bottom .right .info {

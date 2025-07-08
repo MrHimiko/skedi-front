@@ -36,15 +36,10 @@ export class FormsService {
     }
     
     /**
-     * Get all forms for current organization
+     * Get all forms (global - not tied to organization)
      */
     static async getForms(useCache = true, organizationId = null) {
         const now = Date.now();
-        const orgId = organizationId || this.getCurrentOrganizationId();
-        
-        if (!orgId) {
-            throw new Error('No organization selected');
-        }
         
         // Check cache
         if (
@@ -56,7 +51,8 @@ export class FormsService {
         }
         
         try {
-            const response = await api.get(`organizations/${orgId}/forms`);
+            // Use global forms endpoint
+            const response = await api.get('forms');
             
             if (response && response.success) {
                 this.formsCache = {
@@ -69,54 +65,36 @@ export class FormsService {
             throw new Error(response?.message || 'Failed to fetch forms');
         } catch (error) {
             console.error('Error fetching forms:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Get forms for all organizations
-     */
-    static async getFormsForAllOrganizations() {
-        const organizations = this.getAllOrganizations();
-        const formsData = [];
-        
-        for (const org of organizations) {
-            if (org.entity && org.entity.id) {
+            
+            // Fallback to organization-based endpoint for backward compatibility
+            if (organizationId || this.getCurrentOrganizationId()) {
+                const orgId = organizationId || this.getCurrentOrganizationId();
                 try {
-                    const forms = await this.getForms(false, org.entity.id);
+                    const response = await api.get(`organizations/${orgId}/forms`);
                     
-                    // Add organization info to each form
-                    const formsWithOrg = forms.map(form => ({
-                        ...form,
-                        organization: {
-                            id: org.entity.id,
-                            name: org.entity.name,
-                            slug: org.entity.slug
-                        }
-                    }));
-                    
-                    formsData.push(...formsWithOrg);
-                } catch (error) {
-                    console.warn(`Failed to load forms for organization ${org.entity.name}:`, error);
+                    if (response && response.success) {
+                        this.formsCache = {
+                            data: response.data,
+                            timestamp: now
+                        };
+                        return response.data;
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback error:', fallbackError);
                 }
             }
+            
+            throw error;
         }
-        
-        return formsData;
     }
     
     /**
      * Get a single form by ID
      */
     static async getForm(formId, organizationId = null) {
-        const orgId = organizationId || this.getCurrentOrganizationId();
-        
-        if (!orgId) {
-            throw new Error('No organization selected');
-        }
-        
         try {
-            const response = await api.get(`organizations/${orgId}/forms/${formId}`);
+            // Use global forms endpoint
+            const response = await api.get(`forms/${formId}`);
             
             if (response && response.success) {
                 return response.data;
@@ -125,6 +103,21 @@ export class FormsService {
             throw new Error(response?.message || 'Failed to fetch form');
         } catch (error) {
             console.error('Error fetching form:', error);
+            
+            // Fallback to organization-based endpoint for backward compatibility
+            if (organizationId || this.getCurrentOrganizationId()) {
+                const orgId = organizationId || this.getCurrentOrganizationId();
+                try {
+                    const response = await api.get(`organizations/${orgId}/forms/${formId}`);
+                    
+                    if (response && response.success) {
+                        return response.data;
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback error:', fallbackError);
+                }
+            }
+            
             throw error;
         }
     }
@@ -133,26 +126,44 @@ export class FormsService {
      * Create a new form
      */
     static async createForm(formData, organizationId = null) {
-        const orgId = organizationId || this.getCurrentOrganizationId();
-        
-        if (!orgId) {
-            throw new Error('No organization selected');
-        }
-        
         try {
             console.log('Creating form with data:', formData);
-            const response = await api.post(`organizations/${orgId}/forms`, formData);
+            
+            // Use global forms endpoint
+            const response = await api.post('forms', formData);
             
             if (response && response.success) {
-                // Clear cache
-                this.clearCache();
-                console.log('Form created successfully:', response.data);
+                // Clear cache to force refresh
+                this.formsCache = {
+                    data: [],
+                    timestamp: 0
+                };
                 return response.data;
             }
             
             throw new Error(response?.message || 'Failed to create form');
         } catch (error) {
             console.error('Error creating form:', error);
+            
+            // Fallback to organization-based endpoint for backward compatibility
+            if (organizationId || this.getCurrentOrganizationId()) {
+                const orgId = organizationId || this.getCurrentOrganizationId();
+                try {
+                    const response = await api.post(`organizations/${orgId}/forms`, formData);
+                    
+                    if (response && response.success) {
+                        // Clear cache to force refresh
+                        this.formsCache = {
+                            data: [],
+                            timestamp: 0
+                        };
+                        return response.data;
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback error:', fallbackError);
+                }
+            }
+            
             throw error;
         }
     }
@@ -161,41 +172,44 @@ export class FormsService {
      * Update an existing form
      */
     static async updateForm(formId, formData, organizationId = null) {
-        const orgId = organizationId || this.getCurrentOrganizationId();
-        
-        if (!orgId) {
-            throw new Error('No organization selected');
-        }
-        
         try {
             console.log('Updating form with data:', formData);
-            const response = await api.put(`organizations/${orgId}/forms/${formId}`, formData);
             
-            console.log('Backend response:', response);
+            // Use global forms endpoint
+            const response = await api.put(`forms/${formId}`, formData);
             
             if (response && response.success) {
-                // Clear cache
-                this.clearCache();
-                
-                // Check if fields/settings were actually saved
-                if (response.data && (!response.data.fields || response.data.fields.length === 0) && formData.fields && formData.fields.length > 0) {
-                    console.warn('Warning: Fields were sent but not returned by backend');
-                    console.warn('Sent fields:', formData.fields);
-                    console.warn('Returned fields:', response.data.fields);
-                }
-                
-                if (response.data && (!response.data.settings || Object.keys(response.data.settings).length === 0) && formData.settings && Object.keys(formData.settings).length > 0) {
-                    console.warn('Warning: Settings were sent but not returned by backend');
-                    console.warn('Sent settings:', formData.settings);
-                    console.warn('Returned settings:', response.data.settings);
-                }
-                
+                // Clear cache to force refresh
+                this.formsCache = {
+                    data: [],
+                    timestamp: 0
+                };
                 return response.data;
             }
             
             throw new Error(response?.message || 'Failed to update form');
         } catch (error) {
             console.error('Error updating form:', error);
+            
+            // Fallback to organization-based endpoint for backward compatibility
+            if (organizationId || this.getCurrentOrganizationId()) {
+                const orgId = organizationId || this.getCurrentOrganizationId();
+                try {
+                    const response = await api.put(`organizations/${orgId}/forms/${formId}`, formData);
+                    
+                    if (response && response.success) {
+                        // Clear cache to force refresh
+                        this.formsCache = {
+                            data: [],
+                            timestamp: 0
+                        };
+                        return response.data;
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback error:', fallbackError);
+                }
+            }
+            
             throw error;
         }
     }
@@ -204,60 +218,53 @@ export class FormsService {
      * Delete a form
      */
     static async deleteForm(formId, organizationId = null) {
-        const orgId = organizationId || this.getCurrentOrganizationId();
-        
-        if (!orgId) {
-            throw new Error('No organization selected');
-        }
-        
         try {
-            const response = await api.delete(`organizations/${orgId}/forms/${formId}`);
+            // Use global forms endpoint
+            const response = await api.delete(`forms/${formId}`);
             
             if (response && response.success) {
-                // Clear cache
-                this.clearCache();
-                return true;
+                // Clear cache to force refresh
+                this.formsCache = {
+                    data: [],
+                    timestamp: 0
+                };
+                return response.data;
             }
             
             throw new Error(response?.message || 'Failed to delete form');
         } catch (error) {
             console.error('Error deleting form:', error);
+            
+            // Fallback to organization-based endpoint for backward compatibility
+            if (organizationId || this.getCurrentOrganizationId()) {
+                const orgId = organizationId || this.getCurrentOrganizationId();
+                try {
+                    const response = await api.delete(`organizations/${orgId}/forms/${formId}`);
+                    
+                    if (response && response.success) {
+                        // Clear cache to force refresh
+                        this.formsCache = {
+                            data: [],
+                            timestamp: 0
+                        };
+                        return response.data;
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback error:', fallbackError);
+                }
+            }
+            
             throw error;
         }
     }
     
     /**
-     * Duplicate a form
-     */
-    static async duplicateForm(formId, organizationId = null) {
-        const orgId = organizationId || this.getCurrentOrganizationId();
-        
-        try {
-            // Get the original form
-            const originalForm = await this.getForm(formId, orgId);
-            
-            // Create new form data
-            const duplicateData = {
-                name: `${originalForm.name} (Copy)`,
-                description: originalForm.description,
-                fields: originalForm.fields || [],
-                settings: originalForm.settings || {},
-                is_active: originalForm.is_active,
-                allow_multiple_submissions: originalForm.allow_multiple_submissions,
-                requires_authentication: originalForm.requires_authentication
-            };
-            
-            return await this.createForm(duplicateData, orgId);
-        } catch (error) {
-            console.error('Error duplicating form:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Clear service cache
+     * Clear forms cache
      */
     static clearCache() {
-        this.formsCache.timestamp = 0;
+        this.formsCache = {
+            data: [],
+            timestamp: 0
+        };
     }
 }

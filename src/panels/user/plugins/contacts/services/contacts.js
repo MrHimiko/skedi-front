@@ -14,15 +14,16 @@ export const ContactsService = {
             page = 1,
             limit = 50,
             search = '',
-            useCache = true
+            useCache = true,
+            host_only = false
         } = options;
 
         if (!organizationId) {
             throw new Error('Organization ID is required');
         }
 
-        // Check cache if enabled
-        if (useCache) {
+        // Check cache if enabled and not host_only (host_only should always be fresh)
+        if (useCache && !host_only) {
             const cached = storage.get(CACHE_KEY);
             if (cached && cached.organizationId === organizationId && 
                 (Date.now() - cached.timestamp) < CACHE_DURATION) {
@@ -39,16 +40,23 @@ export const ContactsService = {
             if (search) {
                 params.append('search', search);
             }
+            
+            // Add host_only parameter to tell backend which method to use
+            if (host_only) {
+                params.append('host_only', 'true');
+            }
 
             const response = await api.get(`user/organizations/${organizationId}/contacts?${params}`);
 
             if (response && response.success && response.data) {
-                // Cache the response
-                storage.set(CACHE_KEY, {
-                    data: response.data,
-                    timestamp: Date.now(),
-                    organizationId
-                });
+                // Only cache non-host-specific responses
+                if (!host_only) {
+                    storage.set(CACHE_KEY, {
+                        data: response.data,
+                        timestamp: Date.now(),
+                        organizationId
+                    });
+                }
 
                 return response.data;
             }

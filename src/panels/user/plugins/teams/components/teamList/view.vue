@@ -1,13 +1,16 @@
 <script setup>
 import ButtonComponent from '@form/button/view.vue';
-import { PhLink, PhUsers, PhCode, PhPlus, PhDotsThree, PhGearSix } from "@phosphor-icons/vue";
+import { PhLink, PhUsers, PhCode, PhPlus, PhDotsThree, PhTrash, PhUserPlus } from "@phosphor-icons/vue";
 import TeamList from '@user_teams/components/teamList/view.vue';
 import TeamCreateForm from '@user_teams/components/form/teamCreate.vue';
 import TeamEditForm from '@user_teams/components/form/teamEdit.vue';
+import ConfirmComponent from '@floated/confirm/view.vue';
+import MenusComponent from '@global/menus/view.vue';
 import { api } from '@utils/api';
 import { popup } from '@utils/popup';
+import { common } from '@utils/common';
 import { UserStore } from '@stores/user';
-import { ref, inject } from 'vue';
+import { ref, inject, onMounted, onUnmounted } from 'vue';
 
 import { hasAdminAccess, getUserCount, hasSubteams } from '@user_shared/utils/js/organization-structure.js';
 
@@ -23,7 +26,7 @@ const props = defineProps({
         required: true
     },
     orgId: {
-        type: String,
+        type: Number,
         required: true
     },
     orgSlug: {
@@ -66,6 +69,54 @@ function getTeamUrl(team) {
     if (!team || !team.slug) return '#';
     return `https://skedi.com/${props.orgSlug}/${team.slug}`;
 }
+
+// Delete team
+function deleteTeam(team) {
+    
+    let warningMessage = `Are you sure you want to delete "${team.name}"?`;
+    
+    if (hasSubteams(team)) {
+        warningMessage += ` This will also delete all ${team.teams.length} sub-team(s) and all associated events.`;
+    } else if (team.events && team.events.length > 0) {
+        warningMessage += ` This will also delete ${team.events.length} event(s) associated with this team.`;
+    }
+    
+    popup.open(
+        'delete-team-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: warningMessage,
+            callback: async () => {
+                try {
+                    const result = await api.put(`organizations/${props.orgId}/teams/${team.id}`, {
+                        deleted: true
+                    });
+                    
+                    if (result && result.success) {
+                        common.notification('Team deleted successfully', true);
+                        popup.close();
+                        triggerReload();
+                    } else {
+                        common.notification(result?.message || 'Failed to delete team', false);
+                    }
+                } catch (error) {
+                    console.error('Error deleting team:', error);
+                    common.notification('Failed to delete team', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+// Add member
+function addMember(team) {
+    common.notification('Member invitation coming soon', true);
+}
 </script>
 
 <template>
@@ -92,17 +143,19 @@ function getTeamUrl(team) {
                         <div class="user-item" 
                              v-for="user in team.users" 
                              :key="user.id"
-                             :class="user.effective_role ? 'role-' + user.effective_role : ''"
-                             v-tooltip="{ content: `Role: ${user.effective_role || 'member'}` }">
-                            {{ user.name }}
+                             :class="user.effective_role ? `role-${user.effective_role}` : ''">
+                            {{ user.name }} 
+                            <span class="user-role" v-if="user.effective_role">
+                                ({{ user.effective_role }})
+                            </span>
                         </div>
                     </div>
                 </div>
 
                 <div class="bottom">
-                    <div class="right">
-                        <div class="actions">
-                            <ButtonComponent
+                    <div class="left">
+                        <div class="links">
+                            <ButtonComponent 
                                 v-tooltip="{ content: 'Copy URL' }"
                                 as="secondary icon"
                                 :iconLeft="{ component: PhLink, weight: 'bold' }"
@@ -112,31 +165,12 @@ function getTeamUrl(team) {
                                 as="secondary icon"
                                 :iconLeft="{ component: PhCode, weight: 'bold' }"
                             />
+                        </div>
+                    </div>
 
-                            <button-component v-tooltip="{ content: 'Settings' }" as="secondary icon"
-                                :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
-                                v-popup="{
-                                    component: TeamEditForm,
-                                    overlay: { position: 'center' },
-                                    properties: {
-                                        endpoint: `organizations/${orgId}/teams/${team.id}`,
-                                        type: 'PUT',
-                                        callback: (event, data, response, success) => {
-                                            console.log(response);
-                                            popup.close();
-                                            triggerReload();
-                                        },
-                                        class: 'h-auto',
-                                        title: `Edit ${team.name}`,
-                                        values: () => {return {name: team.name, slug: team.slug, color:team.color} }
-                                    }
-                                }"
-                            />
-
-                            <ButtonComponent v-if="hasAdminAccess(team)"
-                                v-tooltip="{ content: 'Create subteam' }"
-                                as="secondary icon"
-                                :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                    <div class="right" v-if="hasAdminAccess(team)">
+                        <div class="actions">
+                            <ButtonComponent
                                 v-popup="{
                                     component: TeamCreateForm,
                                     overlay: { position: 'center' },
@@ -144,7 +178,6 @@ function getTeamUrl(team) {
                                         endpoint: `organizations/${orgId}/teams?parent_team_id=${team.id}`,
                                         type: 'POST',
                                         callback: (event, data, response, success) => {
-                                            console.log(response);
                                             popup.close();
                                             triggerReload();
                                         },
@@ -152,8 +185,32 @@ function getTeamUrl(team) {
                                         title: `Create new subteam of ${team.name}`,
                                     }
                                 }"
+                                v-tooltip="{ content: 'Create subteam' }"
+                                as="secondary icon"
+                                :iconLeft="{ component: PhPlus, weight: 'bold' }"
                             />
-                            <ButtonComponent v-if="hasAdminAccess(team)"
+                            
+                            <!-- Three dots menu -->
+                            <ButtonComponent
+                                v-dropdown="{
+                                    component: MenusComponent,
+                                    properties: {
+                                        menus: [
+                                            {
+                                                label: 'Add Member',
+                                                iconComponent: PhUserPlus,
+                                                weight: 'bold',
+                                                onClick: () => addMember(team)
+                                            },
+                                            {
+                                                label: 'Delete Team',
+                                                iconComponent: PhTrash,
+                                                weight: 'bold',
+                                                onClick: () => deleteTeam(team)
+                                            }
+                                        ]
+                                    }
+                                }"
                                 as="secondary icon"
                                 :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
                             />
@@ -183,5 +240,37 @@ function getTeamUrl(team) {
     padding-left: 1em;
     margin-top: 0.5em;
     margin-bottom: 0.5em;
+}
+
+.team-item {
+    margin-bottom: 15px;
+}
+
+.team {
+    padding: 20px;
+    background-color: var(--background-0);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.team h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 5px 0;
+}
+
+.team-url {
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.team-url:hover {
+    text-decoration: underline;
+}
+
+.user-role {
+    font-size: 12px;
+    color: var(--text-secondary);
 }
 </style>

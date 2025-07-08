@@ -76,8 +76,8 @@ const loadData = async () => {
             console.log('No form currently attached to event');
         }
         
-        // Load all available forms for the organization
-        const forms = await FormsService.getForms(false, props.organizationId);
+        // Load all available forms (no longer organization-specific)
+        const forms = await FormsService.getForms(false);
         availableForms.value = forms || [];
         
     } catch (error) {
@@ -203,7 +203,7 @@ onMounted(() => {
                         
                         <!-- Default form info -->
                         <div v-if="!selectedFormId" class="default-form-info">
-                            <p>Default form is asking user for Name, Email & Message</p>
+                            <p>Default form includes: Name, Email & Guest List fields</p>
                         </div>
                         
                         <div v-if="selectedForm" class="selected-form-actions">
@@ -248,75 +248,60 @@ onMounted(() => {
 
 <style scoped>
 .event-form-settings {
-    width: 100%;
-    max-width: 500px;
+    max-width: 600px;
 }
 
 .loading-section {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 200px;
-    color: var(--text-secondary);
+    text-align: center;
+    padding: var(--spacing-4xl) 0;
 }
 
 .form-settings-content {
-    padding: 20px 0;
+    padding: var(--spacing-2xl);
 }
 
 .calendar-form-section h3 {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: var(--spacing-sm);
 }
 
 .form-description {
-    font-size: 14px;
     color: var(--text-secondary);
-    margin-bottom: 20px;
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--spacing-2xl);
 }
 
 .no-forms-notice {
-    margin-bottom: 20px;
+    margin-bottom: var(--spacing-2xl);
 }
 
 .create-form-action {
-    margin-top: 16px;
-    display: flex;
-    justify-content: center;
+    margin-top: var(--spacing-xl);
 }
 
 .form-selector {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    margin-bottom: var(--spacing-2xl);
 }
 
 .default-form-info {
-    background-color: var(--background-1);
-    padding: 12px 16px;
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
     border-radius: var(--radius-md);
-}
-
-.default-form-info p {
-    margin: 0;
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     color: var(--text-secondary);
 }
 
 .selected-form-actions {
-    display: flex;
-    gap: 12px;
+    margin-top: var(--spacing-lg);
 }
 
 .additional-actions {
-    display: flex;
-    justify-content: center;
+    margin-top: var(--spacing-md);
 }
 
 .actions {
-    margin-top: 30px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
+    margin-top: var(--spacing-4xl);
+    padding-top: var(--spacing-2xl);
+    border-top: 1px solid var(--border-primary);
 }
 </style>

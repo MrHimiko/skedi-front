@@ -5,11 +5,22 @@
 
 .c-color .color
 {
-    background-color: var(--green-default);
-    width: 50px;
-    height: 20px;
-    border-radius: var(--radius-xl);
+    background-color: transparent;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
+    align-items: center;
+}
+
+.c-color input {
+    display: none;
+}
+
+.c-color .display {
+    display: flex;
+    gap:8px;
+    align-items: center;
 }
 
 .c-color-dropdown 
