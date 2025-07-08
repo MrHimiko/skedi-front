@@ -72,7 +72,6 @@ function getTeamUrl(team) {
 
 // Delete team
 function deleteTeam(team) {
-    
     let warningMessage = `Are you sure you want to delete "${team.name}"?`;
     
     if (hasSubteams(team)) {
@@ -81,6 +80,9 @@ function deleteTeam(team) {
         warningMessage += ` This will also delete ${team.events.length} event(s) associated with this team.`;
     }
     
+    // Create a temporary form element with the deleted field
+    const formHtml = `<input type="hidden" name="deleted" value="true" />`;
+    
     popup.open(
         'delete-team-confirm',
         null,
@@ -88,22 +90,14 @@ function deleteTeam(team) {
         {
             as: 'red',
             description: warningMessage,
-            callback: async () => {
-                try {
-                    const result = await api.put(`organizations/${props.orgId}/teams/${team.id}`, {
-                        deleted: true
-                    });
-                    
-                    if (result && result.success) {
-                        common.notification('Team deleted successfully', true);
-                        popup.close();
-                        triggerReload();
-                    } else {
-                        common.notification(result?.message || 'Failed to delete team', false);
-                    }
-                } catch (error) {
-                    console.error('Error deleting team:', error);
-                    common.notification('Failed to delete team', false);
+            endpoint: `organizations/${props.orgId}/teams/${team.id}`,
+            type: 'PUT',
+            callback: (event, data, response, success) => {
+                if (success) {
+                    common.notification('Team deleted successfully', true);
+                    triggerReload();
+                } else {
+                    common.notification(response?.message || 'Failed to delete team', false);
                 }
             }
         },
@@ -111,6 +105,14 @@ function deleteTeam(team) {
             position: 'center'
         }
     );
+    
+    // Inject the hidden field into the form after popup opens
+    setTimeout(() => {
+        const form = document.querySelector('.l-popup form');
+        if (form) {
+            form.insertAdjacentHTML('afterbegin', formHtml);
+        }
+    }, 100);
 }
 
 // Add member

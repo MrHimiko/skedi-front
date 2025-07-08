@@ -68,6 +68,8 @@ onMounted(() => {
 
 // Delete organization
 function deleteOrganization(org) {
+    // Create a temporary form element with the deleted field
+    const formHtml = `<input type="hidden" name="deleted" value="true" />`;
     
     popup.open(
         'delete-org-confirm',
@@ -76,20 +78,14 @@ function deleteOrganization(org) {
         {
             as: 'red',
             description: `Are you sure you want to delete "${org.name}"? This will permanently delete all teams and events within this organization.`,
-            callback: async () => {
-                try {
-                                            const result = await api.delete(`organizations/${org.id}`);
-                    
-                    if (result && result.success) {
-                        common.notification('Organization deleted successfully', true);
-                        popup.close();
-                        reloadData();
-                    } else {
-                        common.notification(result?.message || 'Failed to delete organization', false);
-                    }
-                } catch (error) {
-                    console.error('Error deleting organization:', error);
-                    common.notification('Failed to delete organization', false);
+            endpoint: `organizations/${org.id}`,
+            type: 'PUT',
+            callback: (event, data, response, success) => {
+                if (success) {
+                    common.notification('Organization deleted successfully', true);
+                    reloadData();
+                } else {
+                    common.notification(response?.message || 'Failed to delete organization', false);
                 }
             }
         },
@@ -97,6 +93,14 @@ function deleteOrganization(org) {
             position: 'center'
         }
     );
+    
+    // Inject the hidden field into the form after popup opens
+    setTimeout(() => {
+        const form = document.querySelector('.l-popup form');
+        if (form) {
+            form.insertAdjacentHTML('afterbegin', formHtml);
+        }
+    }, 100);
 }
 
 function createTeam(orgId) {
