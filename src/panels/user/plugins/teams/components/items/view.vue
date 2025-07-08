@@ -58,7 +58,8 @@ onMounted(() => {
                         id: entity.id,
                         name: entity.name || 'Unknown',
                         slug: entity.slug || 'unknown',
-                        teams: []
+                        teams: [],
+                        role: org.role // Make sure to include the role
                     };
                 });
             }
@@ -66,11 +67,24 @@ onMounted(() => {
     }
 });
 
+// Check if user is admin of the organization
+function isOrgAdmin(org) {
+    // Get the user's organization data from the store
+    const userOrgs = userStore.getOrganizations();
+    const userOrg = userOrgs.find(o => (o.entity?.id || o.id) === org.id);
+    
+    // Check if user has admin role for this organization
+    return userOrg && userOrg.role === 'admin';
+}
+
+// Get organization URL
+function getOrgUrl(org) {
+    if (!org || !org.slug) return '#';
+    return `https://skedi.com/${org.slug}`;
+}
+
 // Delete organization
 function deleteOrganization(org) {
-    // Create a temporary form element with the deleted field
-    const formHtml = `<input type="hidden" name="deleted" value="true" />`;
-    
     popup.open(
         'delete-org-confirm',
         null,
@@ -78,14 +92,20 @@ function deleteOrganization(org) {
         {
             as: 'red',
             description: `Are you sure you want to delete "${org.name}"? This will permanently delete all teams and events within this organization.`,
-            endpoint: `organizations/${org.id}`,
-            type: 'PUT',
-            callback: (event, data, response, success) => {
-                if (success) {
-                    common.notification('Organization deleted successfully', true);
-                    reloadData();
-                } else {
-                    common.notification(response?.message || 'Failed to delete organization', false);
+            callback: async () => {
+                try {
+                    const result = await api.delete(`organizations/${org.id}`);
+                    
+                    if (result && result.success) {
+                        common.notification('Organization deleted successfully', true);
+                        popup.close();
+                        reloadData();
+                    } else {
+                        common.notification(result?.message || 'Failed to delete organization', false);
+                    }
+                } catch (error) {
+                    console.error('Error deleting organization:', error);
+                    common.notification('Failed to delete organization', false);
                 }
             }
         },
@@ -93,14 +113,6 @@ function deleteOrganization(org) {
             position: 'center'
         }
     );
-    
-    // Inject the hidden field into the form after popup opens
-    setTimeout(() => {
-        const form = document.querySelector('.l-popup form');
-        if (form) {
-            form.insertAdjacentHTML('afterbegin', formHtml);
-        }
-    }, 100);
 }
 
 function createTeam(orgId) {
@@ -117,37 +129,43 @@ function createTeam(orgId) {
                         <div class="logo">
                             <span>{{ org.name ? org.name.charAt(0).toUpperCase() : 'O' }}</span>
                         </div>
-                        <p>
-                            {{ org.name }}
-                            <span>{{ org.teams ? org.teams.length : 0 }}</span>
-                        </p>
+                        <div>
+                            <p>
+                                {{ org.name }}
+                                <span v-if="isOrgAdmin(org)" class="admin">Admin</span>
+                            </p>
+                            <a :href="getOrgUrl(org)" class="org-url">
+                                {{ getOrgUrl(org) }}
+                            </a>
+                        </div>
                     </div>
                 </div>
 
-                <div class="right">
+                <div class="right" v-if="isOrgAdmin(org)">
                     <div class="actions">
-                        <button-component 
+                        <!-- Settings button - only for admins -->
+                        <button-component
                             v-popup="{
                                 component: OrganizationEditForm,
                                 overlay: { position: 'center' },
                                 properties: {
+                                    values: () => org,
                                     endpoint: `organizations/${org.id}`,
                                     type: 'PUT',
                                     callback: (event, data, response, success) => {
                                         popup.close();
                                         reloadData();
                                     },
-                                    class: 'h-auto',
-                                    title: `Edit ${org.name}`,
-                                    values: () => {return {name: org.name, slug: org.slug} }
+                                    class: 'h-auto'
                                 }
                             }"
-                            v-tooltip="{ content: 'Settings' }" 
+                            v-tooltip="{ content: 'Organization settings' }" 
                             as="tertiary icon"
                             :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
                         />
-
-                        <button-component 
+                        
+                        <!-- Create team button - only for admins -->
+                        <button-component
                             v-popup="{
                                 component: TeamCreateForm,
                                 overlay: { position: 'center' },
@@ -168,7 +186,7 @@ function createTeam(orgId) {
                             @click="createTeam(org.id)" 
                         />
                         
-                        <!-- Three dots menu -->
+                        <!-- Three dots menu - only for admins -->
                         <button-component
                             v-dropdown="{
                                 component: MenusComponent,
@@ -188,6 +206,11 @@ function createTeam(orgId) {
                             :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
                         />
                     </div>
+                </div>
+                
+                <!-- For non-admins, just show member badge -->
+                <div class="right" v-else>
+                    <span class="member-badge">Member</span>
                 </div>
             </div>
 
@@ -220,6 +243,93 @@ function createTeam(orgId) {
 </template>
 
 <style scoped>
+.teams-c-items {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.teams-c-item {
+    background: var(--background-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+}
+
+.head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.org-name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.org-name .logo {
+    width: 40px;
+    height: 40px;
+    background: var(--brand-gradient);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 18px;
+}
+
+.org-name p {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.org-name p span.admin {
+    font-size: 12px;
+    background: rgba(59, 130, 246, 0.1);
+    color: rgb(59, 130, 246);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.org-url {
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.org-url:hover {
+    text-decoration: underline;
+}
+
+.right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.member-badge {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 4px 12px;
+    background: var(--background-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
 .org-users {
     margin-top: 20px;
     padding: 15px;

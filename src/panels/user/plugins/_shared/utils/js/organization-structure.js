@@ -66,11 +66,7 @@ function createTeamTree(teams, parentId = null) {
 export function hasAdminAccess(team) {
     if (!team) return false;
     
-    // Check team's effective_role or role property directly
-    return team.effective_role === 'admin' || 
-           team.effective_role === 'team_admin' || 
-           team.role === 'admin' || 
-           team.role === 'team_admin';
+    return team.effective_role === 'admin' || team.role === 'admin';
 }
 
 
