@@ -100,6 +100,7 @@ function openTeamDetails(team) {
         TeamDetailsPopup,
         {
             team: team,
+            teamId: team.id,
             orgSlug: props.orgSlug,
             orgUsers: props.orgUsers,
             orgId: props.orgId,
@@ -229,10 +230,18 @@ function canPerformAdminActions(team) {
                                 properties: {
                                     endpoint: `organizations/${orgId}/teams?parent_team_id=${team.id}`,
                                     type: 'POST',
-                                    callback: (event, data, response, success) => {
+                                    callback: async (event, data, response, success) => {
+                                    if (success) {
                                         popup.close();
-                                        triggerReload();
-                                    },
+                                        
+                                        // Always call reloadData if available
+                                        if (props.reloadData) {
+                                            await props.reloadData();
+                                        } else {
+                                            triggerReload();
+                                        }
+                                    }
+                                },
                                     class: 'h-auto',
                                     title: `Create new subteam of ${team.name}`,
                                 }
@@ -481,7 +490,6 @@ function canPerformAdminActions(team) {
 /* Existing styles for list view */
 .teams-list {
     list-style-type: none;
-    padding-left: 1em;
     margin-top: 0.5em;
     margin-bottom: 0.5em;
 }
