@@ -19,14 +19,17 @@
     import EventFormSettings from '@user_events/components/form/eventFormSettings.vue';
     import EventCreateForm from '@user_events/components/form/eventCreate.vue';
     import OrganizationEditForm from '@user_teams/components/form/organizationEdit.vue';
+    import OrganizationCreateForm from '@user_teams/components/form/organizationCreate.vue';
     import EventEditLocation from '@user_events/components/form/eventEditLocation.vue';
     import ConfirmComponent from '@floated/confirm/view.vue';
+    import EventManageTeam from '@user_events/components/form/eventManageTeam.vue';
+
 
     // Icon imports
     import { 
         PhGearSix, PhPlus, PhCode, PhLink, PhUsers, PhDotsThree,
         PhArrowSquareOut, PhClock, PhCalendar, PhMapPin, PhCopy, 
-        PhFlowArrow, PhTable, PhTrash 
+        PhFlowArrow, PhTable, PhTrash, PhCaretDown, PhCaretUp
     } from "@phosphor-icons/vue";
 
     
@@ -36,6 +39,10 @@
     const userStore = UserStore();
     const organizations = ref([]);
     const eventsItems = ref(0);
+    
+    // New state for filters and accordion
+    const selectedTeams = ref({});
+    const expandedOrgs = ref({});
 
     // Reload data from API
     async function reloadData() {
@@ -69,6 +76,7 @@
                     ...event,
                     teamColor: 'black', 
                     teamName: org.name,
+                    teamId: null,
                     isOrgEvent: true,
                     organization_id: org.id
                 }));
@@ -85,6 +93,7 @@
                             ...event,
                             teamColor: team.color || '#6c5ce7', 
                             teamName: team.name,
+                            teamId: team.id,
                             isOrgEvent: false,
                             organization_id: org.id
                         }));
@@ -96,6 +105,72 @@
         return events;
     }
 
+    // NEW: Filter events based on selected teams
+    function getFilteredEvents(org) {
+        const allEvents = getAllEvents(org);
+        const orgSelectedTeams = selectedTeams.value[org.id];
+        
+        // If no teams selected, show all events
+        if (!orgSelectedTeams || orgSelectedTeams.length === 0) {
+            return allEvents;
+        }
+        
+        // Filter events based on selected teams
+        return allEvents.filter(event => {
+            // Always show all events if "All" is selected
+            if (orgSelectedTeams.includes('all')) {
+                return true;
+            }
+            
+            // Show org-level events if org is selected
+            if (event.isOrgEvent && orgSelectedTeams.includes('org')) {
+                return true;
+            }
+            
+            // Show team events if team is selected
+            return event.teamId && orgSelectedTeams.includes(event.teamId);
+        });
+    }
+
+    // NEW: Toggle team selection
+    function toggleTeamFilter(orgId, teamId) {
+        if (!selectedTeams.value[orgId]) {
+            selectedTeams.value[orgId] = [];
+        }
+        
+        const index = selectedTeams.value[orgId].indexOf(teamId);
+        if (index > -1) {
+            selectedTeams.value[orgId].splice(index, 1);
+        } else {
+            selectedTeams.value[orgId].push(teamId);
+        }
+    }
+
+    // NEW: Check if team is selected
+    function isTeamSelected(orgId, teamId) {
+        return selectedTeams.value[orgId]?.includes(teamId) || false;
+    }
+
+    // NEW: Toggle organization expansion
+    function toggleOrgExpansion(orgId) {
+        expandedOrgs.value[orgId] = !expandedOrgs.value[orgId];
+    }
+
+    // NEW: Check if organization is expanded
+    function isOrgExpanded(orgId) {
+        return expandedOrgs.value[orgId] !== false;
+    }
+
+    // NEW: Get visible teams (first 3)
+    function getVisibleTeams(teams) {
+        return teams.slice(0, 3);
+    }
+
+    // NEW: Get overflow teams (after first 3)
+    function getOverflowTeams(teams) {
+        return teams.slice(3);
+    }
+
     // Menu items for event actions
     const eventActionMenus = markRaw([
         { label: 'Preview', icon: null, iconComponent: PhArrowSquareOut, weight: 'regular' },
@@ -103,6 +178,7 @@
         { label: 'Edit availability', icon: null, iconComponent: PhCalendar, weight: 'regular' },
         { label: 'Edit location', icon: null, iconComponent: PhMapPin, weight: 'regular' },
         { label: 'Edit hosts', icon: null, iconComponent: PhUsers, weight: 'regular' },
+        { label: 'Manage team', icon: null, iconComponent: PhUsers, weight: 'regular' },  // NEW
         { label: 'Form Settings', icon: null, iconComponent: PhTable, weight: 'regular' },
         { label: 'Add workflow', icon: null, iconComponent: PhFlowArrow, weight: 'regular' },
         { label: 'Add routing form', icon: null, iconComponent: PhTable, weight: 'regular' },
@@ -153,6 +229,29 @@
                     }
                 );
                 break;
+
+            case 'Manage team':
+                popup.open(
+                    'manage-event-team',
+                    null,
+                    EventManageTeam,
+                    {
+                        eventId: selectedEventId,
+                        organizationId: orgId,
+                        values: () => eventData,
+                        callback: (event, data, response, success) => {
+                            if (success) {
+                                reloadData();
+                            }
+                        }
+                    },
+                    {
+                        position: 'center'
+                    }
+                );
+                break;
+
+
             case 'Edit availability':
                 popup.open(
                     'edit-event-schedule',               
@@ -278,6 +377,11 @@
     onMounted(() => {
         organizations.value = mergeOrganizationsAndTeams();
         
+        // Initialize all orgs as expanded
+        organizations.value.forEach(org => {
+            expandedOrgs.value[org.id] = true;
+        });
+        
         // Fallback for empty organizations
         if (organizations.value.length === 0) {
             const rawTeams = toRaw(userStore.getTeams());
@@ -311,22 +415,71 @@
             <div class="head">
                 <div class="left">
                     <div class="org-name">
+                        <!-- NEW: Toggle button -->
+                        <button 
+                            @click="toggleOrgExpansion(org.id)"
+                            class="org-toggle"
+                            :aria-expanded="isOrgExpanded(org.id)"
+                        >
+                            <component 
+                                :is="isOrgExpanded(org.id) ? PhCaretDown : PhCaretUp" 
+                                size="16" 
+                                weight="bold"
+                            />
+                        </button>
+                        
                         <div class="logo">
                             <span>{{ org.name ? org.name.charAt(0).toUpperCase() : 'O' }}</span>
                         </div>
                         <p>
                             {{ org.name }}
-                            <span>{{ getAllEvents(org).length }}</span>
+                            <span>{{ getFilteredEvents(org).length }}</span>
                         </p>
                     </div>
 
-                    <!-- Top-level teams list -->
-                    <div class="org-teams" v-if="getTopLevelTeams(org).length > 0">
-                        <div class="teams-list">
-                            <div v-for="team in getTopLevelTeams(org)" :key="team.id" class="team-item">
-                                {{ team.name }}
-                            </div>
-                        </div>
+                    <!-- NEW: Team filters instead of just showing teams -->
+                    <div class="team-filters" v-if="getTopLevelTeams(org).length > 0">
+
+                        
+                        <!-- Organization level filter -->
+                        <button 
+                            class="team-filter-item"
+                            :class="{ active: isTeamSelected(org.id, 'org') }"
+                            @click="toggleTeamFilter(org.id, 'org')"
+                        >
+                            {{ org.name }}
+                        </button>
+                        
+                        <!-- Visible teams -->
+                        <button 
+                            v-for="team in getVisibleTeams(getTopLevelTeams(org))" 
+                            :key="team.id"
+                            class="team-filter-item"
+                            :class="{ active: isTeamSelected(org.id, team.id) }"
+                            @click="toggleTeamFilter(org.id, team.id)"
+                        >
+                            {{ team.name }}
+                        </button>
+                        
+                        <!-- Overflow teams dropdown -->
+                        <ButtonComponent 
+                            v-if="getOverflowTeams(getTopLevelTeams(org)).length > 0"
+                            v-dropdown="{
+                                component: MenusComponent,
+                                properties: {
+                                    menus: getOverflowTeams(getTopLevelTeams(org)).map(team => ({
+                                        label: team.name,
+                                        icon: isTeamSelected(org.id, team.id) ? '✓' : null
+                                    })),
+                                    onClick: ($event, menu) => {
+                                        const team = getOverflowTeams(getTopLevelTeams(org)).find(t => t.name === menu.label);
+                                        if (team) toggleTeamFilter(org.id, team.id);
+                                    }
+                                }
+                            }"
+                            as="tertiary icon size36"
+                            :iconLeft="{ component: PhCaretDown, weight: 'bold' }"
+                        />
                     </div>
                 </div>
 
@@ -386,13 +539,18 @@
                 </div>
             </div>
 
-            <!-- Events grid -->
-            <div class="events-grid" v-if="getAllEvents(org).length > 0">
+            <!-- Events grid - NEW: with v-show for smooth toggle -->
+            <div class="events-grid" v-if="getFilteredEvents(org).length > 0" v-show="isOrgExpanded(org.id)">
                 <div class="events-container">
                     <!-- Event cards -->
-                    <div v-for="event in getAllEvents(org)" :key="event.id" class="event-card">
+                    <div v-for="event in getFilteredEvents(org)" :key="event.id" class="event-card">
                         <div class="top">
-                            <div class="event-color-marker" :style="{ backgroundColor: event.teamColor }"></div>
+                            <!-- UPDATED: Add tooltip to color marker -->
+                            <div 
+                                class="event-color-marker" 
+                                :style="{ backgroundColor: event.teamColor }"
+                                v-tooltip="{ content: event.teamName }"
+                            ></div>
                             <p class="event-name">{{ event.name || 'Unnamed Event' }}</p>
                             <a target="_BLANK" :href="'https://app.skedi.com/front/' + org.slug + '/' + event.slug" class="blue-link">
                                 {{ 'https://skedi.com/' + org.slug + "/" + event.slug }}
@@ -443,6 +601,56 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- NEW: Empty state when no events -->
+            <div class="events-empty-state" v-else v-show="isOrgExpanded(org.id)">
+                <div class="empty-state-box">
+                    <p>Nothing here yet</p>
+                    <button-component 
+                        as="secondary"
+                        :iconLeft="{ component: PhPlus, weight: 'bold' }" 
+                        label="Create event type"
+                        v-popup="{
+                            component: EventCreateForm,
+                            overlay: { position: 'center' },
+                            properties: {
+                                title: 'New event type',
+                                preselectedOrganizationId: org.id,
+                                callback: (event, data, response, success) => {
+                                    if (success) {
+                                        reloadData();
+                                        console.log('Event created', response);
+                                    }
+                                },
+                            },
+                        }"
+                    />
+                </div>
+            </div>
+        </div>
+        
+        <!-- NEW: Create organization button at bottom -->
+        <div class="create-org-section">
+            <ButtonComponent 
+                v-popup="{
+                    component: OrganizationCreateForm,
+                    overlay: { position: 'center' },
+                    properties: {
+                        endpoint: 'organizations',
+                        type: 'POST',
+                        callback: (event, data, response, success) => {
+                            console.log('org created', response);
+                            popup.close();
+                            reloadData();
+                        },
+                        class: 'h-auto',
+                        title: 'Create new organization',
+                    }
+                }"
+                as="primary"
+                :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                label="Create Organization"
+            />
         </div>
     </div>
 </template>
@@ -452,15 +660,56 @@
         flex: 1;
     }
 
-    .teams-list {
+    /* NEW: Toggle button styling */
+    .org-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
         display: flex;
-        flex-wrap: wrap;
-        gap: 3px;
-        flex-direction: row;
-        border-left: none;
-        margin: 0;
-        margin-top: 0;
-        padding: 0;
+        align-items: center;
+        padding: 4px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .org-toggle:hover {
+        background-color: var(--background-2);
+    }
+
+    /* NEW: Team filter styling */
+    .team-filters {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: 10px;
+    }
+
+    .team-filter-item {
+        padding: 4px 12px;
+        height: 26px;
+        font-size: 13px;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+        line-height:1;
+        color: var(--text-secondary);
+    }
+
+    .team-filter-item:hover {
+        background: var(--background-1);
+    }
+
+    .team-filter-item.active {
+        color:black;
+        border:1px solid black;
+    }
+
+    /* Keep original team list hidden but in DOM for backward compatibility */
+    .teams-list {
+        display: none;
     }
 
     .team-item {
@@ -479,6 +728,7 @@
     /* Event grid layout */
     .events-grid {
         margin-top: 20px;
+        transition: all 0.3s ease;
     }
 
     .events-container {
@@ -504,9 +754,9 @@
     }
 
     .event-card .event-color-marker {
-        width: 4px;
-        height: 16px;
-        border-radius: 2px;
+        width: 40px;
+        height: 10px;
+        border-radius: 100px;
         margin-bottom: 8px;
     }
 
@@ -543,4 +793,32 @@
         display: flex;
         gap: 5px;
     }
+
+    /* NEW: Create organization section */
+    .create-org-section {
+        margin-top: 30px;
+        text-align: center;
+    }
+
+
+    /* NEW: Empty state styling */
+    .events-empty-state {
+        margin-top: 20px;
+        transition: all 0.3s ease;
+    }
+
+    .empty-state-box {
+        background-color: var(--background-0);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 40px;
+        text-align: center;
+    }
+
+    .empty-state-box p {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+    
 </style>

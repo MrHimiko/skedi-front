@@ -175,51 +175,53 @@ function canPerformAdminActions(team) {
         <div v-if="isRootLevel" class="teams-grid">
             <div v-for="team in teams" :key="team.id" class="team-card">
                 <div class="team-card-content">
-                    <div class="team-header">
-                        <h3 @click="openTeamDetails(team)" class="team-name">{{ team.name }}</h3>
-                        <div v-if="canPerformAdminActions(team)" class="team-actions">
-                            <ButtonComponent
-                                v-dropdown="{
-                                    component: MenusComponent,
-                                    properties: {
-                                        menus: [
-                                            {
-                                                label: 'Add Member',
-                                                iconComponent: PhUserPlus,
-                                                weight: 'bold',
-                                                onClick: () => addMember(team)
-                                            },
-                                            {
-                                                label: 'Delete Team',
-                                                iconComponent: PhTrash,
-                                                weight: 'bold',
-                                                onClick: () => deleteTeam(team)
-                                            }
-                                        ]
-                                    }
-                                }"
-                                as="c-button tertiary icon"
-                                :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
-                            />
+                    <div>
+                        <div class="team-header">
+                            <h3 @click="openTeamDetails(team)" class="team-name">{{ team.name }}</h3>
+                            <div v-if="canPerformAdminActions(team)" class="team-actions">
+                                <ButtonComponent
+                                    v-dropdown="{
+                                        component: MenusComponent,
+                                        properties: {
+                                            menus: [
+                                                {
+                                                    label: 'Add Member',
+                                                    iconComponent: PhUserPlus,
+                                                    weight: 'bold',
+                                                    onClick: () => addMember(team)
+                                                },
+                                                {
+                                                    label: 'Delete Team',
+                                                    iconComponent: PhTrash,
+                                                    weight: 'bold',
+                                                    onClick: () => deleteTeam(team)
+                                                }
+                                            ]
+                                        }
+                                    }"
+                                    as="c-button tertiary icon"
+                                    :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
+                                />
+                            </div>
                         </div>
-                    </div>
-                    
-                    <a :href="getTeamUrl(team)" class="team-url">
-                        {{ getTeamUrl(team) }}
-                    </a>
-                    
-                    <div class="team-info">
-                        <div class="info-item">
-                            <PhUsers size="16" />
-                            <span>{{ getUserCount(team) }} members</span>
+                        
+                        <a :href="getTeamUrl(team)" class="team-url">
+                            {{ getTeamUrl(team) }}
+                        </a>
+                        
+                        <div class="team-info">
+                            <div class="info-item">
+                                <PhUsers size="16" />
+                                <span>{{ getUserCount(team) }} members</span>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <div v-if="hasSubteams(team)" 
-                         class="subteam-indicator"
-                         @click="openTeamDetails(team)">
-                        <PhCaretRight size="16" />
-                        <span>{{ getSubteamCountText(team) }}</span>
+                        
+                        <div v-if="hasSubteams(team)" 
+                            class="subteam-indicator"
+                            @click="openTeamDetails(team)">
+                            <PhCaretRight size="16" />
+                            <span>{{ getSubteamCountText(team) }}</span>
+                        </div>
                     </div>
                     
                     <div v-if="canPerformAdminActions(team)" class="team-footer">
@@ -408,6 +410,10 @@ function canPerformAdminActions(team) {
 
 .team-card-content {
     padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
 }
 
 .team-header {

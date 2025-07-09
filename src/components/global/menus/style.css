@@ -3,7 +3,7 @@
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     min-width: 200px;
-    max-height: 400px;
+    max-height: 430px;
 }
 
 .c-menus > .search {

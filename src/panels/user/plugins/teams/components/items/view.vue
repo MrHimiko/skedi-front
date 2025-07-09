@@ -260,7 +260,6 @@ function createTeam(orgId) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
 }
 
 .org-name {
@@ -301,9 +300,10 @@ function createTeam(orgId) {
 }
 
 .org-url {
-    color: var(--text-secondary);
+    color: var(--brand-blue);
     font-size: 14px;
     text-decoration: none;
+    font-weight: 500;
 }
 
 .org-url:hover {
