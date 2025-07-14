@@ -134,9 +134,22 @@ function createTeam(orgId) {
                                 {{ org.name }}
                                 <span v-if="isOrgAdmin(org)" class="admin">Admin</span>
                             </p>
-                            <a :href="getOrgUrl(org)" class="org-url">
-                                {{ getOrgUrl(org) }}
-                            </a>
+                            <div>
+                                <p>
+                                    <router-link 
+                                        v-if="isOrgAdmin(org)"
+                                        :to="`/organization/${org.id}`"
+                                        class="org-name-link"
+                                    >
+                                        {{ org.name }}
+                                    </router-link>
+                                    <span v-else>{{ org.name }}</span>
+                                    <span v-if="isOrgAdmin(org)" class="admin">Admin</span>
+                                </p>
+                                <a :href="getOrgUrl(org)" class="org-url">
+                                    {{ getOrgUrl(org) }}
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -347,4 +360,17 @@ function createTeam(orgId) {
     padding: 5px 0;
     color: var(--text-secondary);
 }
+
+.org-name-link {
+    color: var(--text-primary);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+}
+
+.org-name-link:hover {
+    color: var(--brand-primary);
+}
+
+
 </style>

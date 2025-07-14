@@ -13,6 +13,7 @@ import RunUserBookings from '@user_bookings/run';
 import RunUserIntegrations from '@user_integrations/run';
 import RunUserForms from '@user_forms/run';
 import RunUserContacts from '@user_contacts/run';
+import RunUserOrganizations from '@user_organizations/run';
 
 
 
@@ -32,6 +33,7 @@ initializeApp((app, router, stores) =>
         RunUserIntegrations,
         RunUserForms,
         RunUserContacts,
+        RunUserOrganizations
     ];
 
     if(stores.extension.has(1))
