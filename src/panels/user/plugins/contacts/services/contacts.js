@@ -115,7 +115,7 @@ export const ContactsService = {
     },
 
     /**
-     * Delete a contact
+     * Delete a contact from organization
      */
     async deleteContact(organizationId, contactId) {
         if (!organizationId) {
@@ -124,6 +124,26 @@ export const ContactsService = {
 
         try {
             const response = await api.delete(`user/organizations/${organizationId}/contacts/${contactId}`);
+            
+            if (response && response.success) {
+                // Clear cache
+                storage.remove(CACHE_KEY);
+                return true;
+            }
+
+            throw new Error(response?.message || 'Failed to delete contact');
+        } catch (error) {
+            console.error('Failed to delete contact:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Delete a contact from My Contacts
+     */
+    async deleteHostContact(contactId) {
+        try {
+            const response = await api.delete(`user/contacts/${contactId}`);
             
             if (response && response.success) {
                 // Clear cache
@@ -173,19 +193,69 @@ export const ContactsService = {
     },
 
     /**
-     * Toggle favorite for host contact
+     * Toggle favorite for a contact in "My Contacts" (host contact)
      */
     async toggleHostFavorite(contactId) {
         try {
-            const response = await api.put(`user/contacts/${contactId}/host-favorite`);
+            const response = await api.post(`user/contacts/${contactId}/toggle-favorite`);
             
             if (response && response.success) {
+                // Clear cache to force refresh
+                storage.remove(CACHE_KEY);
                 return response.data;
             }
 
             throw new Error(response?.message || 'Failed to update favorite status');
         } catch (error) {
             console.error('Failed to toggle host favorite:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Toggle favorite for a contact in an organization
+     */
+    async toggleFavorite(organizationId, contactId) {
+        try {
+            const response = await api.post(`user/organizations/${organizationId}/contacts/${contactId}/toggle-favorite`);
+            
+            if (response && response.success) {
+                // Clear cache to force refresh
+                storage.remove(CACHE_KEY);
+                return response.data;
+            }
+
+            throw new Error(response?.message || 'Failed to update favorite status');
+        } catch (error) {
+            console.error('Failed to toggle favorite:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Export contacts from My Contacts
+     */
+    async exportMyContacts(filters = {}) {
+        try {
+            const filename = `my_contacts_${new Date().toISOString().split('T')[0]}.csv`;
+            await api.download('user/contacts/export', filters, filename);
+            return true;
+        } catch (error) {
+            console.error('Export failed:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Export contacts from organization
+     */
+    async exportOrganizationContacts(organizationId, filters = {}) {
+        try {
+            const filename = `contacts_${new Date().toISOString().split('T')[0]}.csv`;
+            await api.download(`user/organizations/${organizationId}/contacts/export`, filters, filename);
+            return true;
+        } catch (error) {
+            console.error('Export failed:', error);
             throw error;
         }
     },

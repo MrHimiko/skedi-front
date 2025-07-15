@@ -6,6 +6,9 @@ import Notice from '@global/notice/view.vue';
 import Button from '@form/button/view.vue';
 import MenusComponent from '@global/menus/view.vue';
 import { PhEnvelope, PhDotsThree, PhStar, PhCalendarCheck, PhShareNetwork, PhTrash, PhAddressBook } from "@phosphor-icons/vue";
+import { popup } from '@utils/popup';
+import ConfirmComponent from '@floated/confirm/view.vue';
+
 
 const props = defineProps({
     contacts: {
@@ -23,6 +26,10 @@ const props = defineProps({
     isSearching: {
         type: Boolean,
         default: false
+    },
+    currentView: { 
+        type: String,
+        default: 'my-contacts'
     }
 });
 
@@ -55,29 +62,44 @@ function formatMeeting(meeting) {
     const date = new Date(meeting.date);
     const now = new Date();
     
+    // For past meetings, show relative time
     if (date < now) {
-        return `${meeting.event_name} • ${formatDate(meeting.date)}`;
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        let dateStr;
+        if (diffDays < 1) {
+            dateStr = 'Today';
+        } else if (diffDays === 1) {
+            dateStr = 'Yesterday';
+        } else if (diffDays < 7) {
+            dateStr = `${diffDays} days ago`;
+        } else {
+            dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        
+        return `${meeting.event_name} • ${dateStr}`;
     } else {
+        // For future meetings, show date and time
         const options = { 
             month: 'short', 
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit'
+            day: 'numeric'
         };
         return `${meeting.event_name} • ${date.toLocaleDateString('en-US', options)}`;
     }
 }
 
-// Check if contact is favorite based on data structure
 function isFavorite(contactData) {
-    // For host contacts (My Contacts view)
-    if (contactData.host_info) {
+    // For "My Contacts" view - check host_info
+    if (props.currentView === 'my-contacts' && contactData.host_info) {
         return contactData.host_info.is_favorite === true;
     }
-    // For organization contacts
+    
+    // For organization view - check organization_contact
     if (contactData.organization_contact) {
         return contactData.organization_contact.is_favorite === true;
     }
+    
     return false;
 }
 
@@ -87,6 +109,7 @@ const processedContacts = computed(() => {
         const contact = contactData.contact;
         return {
             id: contactData.id,
+            contact_id: contact.id, // Add the base contact ID
             name: contact.name || contact.email,
             email: contact.email,
             phone: contact.phone,
@@ -95,7 +118,8 @@ const processedContacts = computed(() => {
             raw_last_meeting: contactData.last_meeting,
             raw_next_meeting: contactData.next_meeting,
             is_favorite: isFavorite(contactData),
-            organization: contactData.organization // For My Contacts view
+            organization: contactData.organization,
+            raw_data: contactData // Keep the original data structure
         };
     });
 });
@@ -139,13 +163,27 @@ function shareAvailability(contact) {
 }
 
 function toggleFavorite(contact) {
-    emit('toggleFavorite', contact);
+    // Emit the event with the original data structure
+    emit('toggleFavorite', contact.raw_data);
 }
 
 function deleteContact(contact) {
-    if (confirm(`Are you sure you want to remove ${contact.name} from your contacts?`)) {
-        emit('deleteContact', contact);
-    }
+    popup.open(
+        'delete-contact-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to remove ${contact.name || contact.email} from your contacts?`,
+            callback: () => {
+                emit('deleteContact', contact.raw_data);
+                popup.close();
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Get dropdown menus for contact

@@ -164,52 +164,72 @@ function handleTabChange(event, tab) {
 }
 
 // Contact actions
-function handleToggleFavorite(contact) {
-    if (selectedOrganization.value === 'my-contacts') {
-        // For "My Contacts", we need the organization ID from the contact data
-        const orgId = contact.organization?.id;
-        if (!orgId) {
-            common.notification('Unable to update favorite status', false);
-            return;
+async function handleToggleFavorite(contact) {
+    console.log("Toggle favorite - Full contact data:", contact);
+    console.log("Contact ID (organization_contact):", contact.id);
+    console.log("Base contact ID:", contact.contact?.id);
+    console.log("Selected organization:", selectedOrganization.value);
+
+    try {
+        if (selectedOrganization.value === 'my-contacts') {
+            const contactId = contact.contact?.id || contact.id;
+            console.log("Calling toggleHostFavorite with ID:", contactId);
+            await ContactsService.toggleHostFavorite(contactId);
+            common.notification('Updated favorite status', true);
+        } else {
+            // For organization contacts, use the organization_contact ID (which is contact.id)
+            console.log("Calling toggleFavorite with org:", selectedOrganization.value, "contact:", contact.id);
+            
+            const result = await ContactsService.toggleFavorite(selectedOrganization.value, contact.id);
+            console.log("Toggle result:", result);
+            
+            common.notification('Updated favorite status', true);
         }
         
-        // Toggle favorite on host_contact
-        ContactsService.toggleHostFavorite(contact.contact.id, orgId)
-            .then(() => {
-                common.notification('Updated favorite status', true);
-                loadContacts();
-            })
-            .catch(() => {
-                common.notification('Failed to update favorite status', false);
-            });
-    } else {
-        // Toggle favorite on organization_contact
-        ContactsService.toggleFavorite(selectedOrganization.value, contact.id)
-            .then(() => {
-                common.notification('Updated favorite status', true);
-                loadContacts();
-            })
-            .catch(() => {
-                common.notification('Failed to update favorite status', false);
-            });
+        await loadContacts();
+    } catch (error) {
+        console.error('Failed to toggle favorite - Full error:', error);
+        common.notification(error.message || 'Failed to update favorite status', false);
     }
 }
 
-function handleDeleteContact(contact) {
-    if (selectedOrganization.value === 'my-contacts') {
-        common.notification('Cannot delete contacts from My Contacts view', false);
-        return;
+async function handleDeleteContact(contact) {
+    try {
+        if (selectedOrganization.value === 'my-contacts') {
+            // For "My Contacts", use the base contact ID
+            const contactId = contact.contact?.id || contact.id;
+            await ContactsService.deleteHostContact(contactId);
+        } else {
+            // For organization contacts
+            await ContactsService.deleteContact(selectedOrganization.value, contact.id);
+        }
+        
+        common.notification('Contact removed successfully', true);
+        await loadContacts(); // Reload to show updated list
+    } catch (error) {
+        console.error('Failed to delete contact:', error);
+        common.notification('Failed to remove contact', false);
     }
-    
-    ContactsService.deleteContact(selectedOrganization.value, contact.id)
-        .then(() => {
-            common.notification('Contact removed successfully', true);
-            loadContacts();
-        })
-        .catch(() => {
-            common.notification('Failed to remove contact', false);
-        });
 }
+
+
+async function handleExportContacts() {
+    try {
+        const filters = searchQuery.value ? { search: searchQuery.value } : {};
+        
+        if (selectedOrganization.value === 'my-contacts') {
+            await ContactsService.exportMyContacts(filters);
+        } else {
+            await ContactsService.exportOrganizationContacts(selectedOrganization.value, filters);
+        }
+        
+        common.notification('Export started', true);
+    } catch (error) {
+        console.error('Export failed:', error);
+        common.notification('Failed to export contacts', false);
+    }
+}
+
 
 // Handle other actions
 function handleNewContact() {
@@ -228,9 +248,7 @@ function handleImportContacts() {
     common.notification('Import functionality coming soon', true);
 }
 
-function handleExportContacts() {
-    common.notification('Export functionality coming soon', true);
-}
+
 </script>
 
 <template>
@@ -288,11 +306,12 @@ function handleExportContacts() {
                     :onClick="handleTabChange"
                 />
                 
-                <ContactsList
+                <ContactsList 
                     :contacts="contacts"
                     :isLoading="isLoading"
                     :activeTab="activeTab"
-                    :isSearching="!!searchQuery"
+                    :currentView="selectedOrganization"
+                    :isSearching="searchQuery.length > 0"
                     @reload="loadContacts"
                     @toggleFavorite="handleToggleFavorite"
                     @deleteContact="handleDeleteContact"
