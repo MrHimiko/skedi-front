@@ -41,7 +41,6 @@ function isUserAdminOfOrg(orgId) {
     if (!userOrg) return false;
     
     // Check the role field directly on the userOrg object
-    // Based on your user_organizations table structure
     return ['admin', 'owner', 'creator'].includes(userOrg.role?.toLowerCase());
 }
 
@@ -84,7 +83,6 @@ const tabs = computed(() => [
 
 // Set initial organization
 onMounted(() => {
-    // Default is already "my-contacts"
     loadContacts();
 });
 
@@ -97,51 +95,47 @@ watch(selectedOrganization, (newOrgId, oldOrgId) => {
     }
 });
 
-
 function handleOrganizationChange(value) {
     console.log('Organization changed to:', value);
     selectedOrganization.value = value;
-    // The watcher will trigger loadContacts()
 }
 
-
-// Load contacts
 // Load contacts
 async function loadContacts() {
     try {
         isLoading.value = true;
         
+        let response;
+        
         if (selectedOrganization.value === 'my-contacts') {
-            // For "My Contacts", we need to fetch contacts differently
-            // For now, let's just get from the first organization and filter
-            if (organizations.value.length > 0) {
-                const firstOrgId = organizations.value[0].entity?.id || organizations.value[0].id;
-                const response = await ContactsService.getContacts(firstOrgId, {
-                    search: searchQuery.value,
-                    useCache: false
-                });
-                
-                // We would need backend support to properly filter host contacts
-                // For now, just show all contacts from first org
-                contacts.value = response.data || [];
-            } else {
-                contacts.value = [];
-            }
-        } else {
-            // Load organization contacts normally
-            const response = await ContactsService.getContacts(selectedOrganization.value, {
+            // Load "My Contacts" - contacts where user is the host
+            response = await ContactsService.getMyContacts({
                 search: searchQuery.value,
+                page: 1,
+                limit: 50
+            });
+        } else {
+            // Load organization contacts
+            response = await ContactsService.getContacts(selectedOrganization.value, {
+                search: searchQuery.value,
+                page: 1,
+                limit: 50,
                 useCache: false
             });
-            
-            contacts.value = response.data || [];
         }
+        
+        contacts.value = response.data || [];
         
         // Filter based on active tab
         if (activeTab.value === 'favorites') {
-            contacts.value = contacts.value.filter(contact => 
-                contact.organization_contact?.is_favorite === true
-            );
+            contacts.value = contacts.value.filter(contact => {
+                // For "My Contacts", check host_info.is_favorite
+                if (selectedOrganization.value === 'my-contacts') {
+                    return contact.host_info?.is_favorite === true;
+                }
+                // For organization contacts, check organization_contact.is_favorite
+                return contact.organization_contact?.is_favorite === true;
+            });
         }
         
     } catch (error) {
@@ -172,8 +166,15 @@ function handleTabChange(event, tab) {
 // Contact actions
 function handleToggleFavorite(contact) {
     if (selectedOrganization.value === 'my-contacts') {
+        // For "My Contacts", we need the organization ID from the contact data
+        const orgId = contact.organization?.id;
+        if (!orgId) {
+            common.notification('Unable to update favorite status', false);
+            return;
+        }
+        
         // Toggle favorite on host_contact
-        ContactsService.toggleHostFavorite(contact.id)
+        ContactsService.toggleHostFavorite(contact.contact.id, orgId)
             .then(() => {
                 common.notification('Updated favorite status', true);
                 loadContacts();
@@ -195,6 +196,11 @@ function handleToggleFavorite(contact) {
 }
 
 function handleDeleteContact(contact) {
+    if (selectedOrganization.value === 'my-contacts') {
+        common.notification('Cannot delete contacts from My Contacts view', false);
+        return;
+    }
+    
     ContactsService.deleteContact(selectedOrganization.value, contact.id)
         .then(() => {
             common.notification('Contact removed successfully', true);
@@ -207,10 +213,18 @@ function handleDeleteContact(contact) {
 
 // Handle other actions
 function handleNewContact() {
+    if (selectedOrganization.value === 'my-contacts') {
+        common.notification('Please select an organization to add contacts', false);
+        return;
+    }
     common.notification('Contact creation coming soon', true);
 }
 
 function handleImportContacts() {
+    if (selectedOrganization.value === 'my-contacts') {
+        common.notification('Please select an organization to import contacts', false);
+        return;
+    }
     common.notification('Import functionality coming soon', true);
 }
 

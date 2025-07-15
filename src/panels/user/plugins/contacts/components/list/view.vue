@@ -68,6 +68,19 @@ function formatMeeting(meeting) {
     }
 }
 
+// Check if contact is favorite based on data structure
+function isFavorite(contactData) {
+    // For host contacts (My Contacts view)
+    if (contactData.host_info) {
+        return contactData.host_info.is_favorite === true;
+    }
+    // For organization contacts
+    if (contactData.organization_contact) {
+        return contactData.organization_contact.is_favorite === true;
+    }
+    return false;
+}
+
 // Process contacts for table
 const processedContacts = computed(() => {
     return props.contacts.map(contactData => {
@@ -81,7 +94,8 @@ const processedContacts = computed(() => {
             next_meeting: formatMeeting(contactData.next_meeting),
             raw_last_meeting: contactData.last_meeting,
             raw_next_meeting: contactData.next_meeting,
-            is_favorite: contactData.organization_contact?.is_favorite || false
+            is_favorite: isFavorite(contactData),
+            organization: contactData.organization // For My Contacts view
         };
     });
 });
@@ -139,28 +153,33 @@ function getContactMenus(contact) {
     return [
         {
             label: 'Send email',
-            icon: 'email',
-            action: () => sendEmail(contact)
+            iconComponent: PhEnvelope,
+            weight: 'regular',
+            onClick: () => sendEmail(contact)
         },
         {
             label: 'Book meeting',
-            icon: 'calendar_month',
-            action: () => bookMeeting(contact)
+            iconComponent: PhCalendarCheck,
+            weight: 'regular',
+            onClick: () => bookMeeting(contact)
         },
         {
             label: 'Share availability',
-            icon: 'share',
-            action: () => shareAvailability(contact)
+            iconComponent: PhShareNetwork,
+            weight: 'regular',
+            onClick: () => shareAvailability(contact)
         },
         {
             label: contact.is_favorite ? 'Remove from favorites' : 'Add to favorites',
-            icon: 'star',
-            action: () => toggleFavorite(contact)
+            iconComponent: PhStar,
+            weight: contact.is_favorite ? 'fill' : 'regular',
+            onClick: () => toggleFavorite(contact)
         },
         {
             label: 'Remove',
-            icon: 'delete',
-            action: () => deleteContact(contact),
+            iconComponent: PhTrash,
+            weight: 'regular',
+            onClick: () => deleteContact(contact),
             class: 'danger'
         }
     ];
@@ -214,6 +233,9 @@ function getContactMenus(contact) {
                                         />
                                     </div>
                                     <div class="contact-email">{{ contact.email }}</div>
+                                    <div v-if="contact.organization" class="contact-organization">
+                                        {{ contact.organization.name }}
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -230,9 +252,8 @@ function getContactMenus(contact) {
                             <div v-else class="no-meeting">-</div>
                         </td>
                         <td class="actions-cell">
-                            <!-- Single dropdown menu with all actions -->
-                            <div 
-                                class="c-button tertiary icon size36"
+                            <button
+                                class="c-button tertiary icon"
                                 v-dropdown="{ 
                                     component: MenusComponent,
                                     properties: {
@@ -240,8 +261,8 @@ function getContactMenus(contact) {
                                     }
                                 }"
                             >
-                                <PhDotsThree :size="20" />
-                            </div>
+                                <PhDotsThree :size="20" weight="bold" />
+                            </button>
                         </td>
                     </tr>
                 </tbody>
@@ -251,19 +272,12 @@ function getContactMenus(contact) {
 </template>
 
 <style scoped>
-.contacts-list {
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    min-height: 400px;
-}
-
 /* Loading State */
 .loading-state {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 60px 20px;
+    min-height: 400px;
 }
 
 .loading-content {
@@ -276,35 +290,31 @@ function getContactMenus(contact) {
     border: 3px solid #F3F4F6;
     border-top-color: #3B82F6;
     border-radius: 50%;
-    margin: 0 auto 16px;
     animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.loading-content p {
-    color: #6B7280;
-    font-size: 14px;
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Empty State */
 .empty-state {
-    padding: 60px 20px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
 }
 
 .empty-state-content {
-    max-width: 450px;
-    margin: 0 auto;
+    text-align: center;
+    max-width: 400px;
 }
 
 .empty-icon {
-    color: #9CA3AF;
+    color: #D1D5DB;
     margin-bottom: 16px;
-    display: flex;
-    justify-content: center;
 }
 
 .empty-title {
@@ -394,6 +404,12 @@ function getContactMenus(contact) {
     color: #6B7280;
 }
 
+.contact-organization {
+    font-size: 12px;
+    color: #9CA3AF;
+    margin-top: 2px;
+}
+
 .meeting-info {
     min-width: 200px;
 }
@@ -416,8 +432,6 @@ function getContactMenus(contact) {
     width: 50px;
     text-align: center;
 }
-
-
 
 /* Responsive */
 @media (max-width: 768px) {

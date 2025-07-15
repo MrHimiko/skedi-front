@@ -130,10 +130,7 @@ function createTeam(orgId) {
                             <span>{{ org.name ? org.name.charAt(0).toUpperCase() : 'O' }}</span>
                         </div>
                         <div>
-                            <p>
-                                {{ org.name }}
-                                <span v-if="isOrgAdmin(org)" class="admin">Admin</span>
-                            </p>
+
                             <div>
                                 <p>
                                     <router-link 
