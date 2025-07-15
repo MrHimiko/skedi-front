@@ -156,7 +156,7 @@ const goToTeams = () => {
 </script>
 
 <template>
-    <PopupView title="Manage Team" customClass="manage-team-popup">
+    <PopupView title="Manage Team" customClass="h-auto manage-team-popup">
         <template #content>
             <div class="form-section">
                 <!-- Loading state -->

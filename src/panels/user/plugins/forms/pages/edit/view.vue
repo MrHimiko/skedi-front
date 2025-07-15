@@ -1,13 +1,15 @@
 <script setup>
-import { ref, onMounted, watch, onUnmounted } from 'vue';
+import { ref, onMounted, watch, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { common } from '@utils/common';
 import { createEmptyForm } from '@user_forms/utils/form-schema';
 import { FormsService } from '@user_forms/services/forms';
+import { UserStore } from '@stores/user';
 
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
 import Button from '@form/button/view.vue';
+import Select from '@form/select/view.vue';
 
 import BuilderView from '@user_forms/components/builder/view.vue';
 import InlineTitleEditor from '@user_forms/components/inline-title-editor.vue';
@@ -20,14 +22,32 @@ import { PhFloppyDisk, PhEye, PhGearSix, PhArrowLeft } from "@phosphor-icons/vue
 
 const route = useRoute();
 const router = useRouter();
+const userStore = UserStore();
 const formId = route.params.id;
 const formData = ref(createEmptyForm());
 const isLoading = ref(true);
 const isSaving = ref(false);
 const isNewForm = ref(formId === 'new');
 const hasUnsavedChanges = ref(false);
+const selectedOrganizationId = ref(null);
 
 let initialFormDataString = '';
+
+// Get user organizations
+const userOrganizations = computed(() => {
+    const orgs = userStore.getOrganizations() || [];
+    return orgs.map(org => ({
+        label: org.entity?.name || 'Unknown Organization',
+        value: org.entity?.id
+    }));
+});
+
+// Set default organization
+const setDefaultOrganization = () => {
+    if (userOrganizations.value.length > 0 && !selectedOrganizationId.value) {
+        selectedOrganizationId.value = userOrganizations.value[0].value;
+    }
+};
 
 // Clean form data helper
 const cleanFormData = (data) => {
@@ -118,6 +138,7 @@ const loadFormData = async () => {
         if (isNewForm.value) {
             formData.value = createEmptyForm();
             initialFormDataString = JSON.stringify(formData.value);
+            setDefaultOrganization();
         } else {
             const data = await FormsService.getForm(formId);
             
@@ -143,6 +164,13 @@ const loadFormData = async () => {
             
             // Clean the loaded data
             formData.value = cleanFormData(loadedFormData);
+            
+            // Set organization from loaded form
+            if (data.organization?.id) {
+                selectedOrganizationId.value = data.organization.id;
+            } else {
+                setDefaultOrganization();
+            }
             
             initialFormDataString = JSON.stringify(formData.value);
         }
@@ -203,6 +231,12 @@ const openFormSettings = () => {
 };
 
 const saveFormToAPI = async () => {
+    // Validate organization selection
+    if (!selectedOrganizationId.value) {
+        common.notification('Please select an organization for this form', false);
+        return null;
+    }
+    
     // Clean the form data before saving
     const cleanedFormData = cleanFormData(formData.value);
     
@@ -217,7 +251,8 @@ const saveFormToAPI = async () => {
         },
         is_active: cleanedFormData.enabled !== false,
         allow_multiple_submissions: true,
-        requires_authentication: false
+        requires_authentication: false,
+        organization_id: selectedOrganizationId.value
     };
     
     console.log('Cleaned data being sent to API:', saveData);
@@ -225,11 +260,11 @@ const saveFormToAPI = async () => {
     let savedForm;
     
     if (isNewForm.value) {
-        savedForm = await FormsService.createForm(saveData);
+        savedForm = await FormsService.createForm(saveData, selectedOrganizationId.value);
         router.replace(`/forms/${savedForm.id}/edit`);
         isNewForm.value = false;
     } else {
-        savedForm = await FormsService.updateForm(formId, saveData);
+        savedForm = await FormsService.updateForm(formId, saveData, selectedOrganizationId.value);
     }
     
     if (savedForm) {
@@ -282,9 +317,6 @@ const goBack = () => {
     }
 };
 
-const previewForm = () => {
-    common.notification('Preview functionality coming soon', true);
-};
 
 const beforeUnloadHandler = (event) => {
     if (hasUnsavedChanges.value) {
@@ -322,20 +354,23 @@ const beforeUnloadHandler = (event) => {
                                 <span class="unsaved-text">Unsaved changes</span>
                             </div>
                             
+                            <Select
+                                v-if="userOrganizations.length > 0"
+                                :value="selectedOrganizationId"
+                                :options="userOrganizations"
+                                placeholder="Select Organization"
+                                @change="(value) => selectedOrganizationId = value"
+                                :disabled="isLoading || isSaving"
+                                style="min-width: 200px"
+                            />
+                            
                             <Button 
-                                as="stroke" 
+                                as="tertiary icon size36" 
                                 :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
-                                label="Settings" 
                                 @click="openFormSettings"
                                 :disabled="isLoading"
                             />
-                            <Button 
-                                as="stroke" 
-                                :iconLeft="{ component: PhEye, weight: 'bold' }" 
-                                label="Preview"
-                                @click="previewForm"
-                                :disabled="isLoading"
-                            />
+
                             <Button 
                                 :iconLeft="{ component: PhFloppyDisk, weight: 'bold' }" 
                                 label="Save" 

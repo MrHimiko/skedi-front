@@ -17,6 +17,7 @@
     font-weight: 500;
     line-height: 1;
     cursor: pointer;
+    min-width: max-content;
 }
 
 .c-button:hover {
@@ -77,6 +78,7 @@
 .c-button.icon.size36 {
     height: 36px;
     width: 36px;
+    min-width: 36px;
     max-width: 36px;
 }
 

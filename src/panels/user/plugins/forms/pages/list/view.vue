@@ -17,8 +17,8 @@ const forms = ref([]);
 const isLoading = ref(true);
 
 // Table configuration
-const tableHeadings = ['Name', 'Events', 'Created', 'Updated', 'Status', 'Actions'];
-const tableKeys = ['name', 'events', 'created_at', 'updated_at', 'status', 'actions'];
+const tableHeadings = ['Name', 'Organization', 'Status', 'Updated', 'Actions'];
+const tableKeys = ['name', 'organization', 'status', 'updated', 'actions'];
 
 // Load forms from API
 const loadForms = async () => {
@@ -30,7 +30,7 @@ const loadForms = async () => {
         const processedForms = formsData.map((form) => {
             return {
                 ...form,
-                events: form.events_count || 0,
+                organization: form.organization?.name || 'Not assigned',
                 created_at: new Date(form.created).toLocaleDateString(),
                 updated_at: new Date(form.updated).toLocaleDateString(),
                 status: form.is_active ? 'Published' : 'Draft'

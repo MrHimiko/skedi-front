@@ -151,6 +151,7 @@ const saveFormAttachment = async () => {
 // Edit form - navigate to form editor
 const editForm = () => {
     if (selectedForm.value) {
+        document.querySelector('.i-popup-close').click();
         router.push(`/forms/${selectedForm.value.id}/edit`);
     }
 };

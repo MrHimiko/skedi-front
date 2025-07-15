@@ -90,15 +90,23 @@ const openFieldSettings = (field, event) => {
         return;
     }
     
+    const availableFields = props.fields.filter(f => {
+        // Exclude the current field
+        if (f.id === field.id || (f.name && field.name && f.name === field.name)) {
+            return false;
+        }
+
+        // Include all other fields
+        return true;
+    });
+    
     popup.open(
         'field-settings',
         null,
         FieldSettings,
         {
             field: field,
-            formFields: props.fields.filter(f => 
-                (f.id !== field.id && f.name !== field.name) && !f.system_field
-            ),
+            formFields: availableFields,
             onUpdate: (updatedField) => {
                 emit('update-field', field.id || field.name, updatedField);
                 popup.close();

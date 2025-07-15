@@ -1,89 +1,88 @@
 <script setup>
-    import { ref, computed, onMounted } from 'vue';
-    import { api } from '@utils/api';
-    import { common } from '@utils/common';
-    import IntegrationProviders from '@user_integrations/providers';
-    
-    import MainLayout from '@layouts/main/view.vue';
-    import HeadingComponent from '@global/heading/view.vue';
-    import IntegrationCard from '@user_integrations/components/marketplace/IntegrationCard.vue';
-    import Button from '@form/button/view.vue';
-    
-    // State management
-    const providers = ref([]);
-    const isLoading = ref(true);
-    const activeTab = ref('installed');
-    const userIntegrations = ref([]);
-    
-    // Fetch both available providers and user's installed integrations
-    async function fetchData() {
-        try {
-            isLoading.value = true;
-            
-            // Get all available providers first
-            const allProviders = IntegrationProviders.getAllProviders();
-            
-            // Then fetch the user's actual integrations from the backend
-            const response = await api.get('user/integrations');
-            
-            if (!response.success) {
-                throw new Error(response.message || 'Failed to fetch integrations');
-            }
-            
-            // Store user integrations for reference
-            userIntegrations.value = response.data;
-            
-            // Map provider details and attach installed status
-            providers.value = allProviders.map(provider => {
-                // Check if this provider is installed by looking at user integrations
-                const isInstalled = userIntegrations.value.some(
-                    integration => integration.provider === provider.id && integration.status === 'active'
-                );
-                
-                // Get the actual integration entity for this provider
-                const installedIntegration = userIntegrations.value.find(
-                    integration => integration.provider === provider.id && integration.status === 'active'
-                );
-                
-                return {
-                    id: provider.id,
-                    name: provider.name,
-                    description: provider.description,
-                    icon: provider.icon,
-                    category: provider.category,
-                    isInstalled: isInstalled,
-                    // Store the actual integration entity ID if installed
-                    entityId: installedIntegration ? installedIntegration.id : null,
-                    // Store any additional info from the installed integration
-                    integrationDetails: installedIntegration || null
-                };
-            });
-            
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            common.notification('Failed to load integrations', false);
-        } finally {
-            isLoading.value = false;
+import { ref, computed, onMounted } from 'vue';
+import { api } from '@utils/api';
+import { common } from '@utils/common';
+import IntegrationProviders from '@user_integrations/providers';
+
+import MainLayout from '@layouts/main/view.vue';
+import HeadingComponent from '@global/heading/view.vue';
+import IntegrationCard from '@user_integrations/components/marketplace/IntegrationCard.vue';
+
+// State management
+const providers = ref([]);
+const isLoading = ref(true);
+const userIntegrations = ref([]);
+
+// Fetch both available providers and user's installed integrations
+async function fetchData() {
+    try {
+        isLoading.value = true;
+        
+        // Get all available providers first
+        const allProviders = IntegrationProviders.getAllProviders();
+        
+        // Then fetch the user's actual integrations from the backend
+        const response = await api.get('user/integrations');
+        
+        if (!response.success) {
+            throw new Error(response.message || 'Failed to fetch integrations');
         }
+        
+        // Store user integrations for reference
+        userIntegrations.value = response.data;
+        
+        // Map provider details and attach installed status
+        providers.value = allProviders.map(provider => {
+            // Check if this provider is installed by looking at user integrations
+            const isInstalled = userIntegrations.value.some(
+                integration => integration.provider === provider.id && integration.status === 'active'
+            );
+            
+            // Get the actual integration entity for this provider
+            const installedIntegration = userIntegrations.value.find(
+                integration => integration.provider === provider.id && integration.status === 'active'
+            );
+            
+            return {
+                id: provider.id,
+                name: provider.name,
+                description: provider.description,
+                icon: provider.icon,
+                category: provider.category,
+                isInstalled: isInstalled,
+                entityId: installedIntegration ? installedIntegration.id : null,
+                integrationDetails: installedIntegration || null
+            };
+        });
+        
+    } catch (error) {
+        console.error('Error fetching data:', error);
+        common.notification('Failed to load integrations', false);
+    } finally {
+        isLoading.value = false;
     }
-    
-    // Handle refresh after connect/disconnect
-    function handleIntegrationChange() {
-        fetchData();
-    }
-    
-    // Filter integrations based on active tab
-    const filteredProviders = computed(() => {
-        if (activeTab.value === 'installed') {
-            return providers.value.filter(provider => provider.isInstalled);
-        }
-        return providers.value;
+}
+
+// Handle refresh after connect/disconnect
+function handleIntegrationChange() {
+    fetchData();
+}
+
+// Sort integrations - connected first, then unconnected
+const sortedProviders = computed(() => {
+    return [...providers.value].sort((a, b) => {
+        // Connected integrations come first
+        if (a.isInstalled && !b.isInstalled) return -1;
+        if (!a.isInstalled && b.isInstalled) return 1;
+        // Then sort alphabetically by name
+        return a.name.localeCompare(b.name);
     });
-    
-    // Initialize component
-    onMounted(() => {
-        fetchData();
-    });
+});
+
+// Initialize component
+onMounted(() => {
+    fetchData();
+});
 </script>
 
 <template>
@@ -95,49 +94,26 @@
                 </HeadingComponent>
                 
                 <div class="integrations-container">
-                    <!-- Tabs -->
-                    <div class="tab-container">
-                        <div 
-                            :class="['tab', { active: activeTab === 'browse' }]"
-                            @click="activeTab = 'browse'"
-                        >
-                            Browse
-                        </div>
-                        <div 
-                            :class="['tab', { active: activeTab === 'installed' }]"
-                            @click="activeTab = 'installed'"
-                        >
-                            Installed ({{ providers.filter(p => p.isInstalled).length }})
-                        </div>
-                    </div>
-                    
                     <!-- Loading state -->
                     <div v-if="isLoading" class="loading-state">
                         Loading integrations...
                     </div>
                     
                     <!-- Empty state -->
-                    <div v-else-if="filteredProviders.length === 0" class="empty-state">
+                    <div v-else-if="sortedProviders.length === 0" class="empty-state">
                         <div class="empty-content">
                             <div class="empty-icon">
                                 <i>extension</i>
                             </div>
-                            <h3>No integrations found</h3>
-                            <p v-if="activeTab === 'installed'">
-                                You haven't connected any integrations yet. Browse available integrations to get started.
-                            </p>
-                            <Button 
-                                v-if="activeTab === 'installed'"
-                                label="Browse Integrations"
-                                @click="activeTab = 'browse'"
-                            />
+                            <h3>No integrations available</h3>
+                            <p>Check back later for available integrations.</p>
                         </div>
                     </div>
                     
-                    <!-- Integrations grid -->
+                    <!-- Integrations grid - all in one -->
                     <div v-else class="integrations-grid">
                         <IntegrationCard 
-                            v-for="provider in filteredProviders"
+                            v-for="provider in sortedProviders"
                             :key="provider.id"
                             :integration="provider"
                             @connect="handleIntegrationChange"
@@ -152,25 +128,6 @@
 <style scoped>
 .integrations-container {
     margin-top: 20px;
-}
-
-.tab-container {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    border-bottom: 1px solid var(--border);
-}
-
-.tab {
-    padding: 10px 15px;
-    cursor: pointer;
-    border-radius: 5px 5px 0 0;
-    font-weight: 500;
-}
-
-.tab.active {
-    border-bottom: 2px solid var(--brand-default);
-    color: var(--brand-default);
 }
 
 .loading-state {
