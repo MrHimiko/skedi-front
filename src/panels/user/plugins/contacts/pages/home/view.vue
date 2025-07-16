@@ -271,7 +271,7 @@ function handleImportContacts() {
                             />
                         </div>
                         
-                        <div class="search-box">
+                        <div class="search-box" style="display:none">
                             <InputComponent
                                 v-model="searchQuery"
                                 placeholder="Search contacts..."
@@ -281,15 +281,10 @@ function handleImportContacts() {
                     </div>
 
                     <div class="right-controls">
-                        <ButtonComponent
-                            label="Import"
-                            as="neutral"
-                            :iconLeft="{ component: PhUpload }"
-                            @click="handleImportContacts"
-                        />
+
                         <ButtonComponent
                             label="Export"
-                            as="neutral"
+                            as="secondary"
                             :iconLeft="{ component: PhDownload }"
                             @click="handleExportContacts"
                         />

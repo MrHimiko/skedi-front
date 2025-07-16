@@ -435,6 +435,8 @@ const beforeUnloadHandler = (event) => {
     gap: 6px;
     color: var(--text-secondary);
     font-size: 13px;
+    min-width: max-content;
+    margin-right: 20px;
 }
 
 .unsaved-dot {

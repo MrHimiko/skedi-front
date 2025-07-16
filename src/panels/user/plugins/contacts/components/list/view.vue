@@ -4,11 +4,11 @@ import { useRouter } from 'vue-router';
 import { common } from '@utils/common';
 import Notice from '@global/notice/view.vue';
 import Button from '@form/button/view.vue';
+
 import MenusComponent from '@global/menus/view.vue';
 import { PhEnvelope, PhDotsThree, PhStar, PhCalendarCheck, PhShareNetwork, PhTrash, PhAddressBook } from "@phosphor-icons/vue";
 import { popup } from '@utils/popup';
 import ConfirmComponent from '@floated/confirm/view.vue';
-
 
 const props = defineProps({
     contacts: {
@@ -243,8 +243,8 @@ function getContactMenus(contact) {
             </div>
         </div>
 
-        <div v-else class="contacts-table-wrapper">
-            <table class="contacts-table">
+        <div v-else class="common-table-wrapper">
+            <table class="common-table">
                 <thead>
                     <tr>
                         <th>Name</th>
@@ -255,13 +255,13 @@ function getContactMenus(contact) {
                 </thead>
                 <tbody>
                     <tr v-for="contact in processedContacts" :key="contact.id">
-                        <td class="contact-info">
-                            <div class="contact-name-wrapper">
-                                <div class="contact-avatar">
+                        <td>
+                            <div class="table-cell-with-avatar">
+                                <div class="table-avatar">
                                     {{ (contact.name || contact.email).charAt(0).toUpperCase() }}
                                 </div>
-                                <div class="contact-details">
-                                    <div class="contact-name">
+                                <div class="table-cell-details">
+                                    <div class="table-cell-title">
                                         {{ contact.name || contact.email }}
                                         <PhStar 
                                             v-if="contact.is_favorite" 
@@ -270,28 +270,25 @@ function getContactMenus(contact) {
                                             class="favorite-icon"
                                         />
                                     </div>
-                                    <div class="contact-email">{{ contact.email }}</div>
-                                    <div v-if="contact.organization" class="contact-organization">
-                                        {{ contact.organization.name }}
-                                    </div>
+                                    <div class="table-cell-subtitle">{{ contact.email }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="meeting-info">
+                        <td>
                             <div v-if="contact.raw_last_meeting" class="meeting-text">
                                 {{ contact.last_meeting }}
                             </div>
-                            <div v-else class="no-meeting">-</div>
+                            <div v-else class="table-no-data">-</div>
                         </td>
-                        <td class="meeting-info">
+                        <td>
                             <div v-if="contact.raw_next_meeting" class="meeting-text upcoming">
                                 {{ contact.next_meeting }}
                             </div>
-                            <div v-else class="no-meeting">-</div>
+                            <div v-else class="table-no-data">-</div>
                         </td>
-                        <td class="actions-cell">
+                        <td class="table-action-cell">
                             <button
-                                class="c-button tertiary icon"
+                                class="c-button secondary icon"
                                 v-dropdown="{ 
                                     component: MenusComponent,
                                     properties: {
@@ -310,6 +307,10 @@ function getContactMenus(contact) {
 </template>
 
 <style scoped>
+
+@import '@global/common-table/style.css';
+/* Component specific styles only */
+
 /* Loading State */
 .loading-state {
     display: flex;
@@ -353,6 +354,8 @@ function getContactMenus(contact) {
 .empty-icon {
     color: #D1D5DB;
     margin-bottom: 16px;
+    display: flex;
+    justify-content: center;
 }
 
 .empty-title {
@@ -369,123 +372,13 @@ function getContactMenus(contact) {
     margin: 0;
 }
 
-/* Table Styles */
-.contacts-table-wrapper {
-    overflow-x: auto;
-}
-
-.contacts-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.contacts-table th {
-    text-align: left;
-    padding: 16px;
-    font-weight: 500;
-    color: #6B7280;
-    border-bottom: 1px solid #E5E7EB;
-    font-size: 14px;
-}
-
-.contacts-table td {
-    padding: 16px;
-    border-bottom: 1px solid #F3F4F6;
-}
-
-.contacts-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.contact-info {
-    min-width: 250px;
-}
-
-.contact-name-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.contact-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: #E5E7EB;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 500;
-    color: #4B5563;
-    flex-shrink: 0;
-}
-
-.contact-details {
-    min-width: 0;
-}
-
-.contact-name {
-    font-weight: 500;
-    color: #111827;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
+/* Contact specific styles */
 .favorite-icon {
-    color: #FBBF24;
+    color: #000;
     flex-shrink: 0;
 }
 
-.contact-email {
-    font-size: 14px;
-    color: #6B7280;
-}
 
-.contact-organization {
-    font-size: 12px;
-    color: #9CA3AF;
-    margin-top: 2px;
-}
 
-.meeting-info {
-    min-width: 200px;
-}
 
-.meeting-text {
-    font-size: 14px;
-    color: #6B7280;
-}
-
-.meeting-text.upcoming {
-    color: #059669;
-    font-weight: 500;
-}
-
-.no-meeting {
-    color: #D1D5DB;
-}
-
-.actions-cell {
-    width: 50px;
-    text-align: center;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .contacts-table {
-        font-size: 14px;
-    }
-    
-    .contacts-table th,
-    .contacts-table td {
-        padding: 12px;
-    }
-    
-    .contact-avatar {
-        width: 36px;
-        height: 36px;
-        font-size: 14px;
-    }
-}
 </style>

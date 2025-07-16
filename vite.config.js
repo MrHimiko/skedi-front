@@ -27,6 +27,7 @@ export default defineConfig({
             '@user_teams': path.resolve(__dirname, './src/panels/user/plugins/teams'),
             '@user_bookings': path.resolve(__dirname, './src/panels/user/plugins/bookings'),
             '@user_contacts': path.resolve(__dirname, './src/panels/user/plugins/contacts'),
+            '@user_potential_leads': path.resolve(__dirname, './src/panels/user/plugins/potential-leads'),
             '@user_organizations': path.resolve(__dirname, './src/panels/user/plugins/organizations'),
             '@user_integrations': path.resolve(__dirname, './src/panels/user/plugins/integrations'),
             '@user_forms': path.resolve(__dirname, './src/panels/user/plugins/forms'),

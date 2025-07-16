@@ -2,38 +2,38 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { common } from '@utils/common';
+import { popup } from '@utils/popup';
 import { FormsService } from '@user_forms/services/forms';
 
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
-import Button from '@form/button/view.vue';
-import TableComponent from '@global/table/view.vue';
-import Notice from '@global/notice/view.vue';
+import ButtonComponent from '@form/button/view.vue';
+import InputComponent from '@form/input/view.vue';
+import MenusComponent from '@global/menus/view.vue';
+import ConfirmComponent from '@floated/confirm/view.vue';
 
-import { PhPlus, PhPencil, PhTrash, PhCopy, PhCalendar } from "@phosphor-icons/vue";
+import { PhPlus, PhPencil, PhTrash, PhCopy, PhCalendar, PhMagnifyingGlass, PhDotsThree, PhFile } from "@phosphor-icons/vue";
 
 const router = useRouter();
 const forms = ref([]);
 const isLoading = ref(true);
-
-// Table configuration
-const tableHeadings = ['Name', 'Organization', 'Status', 'Updated', 'Actions'];
-const tableKeys = ['name', 'organization', 'status', 'updated', 'actions'];
+const searchQuery = ref('');
 
 // Load forms from API
 const loadForms = async () => {
     try {
         isLoading.value = true;
-        const formsData = await FormsService.getForms(false); // Don't use cache for initial load
+        const formsData = await FormsService.getForms(false);
         
-        // Process forms data to add computed properties
+        // Process forms data
         const processedForms = formsData.map((form) => {
             return {
                 ...form,
-                organization: form.organization?.name || 'Not assigned',
-                created_at: new Date(form.created).toLocaleDateString(),
-                updated_at: new Date(form.updated).toLocaleDateString(),
-                status: form.is_active ? 'Published' : 'Draft'
+                organization_name: form.organization?.name || 'Not assigned',
+                created_date: new Date(form.created).toLocaleDateString(),
+                updated_date: new Date(form.updated).toLocaleDateString(),
+                status: form.is_active ? 'Published' : 'Draft',
+                events_count: form.events || 0
             };
         });
         
@@ -50,29 +50,69 @@ onMounted(() => {
     loadForms();
 });
 
+// Filter forms based on search
+const filteredForms = ref([]);
+function filterForms() {
+    if (!searchQuery.value) {
+        filteredForms.value = forms.value;
+        return;
+    }
+    
+    const query = searchQuery.value.toLowerCase();
+    filteredForms.value = forms.value.filter(form => 
+        form.name.toLowerCase().includes(query) ||
+        form.organization_name.toLowerCase().includes(query)
+    );
+}
+
+// Watch for changes
+onMounted(() => {
+    loadForms().then(() => {
+        filteredForms.value = forms.value;
+    });
+});
+
+// Update filtered forms when search changes
+import { watch } from 'vue';
+watch([searchQuery, forms], () => {
+    filterForms();
+});
+
 // Create a new form
 const createForm = () => {
     router.push('/forms/new/edit');
 };
 
 // Edit a form
-const editForm = (id) => {
-    router.push(`/forms/${id}/edit`);
+const editForm = (form) => {
+    router.push(`/forms/${form.id}/edit`);
 };
 
 // Delete a form
-const deleteForm = async (form) => {
-    if (confirm(`Are you sure you want to delete "${form.name}"? This action cannot be undone.`)) {
-        try {
-            await FormsService.deleteForm(form.id);
-            common.notification('Form deleted successfully', true);
-            // Reload forms
-            await loadForms();
-        } catch (error) {
-            console.error('Failed to delete form:', error);
-            common.notification('Failed to delete form', false);
+const deleteForm = (form) => {
+    popup.open(
+        'delete-form-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to delete "${form.name}"? This action cannot be undone.`,
+            callback: async () => {
+                try {
+                    await FormsService.deleteForm(form.id);
+                    common.notification('Form deleted successfully', true);
+                    popup.close();
+                    await loadForms();
+                } catch (error) {
+                    console.error('Failed to delete form:', error);
+                    common.notification('Failed to delete form', false);
+                }
+            }
+        },
+        {
+            position: 'center'
         }
-    }
+    );
 };
 
 // Duplicate a form
@@ -80,7 +120,6 @@ const duplicateForm = async (form) => {
     try {
         await FormsService.duplicateForm(form.id);
         common.notification('Form duplicated successfully', true);
-        // Reload forms
         await loadForms();
     } catch (error) {
         console.error('Failed to duplicate form:', error);
@@ -88,132 +127,275 @@ const duplicateForm = async (form) => {
     }
 };
 
-// Format events display
-const formatEventsDisplay = (form) => {
-    if (form.events === 0) {
-        return 'No events';
-    } else if (form.events === 1) {
-        return '1 event';
-    } else {
-        return `${form.events} events`;
-    }
-};
+// Get form menus
+function getFormMenus(form) {
+    return [
+        {
+            label: 'Edit',
+            iconComponent: PhPencil,
+            weight: 'regular',
+            onClick: () => editForm(form)
+        },
+        {
+            label: 'Duplicate',
+            iconComponent: PhCopy,
+            weight: 'regular',
+            onClick: () => duplicateForm(form)
+        },
+        {
+            label: 'Delete',
+            iconComponent: PhTrash,
+            weight: 'regular',
+            onClick: () => deleteForm(form),
+            class: 'danger'
+        }
+    ];
+}
 
-// Get events tooltip content
-const getEventsTooltip = (form) => {
-    if (form.events === 0) {
-        return 'No events attached to this form';
-    }
-    
-    return `${form.events} events attached`;
+// Format events display
+const formatEventsDisplay = (count) => {
+    if (count === 0) return 'No events';
+    if (count === 1) return '1 event';
+    return `${count} events`;
 };
 </script>
 
 <template>
-    <main-layout>
+    <MainLayout>
         <template #content>
-            <div class="container-lg">
-                <HeadingComponent title="Forms">
-                    <template #right>
-                        <Button 
-                            :iconLeft="{ component: PhPlus, weight: 'bold' }" 
-                            label="Create Form" 
-                            @click="createForm"
-                        />
-                    </template>
-                </HeadingComponent>
-                
-                <div class="p-xl"></div>
-                
-                <div v-if="isLoading" class="loading-container flex-center">
-                    <p>Loading forms...</p>
-                </div>
-                
-                <div v-else-if="forms.length === 0" class="empty-state">
-                    <Notice 
-                        description="You haven't created any forms yet. Click the 'Create Form' button to get started." 
-                        icon="info"
-                        as="suggest"
-                    />
-                </div>
-                
-                <TableComponent
-                    v-else
-                    :headings="tableHeadings"
-                    :keys="tableKeys"
-                    :values="forms"
-                    sticky
-                >
-                    <template #cell="{ row, key, keyIndex, cell }">
-                        <!-- Events column -->
-                        <span 
-                            v-if="key === 'events'" 
-                            class="events-cell"
-                            :class="{ 'has-events': row.events > 0 }"
-                            v-tooltip="{ content: getEventsTooltip(row) }"
-                        >
-                            <PhCalendar :weight="row.events > 0 ? 'bold' : 'regular'" size="16" />
-                            {{ formatEventsDisplay(row) }}
-                        </span>
-                        
-                        <!-- Status column with badge -->
-                        <span 
-                            v-else-if="key === 'status'" 
-                            class="status-badge"
-                            :class="cell.toLowerCase()"
-                        >
-                            {{ cell }}
-                        </span>
-                        
-                        <!-- Actions column -->
-                        <div v-else-if="key === 'actions'" class="actions-cell">
-                            <Button 
-                                as="tertiary icon" 
-                                :iconLeft="{ component: PhPencil, weight: 'bold' }" 
-                                @click="editForm(row.id)"
-                                v-tooltip="{ content: 'Edit' }"
-                            />
-                            <Button 
-                                as="tertiary icon" 
-                                :iconLeft="{ component: PhCopy, weight: 'bold' }" 
-                                @click="duplicateForm(row)"
-                                v-tooltip="{ content: 'Duplicate' }"
-                            />
-                            <Button 
-                                as="tertiary icon" 
-                                :iconLeft="{ component: PhTrash, weight: 'bold' }" 
-                                @click="deleteForm(row)"
-                                v-tooltip="{ content: 'Delete' }"
+            <div class="forms-page">
+                <HeadingComponent 
+                    title="Forms"
+                    description="Create and manage custom forms for your events"
+                />
+
+                <div class="controls-section">
+                    <div class="left-controls">
+                        <div class="search-box">
+                            <InputComponent
+                                v-model="searchQuery"
+                                placeholder="Search forms..."
+                                :iconLeft="{ component: PhMagnifyingGlass }"
                             />
                         </div>
-                        
-                        <!-- Name column (make clickable) -->
-                        <span 
-                            v-else-if="key === 'name'" 
-                            class="form-name-cell"
-                            @click="editForm(row.id)"
-                        >
-                            {{ cell }}
-                        </span>
-                        
-                        <!-- Default cell content -->
-                        <template v-else>
-                            {{ cell }}
-                        </template>
-                    </template>
-                </TableComponent>
+                    </div>
+                    
+                    <div class="right-controls">
+                        <ButtonComponent
+                            label="Create Form"
+                            :iconLeft="{ component: PhPlus }"
+                            @click="createForm"
+                        />
+                    </div>
+                </div>
+
+                <div class="forms-content">
+                    <!-- Loading State -->
+                    <div v-if="isLoading" class="loading-state">
+                        <div class="loading-content">
+                            <div class="loading-spinner"></div>
+                            <p>Loading forms...</p>
+                        </div>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div v-else-if="filteredForms.length === 0" class="empty-state">
+                        <div class="empty-state-content">
+                            <div class="empty-icon">
+                                <PhFile :size="48" weight="thin" />
+                            </div>
+                            <h3 class="empty-title">
+                                {{ searchQuery ? 'No forms found' : 'No forms yet' }}
+                            </h3>
+                            <p class="empty-description">
+                                {{ searchQuery 
+                                    ? 'Try adjusting your search terms.' 
+                                    : "You haven't created any forms yet. Click the 'Create Form' button to get started." 
+                                }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Forms Table -->
+                    <div v-else class="common-table-wrapper">
+                        <table class="common-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Organization</th>
+                                    <th>Status</th>
+                                    <th>Events</th>
+                                    <th>Updated</th>
+                                    <th width="50"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="form in filteredForms" :key="form.id">
+                                    <td>
+                                        <div class="form-name-cell" @click="editForm(form)">
+                                            {{ form.name }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="org-name">{{ form.organization_name }}</span>
+                                    </td>
+                                    <td>
+                                        <span 
+                                            class="status-badge"
+                                            :class="form.status.toLowerCase()"
+                                        >
+                                            {{ form.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div 
+                                            class="events-cell"
+                                            :class="{ 'has-events': form.events_count > 0 }"
+                                        >
+                                            <PhCalendar 
+                                                :weight="form.events_count > 0 ? 'fill' : 'regular'" 
+                                                :size="16" 
+                                            />
+                                            {{ formatEventsDisplay(form.events_count) }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="updated-date">{{ form.updated_date }}</span>
+                                    </td>
+                                    <td class="table-action-cell">
+                                        <button
+                                            class="c-button secondary icon"
+                                            v-dropdown="{ 
+                                                component: MenusComponent,
+                                                properties: {
+                                                    menus: getFormMenus(form)
+                                                }
+                                            }"
+                                        >
+                                            <PhDotsThree :size="20" weight="bold" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </template>
-    </main-layout>
+    </MainLayout>
 </template>
 
 <style scoped>
-.loading-container {
-    min-height: 200px;
+@import '@global/common-table/style.css';
+
+.forms-page {
+    padding: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
 }
 
+.controls-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.left-controls {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+}
+
+.search-box {
+    flex: 1;
+    max-width: 400px;
+}
+
+.right-controls {
+    display: flex;
+    gap: 12px;
+}
+
+
+
+/* Loading State */
+.loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #F3F4F6;
+    border-top-color: #3B82F6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Empty State */
 .empty-state {
-    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.empty-state-content {
+    text-align: center;
+    max-width: 400px;
+}
+
+.empty-icon {
+    color: #D1D5DB;
+    margin-bottom: 16px;
+}
+
+.empty-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 8px 0;
+}
+
+.empty-description {
+    font-size: 14px;
+    color: #6B7280;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Form specific styles */
+.form-name-cell {
+    cursor: pointer;
+    color: var(--brand-default);
+    font-weight: 500;
+}
+
+.form-name-cell:hover {
+    text-decoration: underline;
+}
+
+.org-name,
+.updated-date {
+    font-size: 14px;
+    color: #6B7280;
 }
 
 .status-badge {
@@ -233,30 +415,36 @@ const getEventsTooltip = (form) => {
     color: var(--blue-default);
 }
 
-.actions-cell {
-    display: flex;
-    gap: 4px;
-}
-
 .events-cell {
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--text-secondary);
+    color: #9CA3AF;
     font-size: 13px;
 }
 
 .events-cell.has-events {
-    color: var(--text-primary);
+    color: #6B7280;
 }
 
-.form-name-cell {
-    cursor: pointer;
-    color: var(--brand-default);
-    font-weight: 500;
-}
-
-.form-name-cell:hover {
-    text-decoration: underline;
+/* Responsive */
+@media (max-width: 768px) {
+    .controls-section {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .left-controls {
+        width: 100%;
+    }
+    
+    .search-box {
+        max-width: none;
+    }
+    
+    .right-controls {
+        justify-content: flex-end;
+        width: 100%;
+    }
 }
 </style>

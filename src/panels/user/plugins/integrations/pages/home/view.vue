@@ -153,6 +153,8 @@ onMounted(() => {
     font-size: 48px;
     color: var(--text-tertiary);
     margin-bottom: 20px;
+        display: flex;
+    justify-content: center;
 }
 
 .empty-content h3 {

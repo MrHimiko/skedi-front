@@ -1,0 +1,100 @@
+/* Common Table Styles */
+.common-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.common-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.common-table th {
+    text-align: left;
+    padding: 0 16px;
+    height: 40px;
+    font-weight: 500;
+    color: #000;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+
+.common-table td {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.common-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Common avatar styles */
+.table-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background-color: #E6E6E6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #000000;
+    flex-shrink: 0;
+}
+
+/* Common cell with avatar and details */
+.table-cell-with-avatar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.table-cell-details {
+    min-width: 0;
+}
+
+.table-cell-title {
+    font-weight: 500;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.table-cell-subtitle {
+    font-size: 12px;
+    color: #6B7280;
+    margin-top: 2px;
+}
+
+/* Common action cell */
+.table-action-cell {
+    width: 50px;
+    text-align: center;
+}
+
+/* Common empty/no data text */
+.table-no-data {
+    color: #D1D5DB;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .common-table {
+        font-size: 14px;
+    }
+    
+    .common-table th,
+    .common-table td {
+        padding: 12px;
+    }
+    
+    .table-avatar {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+}
