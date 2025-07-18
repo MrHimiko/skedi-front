@@ -15,7 +15,7 @@ import { UserStore } from '@stores/user';
 import { ref, inject, computed, onMounted, onUnmounted } from 'vue';
 
 import { hasAdminAccess, getUserCount, hasSubteams } from '@user_shared/utils/js/organization-structure.js';
-
+import MemberModal from '@user_shared/components/memberModal/view.vue';
 // Create a unique symbol for the reload function
 const RELOAD_KEY = Symbol('reloadTeams');
 
@@ -157,7 +157,21 @@ function deleteTeam(team) {
 
 // Add member
 function addMember(team) {
-    common.notification('Member invitation coming soon', true);
+    popup.open(
+        'team-members',
+        null,
+        MemberModal,
+        {
+            type: 'team',
+            entityId: team.id,
+            entityName: team.name,
+            organizationId: props.orgId,
+            callback: triggerReload
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Check if user can perform admin actions on a team

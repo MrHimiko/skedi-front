@@ -1,14 +1,17 @@
 <script setup>
     import './style.css'
-    import { ref } from 'vue'
+    import { ref, computed } from 'vue'
     import { useRoute } from 'vue-router'
     import { storage } from '@utils/storage' 
     import { MenuStore } from '@stores/menu'
     import { UserStore } from '@stores/user'
     import TimezoneSelector from '@global/timezone-selector/view.vue'
     import MenusComponent from '@global/menus/view.vue'
+    import { popup } from '@utils/popup';
+    import InvitationNotifications from '@user_shared/components/invitationNotifications/view.vue';
     
-    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle } from "@phosphor-icons/vue";
+    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle, PhBell } from "@phosphor-icons/vue";
+
     
     const menuStore = MenuStore()
     const userStore = UserStore()
@@ -63,6 +66,25 @@
         }
         return route.path.startsWith(menuLink)
     }
+
+
+    // Get invitation count
+    const invitationCount = computed(() => {
+        return userStore.user?.pending_invitations_count || 0;
+    });
+
+    // Function to open invitations popup
+    function openInvitations() {
+        popup.open(
+            'invitations',
+            null,
+            InvitationNotifications,
+            {},
+            {
+                position: 'center'
+            }
+        );
+    }
     
     // User profile dropdown options
     const profileMenus = [
@@ -94,7 +116,6 @@
             <!-- User Profile Section -->
             <div class="profile-section">
                 <div class="profile-top">
-
                     <div 
                         class="profile-header" 
                         v-dropdown="{ component: MenusComponent, properties: { menus: profileMenus } }"
@@ -108,12 +129,17 @@
                         <div class="profile-dropdown-icon" v-if="!minimized">
                             <i>expand_more</i>
                         </div>
-
-                        
                     </div>
 
-                    <div> <PhCaretDoubleLeft class="action" weight="bold" @click="toggle" /> </div>
-                    
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <!-- Notification Bell -->
+                        <div class="notification-bell" @click="openInvitations" v-if="!minimized">
+                            <PhBell weight="bold" :size="20" />
+                            <span v-if="invitationCount > 0" class="badge">{{ invitationCount }}</span>
+                        </div>
+                        
+                        <PhCaretDoubleLeft class="action" weight="bold" @click="toggle" />
+                    </div>
                 </div>
                 
 
