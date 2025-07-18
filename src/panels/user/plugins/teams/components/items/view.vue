@@ -256,7 +256,6 @@ function createTeam(orgId) {
 .teams-c-items {
     display: flex;
     flex-direction: column;
-    gap: 20px;
 }
 
 .teams-c-item {

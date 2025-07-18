@@ -365,7 +365,7 @@ const beforeUnloadHandler = (event) => {
                             />
                             
                             <Button 
-                                as="tertiary icon size36" 
+                                as="secondary icon size36" 
                                 :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
                                 @click="openFormSettings"
                                 :disabled="isLoading"
@@ -435,8 +435,6 @@ const beforeUnloadHandler = (event) => {
     gap: 6px;
     color: var(--text-secondary);
     font-size: 13px;
-    min-width: max-content;
-    margin-right: 20px;
 }
 
 .unsaved-dot {
