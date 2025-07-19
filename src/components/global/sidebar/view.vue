@@ -143,7 +143,7 @@
                 </div>
                 
 
-                <div class="switcher">
+                <div class="switcher" style="display: none;">
                     <div class="logo"></div>
                     <div class="name text-tx text-bold"> Divhunt </div>
                 </div>

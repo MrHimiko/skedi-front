@@ -140,7 +140,7 @@ function createTeam(orgId) {
                                     >
                                         {{ org.name }}
                                     </router-link>
-                                    <span v-else>{{ org.name }}</span>
+                                    {{ org.name }}
                                     <span v-if="isOrgAdmin(org)" class="admin">Admin</span>
                                 </p>
                                 <a :href="getOrgUrl(org)" class="org-url">
@@ -217,11 +217,8 @@ function createTeam(orgId) {
                         />
                     </div>
                 </div>
-                
-                <!-- For non-admins, just show member badge -->
-                <div class="right" v-else>
-                    <span class="member-badge">Member</span>
-                </div>
+
+
             </div>
 
             <!-- Display organization users -->
