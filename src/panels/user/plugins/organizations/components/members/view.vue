@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
+import { UserStore } from '@stores/user';
+import { useRouter } from 'vue-router';
 
 import ButtonComponent from '@form/button/view.vue';
 import InputComponent from '@form/input/view.vue';
@@ -18,7 +20,8 @@ import {
     PhCrown,
     PhUser,
     PhMagnifyingGlass,
-    PhPaperPlaneTilt
+    PhPaperPlaneTilt,
+    PhSignOut
 } from "@phosphor-icons/vue";
 
 const props = defineProps({
@@ -38,12 +41,30 @@ const props = defineProps({
 
 const emit = defineEmits(['refresh']);
 
+const userStore = UserStore();
+const router = useRouter();
+
 // State
 const members = ref([]);
 const isLoading = ref(true);
 const searchQuery = ref('');
 const inviteEmail = ref('');
 const isInviting = ref(false);
+
+// Get current user ID
+const currentUserId = computed(() => userStore.getId());
+
+// Check if current user can leave
+const canLeave = computed(() => {
+    if (!props.isAdmin) return true;
+    
+    // Count other admins
+    const otherAdmins = members.value.filter(member => 
+        member.role === 'admin' && member.user.id !== currentUserId.value
+    );
+    
+    return otherAdmins.length > 0;
+});
 
 // Computed
 const filteredMembers = computed(() => {
@@ -71,6 +92,50 @@ async function loadMembers() {
     } finally {
         isLoading.value = false;
     }
+}
+
+// Leave organization
+async function leaveOrganization() {
+    const warningMessage = !canLeave.value 
+        ? 'You are the only admin of this organization. Please assign another admin before leaving.'
+        : `Are you sure you want to leave "${props.organization.name}"?`;
+    
+    if (!canLeave.value) {
+        common.notification(warningMessage, false);
+        return;
+    }
+    
+    popup.open(
+        'leave-organization-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: warningMessage,
+            callback: async () => {
+                try {
+                    const response = await api.post(`organizations/${props.organizationId}/leave`);
+                    
+                    if (response.success) {
+                        common.notification('Successfully left the organization', true);
+                        popup.close();
+                        
+                        // Refresh user store and redirect
+                        await userStore.init();
+                        router.push('/organizations');
+                    } else {
+                        common.notification(response.message || 'Failed to leave organization', false);
+                    }
+                } catch (error) {
+                    console.error('Failed to leave organization:', error);
+                    common.notification('Failed to leave organization', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Invite member by email
@@ -171,6 +236,19 @@ onMounted(() => {
 
 <template>
     <div class="org-members">
+        <!-- Leave Organization Button -->
+        <div class="action-section">
+            <ButtonComponent
+                :iconLeft="{ component: PhSignOut, weight: 'bold' }"
+                label="Leave Organization"
+                as="tertiary"
+                @click="leaveOrganization"
+                v-tooltip="{ 
+                    content: !canLeave ? 'You are the only admin. Assign another admin first.' : 'Leave this organization' 
+                }"
+            />
+        </div>
+        
         <!-- Invite Section -->
         <div v-if="isAdmin" class="invite-section">
             <h3>Invite New Member</h3>
@@ -232,6 +310,7 @@ onMounted(() => {
                     <div v-if="member.role === 'admin'" class="role-badge admin">
                         <PhCrown :size="16" weight="bold" />
                         <span>Admin</span>
+                        <span v-if="member.is_creator" class="creator-badge">(Creator)</span>
                     </div>
                     <div v-else class="role-badge member">
                         <PhUser :size="16" weight="bold" />
@@ -239,7 +318,7 @@ onMounted(() => {
                     </div>
                 </div>
                 
-                <div v-if="isAdmin" class="member-actions">
+                <div v-if="isAdmin && member.user.id !== currentUserId && !member.is_creator" class="member-actions">
                     <ButtonComponent
                         v-dropdown="{
                             component: MenusComponent,
@@ -273,6 +352,13 @@ onMounted(() => {
 <style scoped>
 .org-members {
     max-width: 800px;
+}
+
+/* Action Section */
+.action-section {
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* Invite Section */
@@ -358,16 +444,15 @@ onMounted(() => {
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    color: var(--text-primary);
 }
 
 .member-details p {
-    margin: 2px 0 0 0;
-    font-size: 13px;
+    margin: 4px 0 0 0;
+    font-size: 14px;
     color: var(--text-secondary);
 }
 
-/* Role Badge */
+/* Member Role */
 .member-role {
     margin-right: 16px;
 }
@@ -377,51 +462,30 @@ onMounted(() => {
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: 20px;
     font-size: 13px;
     font-weight: 500;
 }
 
 .role-badge.admin {
-    background: rgba(251, 191, 36, 0.1);
-    color: rgb(251, 191, 36);
-    border: 1px solid rgba(251, 191, 36, 0.3);
+    background: var(--warning-light);
+    color: var(--warning);
 }
 
 .role-badge.member {
     background: var(--background-2);
     color: var(--text-secondary);
-    border: 1px solid var(--border);
+}
+
+.creator-badge {
+    font-size: 11px;
+    opacity: 0.8;
+    margin-left: 4px;
 }
 
 /* Member Actions */
 .member-actions {
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.member-item:hover .member-actions {
-    opacity: 1;
-}
-
-/* Responsive */
-@media (max-width: 640px) {
-    .invite-form {
-        flex-direction: column;
-    }
-    
-    .member-item {
-        flex-wrap: wrap;
-        gap: 12px;
-    }
-    
-    .member-info {
-        width: 100%;
-    }
-    
-    .member-role,
-    .member-actions {
-        width: auto;
-    }
+    display: flex;
+    align-items: center;
 }
 </style>
