@@ -438,6 +438,8 @@ onMounted(() => {
     font-size: 12px;
     font-weight: 500;
     text-transform: capitalize;
+    min-width: max-content;
+    height: auto;
 }
 
 .role-badge.admin {

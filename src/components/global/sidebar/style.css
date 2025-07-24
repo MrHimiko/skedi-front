@@ -290,3 +290,40 @@
     padding-top: 10px;
 }
 
+/* Add this to your src/components/global/sidebar/style.css */
+
+/* Notification Bell Styles */
+.c-sidebar .notification-bell {
+    position: relative;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.c-sidebar .notification-bell:hover {
+    background-color: var(--background-2);
+}
+
+.c-sidebar .notification-bell .badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: var(--brand-blue);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transform: translate(25%, -25%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}

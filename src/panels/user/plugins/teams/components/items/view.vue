@@ -1,71 +1,74 @@
+<!-- src/panels/user/plugins/teams/components/items/view.vue -->
 <script setup>
-import '@user_shared/utils/styles/organization-dropdowns.css';
+import { ref, computed, onMounted, markRaw } from 'vue';
 import { mergeOrganizationsAndTeams } from '@user_shared/utils/js/organization-structure.js';
-
-import './style.css';
-import { ref, onMounted, toRaw, provide } from 'vue';
-import { PhGearSix, PhPlus, PhUsers, PhDotsThree, PhTrash } from "@phosphor-icons/vue";
-import ButtonComponent from '@form/button/view.vue';
-import ConfirmComponent from '@floated/confirm/view.vue';
-import MenusComponent from '@global/menus/view.vue';
-
-import TeamList from '@user_teams/components/teamList/view.vue';
 import { UserStore } from '@stores/user';
-
-import TeamCreateForm from '@user_teams/components/form/teamCreate.vue';
-import OrganizationEditForm from '@user_teams/components/form/organizationEdit.vue';
-import { popup } from '@utils/popup';
 import { api } from '@utils/api';
+import { popup } from '@utils/popup';
 import { common } from '@utils/common';
 
-// Create a unique symbol for the reload function
-const RELOAD_KEY = Symbol('reloadTeams');
+// Component imports
+import ButtonComponent from '@form/button/view.vue';
+import MenusComponent from '@global/menus/view.vue';
+import TeamList from '@user_teams/components/teamList/view.vue';
+import TeamCreateForm from '@user_teams/components/form/teamCreate.vue';
+import OrganizationEditForm from '@user_teams/components/form/organizationEdit.vue';
+import OrganizationCreateForm from '@user_teams/components/form/organizationCreate.vue';
+import ConfirmComponent from '@floated/confirm/view.vue';
+import MemberModal from '@user_shared/components/memberModal/view.vue';
+
+// Icon imports
+import { 
+    PhGearSix, 
+    PhPlus, 
+    PhCode, 
+    PhLink, 
+    PhUsers, 
+    PhDotsThree,
+    PhTrash,
+    PhUserPlus
+} from "@phosphor-icons/vue";
+
+// Styles
+import '@user_shared/utils/styles/organization-dropdowns.css';
 
 const userStore = UserStore();
-const currentUserId = userStore.getId();
+
+// State
 const organizations = ref([]);
 const eventsItems = ref(0);
+const currentUserId = userStore.getId();
 
+// Load data
 async function reloadData() {
     try {
         const response = await api.get('account/user');
         if (response.success && response.data) {
             userStore.setData(response.data);
-            organizations.value = mergeOrganizationsAndTeams();
+            
+            const mergedOrgs = mergeOrganizationsAndTeams();
+            
+            // Process organizations to ensure proper structure
+            organizations.value = mergedOrgs.map(org => {
+                // Handle both possible structures
+                const entity = org.entity || org;
+                
+                return {
+                    id: entity.id,
+                    name: entity.name || 'Unknown',
+                    slug: entity.slug || 'unknown',
+                    teams: entity.teams || [],
+                    users: entity.users || [],
+                    role: org.role // Make sure to include the role
+                };
+            });
+            
             eventsItems.value++;
         }
     } catch (error) {
-        console.error("Failed to reload user data:", error);
+        console.error('Failed to reload data:', error);
     }
 }
-
-// Provide the reload function to all descendant components
-provide(RELOAD_KEY, reloadData);
-
-onMounted(() => {
-    const rawTeams = toRaw(userStore.getTeams());
-    const rawOrgs = toRaw(userStore.getOrganizations());
-    
-    organizations.value = mergeOrganizationsAndTeams();
-    
-    if (organizations.value.length === 0) {
-        if ((rawTeams && rawTeams.length) || (rawOrgs && rawOrgs.length)) {
-            if (rawOrgs && rawOrgs.length) {
-                organizations.value = rawOrgs.map(org => {
-                    const entity = org.entity || {};
-                    return {
-                        ...entity,
-                        id: entity.id,
-                        name: entity.name || 'Unknown',
-                        slug: entity.slug || 'unknown',
-                        teams: [],
-                        role: org.role // Make sure to include the role
-                    };
-                });
-            }
-        }
-    }
-});
 
 // Check if user is admin of the organization
 function isOrgAdmin(org) {
@@ -81,6 +84,25 @@ function isOrgAdmin(org) {
 function getOrgUrl(org) {
     if (!org || !org.slug) return '#';
     return `https://skedi.com/${org.slug}`;
+}
+
+// Add member to organization
+function addOrganizationMember(org) {
+    popup.open(
+        'org-members',
+        null,
+        MemberModal,
+        {
+            type: 'organization',
+            entityId: org.id,
+            entityName: org.name,
+            organizationId: org.id,
+            callback: reloadData
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Delete organization
@@ -118,6 +140,10 @@ function deleteOrganization(org) {
 function createTeam(orgId) {
     // This is handled by the popup directive
 }
+
+onMounted(() => {
+    reloadData();
+});
 </script>
 
 <template>
@@ -130,36 +156,40 @@ function createTeam(orgId) {
                             <span>{{ org.name ? org.name.charAt(0).toUpperCase() : 'O' }}</span>
                         </div>
                         <div>
-
-                            <div>
-                                <p>
-                                    <router-link 
-                                        v-if="isOrgAdmin(org)"
-                                        :to="`/organization/${org.id}`"
-                                        class="org-name-link"
-                                    >
-                                        {{ org.name }}
-                                    </router-link>
+                            <p>
+                                <a :href="getOrgUrl(org)" target="_blank" class="org-name-link">
                                     {{ org.name }}
-                                    <span v-if="isOrgAdmin(org)" class="admin">Admin</span>
-                                </p>
-                                <a :href="getOrgUrl(org)" class="org-url">
-                                    {{ getOrgUrl(org) }}
                                 </a>
-                            </div>
+                                <span v-if="isOrgAdmin(org)" class="admin">ADMIN</span>
+                            </p>
+                            <a :href="getOrgUrl(org)" target="_blank" class="org-url">
+                                {{ getOrgUrl(org) }}
+                            </a>
                         </div>
                     </div>
                 </div>
 
                 <div class="right" v-if="isOrgAdmin(org)">
+                    <div class="member-badge" v-if="org.users && org.users.length > 0">
+                        <PhUsers weight="bold" :size="16" />
+                        {{ org.users.length }} member{{ org.users.length !== 1 ? 's' : '' }}
+                    </div>
+
                     <div class="actions">
-                        <!-- Settings button - only for admins -->
-                        <button-component
+                        <!-- Add Member button - only for admins -->
+                        <ButtonComponent
+                            @click="addOrganizationMember(org)"
+                            v-tooltip="{ content: 'Add member to organization' }" 
+                            as="tertiary icon"
+                            :iconLeft="{ component: PhUserPlus, weight: 'bold' }" 
+                        />
+
+                        <!-- Organization settings button - only for admins -->
+                        <ButtonComponent
                             v-popup="{
                                 component: OrganizationEditForm,
                                 overlay: { position: 'center' },
                                 properties: {
-                                    values: () => org,
                                     endpoint: `organizations/${org.id}`,
                                     type: 'PUT',
                                     callback: (event, data, response, success) => {
@@ -175,7 +205,7 @@ function createTeam(orgId) {
                         />
                         
                         <!-- Create team button - only for admins -->
-                        <button-component
+                        <ButtonComponent
                             v-popup="{
                                 component: TeamCreateForm,
                                 overlay: { position: 'center' },
@@ -197,7 +227,7 @@ function createTeam(orgId) {
                         />
                         
                         <!-- Three dots menu - only for admins -->
-                        <button-component
+                        <ButtonComponent
                             v-dropdown="{
                                 component: MenusComponent,
                                 properties: {
@@ -217,8 +247,6 @@ function createTeam(orgId) {
                         />
                     </div>
                 </div>
-
-
             </div>
 
             <!-- Display organization users -->
@@ -246,6 +274,30 @@ function createTeam(orgId) {
                 :reloadData="reloadData"
             />
         </div>
+
+        <!-- Create Organization Button -->
+        <div class="create-org-section" style="margin-top: 20px;">
+            <ButtonComponent
+                v-popup="{
+                    component: OrganizationCreateForm,
+                    overlay: { position: 'center' },
+                    properties: {
+                        endpoint: 'organizations',
+                        type: 'POST',
+                        callback: (event, data, response, success) => {
+                            console.log('org created', response);
+                            popup.close();
+                            reloadData();
+                        },
+                        class: 'h-auto',
+                        title: 'Create new organization',
+                    }
+                }"
+                as="primary"
+                :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                label="Create Organization"
+            />
+        </div>
     </div>
 </template>
 
@@ -260,6 +312,7 @@ function createTeam(orgId) {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 20px;
+    margin-bottom: 20px;
 }
 
 .head {
@@ -287,6 +340,20 @@ function createTeam(orgId) {
     font-size: 18px;
 }
 
+.org-name .logo span {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    background-color: var(--brand-yellow);
+    color: #776D2B;
+    line-height: 1;
+    border-radius: 8px;
+}
+
 .org-name p {
     margin: 0 0 4px 0;
     font-size: 18px;
@@ -303,6 +370,7 @@ function createTeam(orgId) {
     padding: 2px 8px;
     border-radius: 4px;
     font-weight: 500;
+    text-transform: uppercase;
 }
 
 .org-url {
@@ -334,6 +402,9 @@ function createTeam(orgId) {
     background: var(--background-1);
     border: 1px solid var(--border);
     border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .org-users {
@@ -365,5 +436,8 @@ function createTeam(orgId) {
     color: var(--brand-primary);
 }
 
-
+.create-org-section {
+    text-align: center;
+    padding: 20px;
+}
 </style>

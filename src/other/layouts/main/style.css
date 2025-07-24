@@ -1,3 +1,4 @@
+/* src/other/layouts/main/style.css */
 .l-main
 {
     height: 100vh;
@@ -23,26 +24,39 @@
     position: relative;
 }
 
-.l-main > .flex > div:last-child > .content 
+/* New: Main content container */
+.main-content {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* New: Scrollable content area */
+.scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.l-main > .flex > div:last-child > .scrollable-content > .content 
 {
     display: flex;
     gap: var(--spacing-6xl);
 }
 
-.l-main > .flex > div:last-child > .content > .left
+.l-main > .flex > div:last-child > .scrollable-content > .content > .left
 {
     flex: 1;
 }
 
-.l-main > .flex > div:last-child > .content > .right-20 { width: 250px; }
-.l-main > .flex > div:last-child > .content > .right-30 { width: 350px; }
-.l-main > .flex > div:last-child > .content > .right-40 { width: 450px; }
-.l-main > .flex > div:last-child > .content > .right-50 { width: 550px; }
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-20 { width: 250px; }
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-30 { width: 350px; }
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-40 { width: 450px; }
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-50 { width: 550px; }
 
-.l-main > .flex > div:last-child > .content > .right-20:empty,
-.l-main > .flex > div:last-child > .content > .right-30:empty,
-.l-main > .flex > div:last-child > .content > .right-40:empty,
-.l-main > .flex > div:last-child > .content > .right-50:empty
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-20:empty,
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-30:empty,
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-40:empty,
+.l-main > .flex > div:last-child > .scrollable-content > .content > .right-50:empty
 {
-    display: none;;
+    display: none;
 }

@@ -70,7 +70,8 @@
 
     // Get invitation count
     const invitationCount = computed(() => {
-        return userStore.user?.pending_invitations_count || 0;
+        const userData = userStore.getData();
+        return userData?.pending_invitations_count || 0;
     });
 
     // Function to open invitations popup
@@ -132,10 +133,14 @@
                     </div>
 
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <!-- Notification Bell -->
-                        <div class="notification-bell" @click="openInvitations" v-if="!minimized">
+                        <!-- Notification Bell - ONLY show if there are invitations -->
+                        <div 
+                            class="notification-bell" 
+                            @click="openInvitations" 
+                            v-if="!minimized && invitationCount > 0"
+                        >
                             <PhBell weight="bold" :size="20" />
-                            <span v-if="invitationCount > 0" class="badge">{{ invitationCount }}</span>
+                            <span class="badge">{{ invitationCount }}</span>
                         </div>
                         
                         <PhCaretDoubleLeft class="action" weight="bold" @click="toggle" />

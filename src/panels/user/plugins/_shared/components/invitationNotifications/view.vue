@@ -261,6 +261,10 @@ onMounted(() => {
     text-align: center;
     padding: 60px 20px;
     color: var(--text-secondary);
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
 }
 
 .empty-state svg {
