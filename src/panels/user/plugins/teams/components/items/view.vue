@@ -26,7 +26,8 @@ import {
     PhUsers, 
     PhDotsThree,
     PhTrash,
-    PhUserPlus
+    PhUserPlus,
+    PhSignOut  
 } from "@phosphor-icons/vue";
 
 // Styles
@@ -84,6 +85,76 @@ function isOrgAdmin(org) {
 function getOrgUrl(org) {
     if (!org || !org.slug) return '#';
     return `https://skedi.com/${org.slug}`;
+}
+
+
+// Get menu options for organization based on role
+function getOrgMenuOptions(org) {
+
+    console.log("ORG", org);
+
+    const options = [];
+    const userOrg = userStore.getOrganizations().find(o => 
+        (o.entity?.id || o.id) === org.id
+    );
+    
+    const isAdmin = userOrg && userOrg.role === 'admin';
+
+    console.log("isADmin", isAdmin);
+    
+    // Everyone can leave
+    options.push({
+        label: 'Leave Organization',
+        iconComponent: PhSignOut,
+        weight: 'bold',
+        onClick: () => leaveOrganization(org)
+    });
+
+    console.log("options", options);
+    
+    // Only admins can delete
+    if (isAdmin) {
+        options.push({
+            label: 'Delete Organization',
+            iconComponent: PhTrash,
+            weight: 'bold',
+            onClick: () => deleteOrganization(org)
+        });
+    }
+    
+    return options;
+}
+
+// Leave organization function
+async function leaveOrganization(org) {
+    popup.open(
+        'leave-org-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to leave "${org.name}"?`,
+            callback: async () => {
+                try {
+                    const response = await api.post(`organizations/${org.id}/leave`);
+                    
+                    if (response.success) {
+                        common.notification('Successfully left the organization', true);
+                        popup.close();
+                        await reloadData();
+                    } else {
+                        common.notification(response.message || 'Failed to leave organization', false);
+                    }
+                } catch (error) {
+                    console.error('Failed to leave organization:', error);
+                    common.notification('Failed to leave organization', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Add member to organization
@@ -169,7 +240,7 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <div class="right" v-if="isOrgAdmin(org)">
+                <div class="right" >
                     <div class="member-badge" v-if="org.users && org.users.length > 0">
                         <PhUsers weight="bold" :size="16" />
                         {{ org.users.length }} member{{ org.users.length !== 1 ? 's' : '' }}
@@ -181,11 +252,13 @@ onMounted(() => {
                             @click="addOrganizationMember(org)"
                             v-tooltip="{ content: 'Add member to organization' }" 
                             as="tertiary icon"
+                            v-if="isOrgAdmin(org)"
                             :iconLeft="{ component: PhUserPlus, weight: 'bold' }" 
                         />
 
                         <!-- Organization settings button - only for admins -->
                         <ButtonComponent
+                            v-if="isOrgAdmin(org)"
                             v-popup="{
                                 component: OrganizationEditForm,
                                 overlay: { position: 'center' },
@@ -206,6 +279,7 @@ onMounted(() => {
                         
                         <!-- Create team button - only for admins -->
                         <ButtonComponent
+                            v-if="isOrgAdmin(org)"
                             v-popup="{
                                 component: TeamCreateForm,
                                 overlay: { position: 'center' },
@@ -226,19 +300,12 @@ onMounted(() => {
                             @click="createTeam(org.id)" 
                         />
                         
-                        <!-- Three dots menu - only for admins -->
                         <ButtonComponent
+                            v-if="getOrgMenuOptions(org).length > 0"
                             v-dropdown="{
                                 component: MenusComponent,
                                 properties: {
-                                    menus: [
-                                        {
-                                            label: 'Delete Organization',
-                                            iconComponent: PhTrash,
-                                            weight: 'bold',
-                                            onClick: () => deleteOrganization(org)
-                                        }
-                                    ]
+                                    menus: getOrgMenuOptions(org)
                                 }
                             }"
                             v-tooltip="{ content: 'More options' }"
