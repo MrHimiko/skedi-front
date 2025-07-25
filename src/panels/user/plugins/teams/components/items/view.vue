@@ -16,7 +16,11 @@ import OrganizationEditForm from '@user_teams/components/form/organizationEdit.v
 import OrganizationCreateForm from '@user_teams/components/form/organizationCreate.vue';
 import ConfirmComponent from '@floated/confirm/view.vue';
 import MemberModal from '@user_shared/components/memberModal/view.vue';
+import { BillingStore } from '@stores/billing';
+import BillingUpgradeModal from '@user_billing/components/upgrade-modal.vue';
 
+const billingStore = BillingStore();
+const canCreateTeams = computed(() => billingStore.planLevel >= 2);
 // Icon imports
 import { 
     PhGearSix, 
@@ -208,12 +212,30 @@ function deleteOrganization(org) {
     );
 }
 
-function createTeam(orgId) {
-    // This is handled by the popup directive
+function createTeam(organizationId) {
+    if (!canCreateTeams.value) {
+        popup.open(
+            'billing-upgrade',
+            null,
+            BillingUpgradeModal,
+            {
+                organizationId,
+                message: 'Teams feature requires a Professional plan or higher.',
+                recommendedPlan: 'professional'
+            }
+        );
+        return;
+    }
 }
 
-onMounted(() => {
+onMounted(async () => {
+
     reloadData();
+
+    for (const org of organizations.value) {
+        await billingStore.loadSubscription(org.id);
+    }
+
 });
 </script>
 
@@ -340,6 +362,24 @@ onMounted(() => {
                 :currentUserId="currentUserId"
                 :reloadData="reloadData"
             />
+
+            <div v-if="!canCreateTeams" class="upgrade-notice">
+                <div class="upgrade-box">
+                    <PhWarning class="warning-icon" />
+                    <span>Creating teams is not available on your current plan</span>
+                    <ButtonComponent
+                        label="Upgrade Plan"
+                        as="primary mini"
+                        @click="() => popup.open('billing-upgrade', null, BillingUpgradeModal, {
+                            organizationId: org.id,
+                            message: 'Unlock teams and more features',
+                            recommendedPlan: 'professional'
+                        })"
+                    />
+                </div>
+            </div>
+
+
         </div>
 
         <!-- Create Organization Button -->
@@ -506,5 +546,30 @@ onMounted(() => {
 .create-org-section {
     text-align: center;
     padding: 20px;
+}
+
+
+.upgrade-notice {
+    margin: 20px 0;
+}
+
+.upgrade-box {
+    background: var(--warning-light);
+    border: 1px solid var(--warning);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.warning-icon {
+    color: var(--warning);
+    font-size: 20px;
+}
+
+.upgrade-box span {
+    flex: 1;
+    color: var(--text-primary);
 }
 </style>

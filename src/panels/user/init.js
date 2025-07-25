@@ -15,6 +15,7 @@ import RunUserForms from '@user_forms/run';
 import RunUserContacts from '@user_contacts/run';
 import RunUserPotentialLeads from '@user_potential_leads/run';
 import RunUserOrganizations from '@user_organizations/run';
+import RunUserBilling from '@user_billing/run';
 
 
 
@@ -36,7 +37,8 @@ initializeApp((app, router, stores) =>
         RunUserForms,
         RunUserContacts,
         RunUserOrganizations,
-        RunUserPotentialLeads
+        RunUserPotentialLeads,
+        RunUserBilling
     ];
 
     if(stores.extension.has(1))
