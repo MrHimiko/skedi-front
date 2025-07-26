@@ -20,7 +20,7 @@ import { BillingStore } from '@stores/billing';
 import BillingUpgradeModal from '@user_billing/components/upgrade-modal.vue';
 
 const billingStore = BillingStore();
-const canCreateTeams = computed(() => billingStore.planLevel >= 2);
+
 // Icon imports
 import { 
     PhGearSix, 
@@ -31,7 +31,9 @@ import {
     PhDotsThree,
     PhTrash,
     PhUserPlus,
-    PhSignOut  
+    PhSignOut,
+    PhWarning,
+    PhUsersThree  
 } from "@phosphor-icons/vue";
 
 // Styles
@@ -43,6 +45,16 @@ const userStore = UserStore();
 const organizations = ref([]);
 const eventsItems = ref(0);
 const currentUserId = userStore.getId();
+
+// Check if a specific organization can create teams
+function canCreateTeams(organizationId) {
+    return billingStore.isProfessional(organizationId);
+}
+
+// Check if organization can add members
+function canAddMembers(organizationId) {
+    return billingStore.canAddMembers(organizationId);
+}
 
 // Load data
 async function reloadData() {
@@ -69,6 +81,9 @@ async function reloadData() {
             });
             
             eventsItems.value++;
+            
+            // Load billing data for all organizations
+            await billingStore.loadAllOrganizationSubscriptions(organizations.value);
         }
     } catch (error) {
         console.error('Failed to reload data:', error);
@@ -91,20 +106,14 @@ function getOrgUrl(org) {
     return `https://skedi.com/${org.slug}`;
 }
 
-
 // Get menu options for organization based on role
 function getOrgMenuOptions(org) {
-
-    console.log("ORG", org);
-
     const options = [];
     const userOrg = userStore.getOrganizations().find(o => 
         (o.entity?.id || o.id) === org.id
     );
     
     const isAdmin = userOrg && userOrg.role === 'admin';
-
-    console.log("isADmin", isAdmin);
     
     // Everyone can leave
     options.push({
@@ -113,8 +122,6 @@ function getOrgMenuOptions(org) {
         weight: 'bold',
         onClick: () => leaveOrganization(org)
     });
-
-    console.log("options", options);
     
     // Only admins can delete
     if (isAdmin) {
@@ -163,6 +170,17 @@ async function leaveOrganization(org) {
 
 // Add member to organization
 function addOrganizationMember(org) {
+    // Check if organization can add members based on their plan
+    if (!canAddMembers(org.id)) {
+        const planLevel = billingStore.getPlanLevel(org.id);
+        if (planLevel === 1) {
+            popup.notification('Free plan only allows 1 member. Please upgrade.', false);
+        } else {
+            popup.notification('No seats available. Please purchase additional seats.', false);
+        }
+        return;
+    }
+    
     popup.open(
         'org-members',
         null,
@@ -212,31 +230,61 @@ function deleteOrganization(org) {
     );
 }
 
+// Create team function with per-organization billing check
 function createTeam(organizationId) {
-    if (!canCreateTeams.value) {
+    if (!canCreateTeams(organizationId)) {
         popup.open(
             'billing-upgrade',
             null,
             BillingUpgradeModal,
             {
-                organizationId,
+                organizationId: organizationId,
                 message: 'Teams feature requires a Professional plan or higher.',
                 recommendedPlan: 'professional'
             }
         );
         return;
     }
+    
+    // If billing check passes, the popup will handle the actual team creation
+}
+
+// Handle team creation button click
+function handleCreateTeamClick(org) {
+    // First check if they can create teams
+    if (!canCreateTeams(org.id)) {
+        popup.open(
+            'billing-upgrade',
+            null,
+            BillingUpgradeModal,
+            {
+                organizationId: org.id,
+                message: 'Teams feature requires a Professional plan or higher.',
+                recommendedPlan: 'professional'
+            }
+        );
+    }
+    // If they can, the v-popup directive will handle opening the create form
+}
+
+// Get plan badge for organization
+function getPlanBadge(orgId) {
+    const planLevel = billingStore.getPlanLevel(orgId);
+    const plans = ['Free', 'Professional', 'Business', 'Enterprise'];
+    return plans[planLevel - 1] || 'Free';
+}
+
+// Get plan badge color
+function getPlanBadgeColor(orgId) {
+    const planLevel = billingStore.getPlanLevel(orgId);
+    const colors = ['#6b7280', '#3b82f6', '#8b5cf6', '#10b981'];
+    return colors[planLevel - 1] || '#6b7280';
 }
 
 onMounted(async () => {
-
-    reloadData();
-
-    for (const org of organizations.value) {
-        await billingStore.loadSubscription(org.id);
-    }
-
+    await reloadData();
 });
+
 </script>
 
 <template>
@@ -254,6 +302,9 @@ onMounted(async () => {
                                     {{ org.name }}
                                 </a>
                                 <span v-if="isOrgAdmin(org)" class="admin">ADMIN</span>
+                                <span class="plan-badge" :style="{ backgroundColor: getPlanBadgeColor(org.id) + '20', color: getPlanBadgeColor(org.id) }">
+                                    {{ getPlanBadge(org.id) }}
+                                </span>
                             </p>
                             <a :href="getOrgUrl(org)" target="_blank" class="org-url">
                                 {{ getOrgUrl(org) }}
@@ -299,10 +350,10 @@ onMounted(async () => {
                             :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
                         />
                         
-                        <!-- Create team button - only for admins -->
+                        <!-- Create team button - ALWAYS visible for admins -->
                         <ButtonComponent
                             v-if="isOrgAdmin(org)"
-                            v-popup="{
+                            v-popup="canCreateTeams(org.id) ? {
                                 component: TeamCreateForm,
                                 overlay: { position: 'center' },
                                 properties: {
@@ -315,11 +366,11 @@ onMounted(async () => {
                                     class: 'h-auto',
                                     title: `Create new team in ${org.name}`,
                                 }
-                            }"
+                            } : null"
                             v-tooltip="{ content: 'Create new team' }" 
                             as="tertiary icon"
                             :iconLeft="{ component: PhPlus, weight: 'bold' }" 
-                            @click="createTeam(org.id)" 
+                            @click="handleCreateTeamClick(org)" 
                         />
                         
                         <ButtonComponent
@@ -352,7 +403,45 @@ onMounted(async () => {
                 </ul>
             </div>
 
-            <!-- Pass org users and current user ID down to all teams using the teams array -->
+            <!-- Show empty state if no teams -->
+            <div v-if="(!org.teams || org.teams.length === 0) && isOrgAdmin(org)" class="no-teams-box">
+                <PhUsersThree weight="duotone" :size="48" class="no-teams-icon" />
+                <h3>No teams yet</h3>
+                <p>Teams help you organize members and manage permissions</p>
+                <div>
+                <ButtonComponent
+                    v-if="canCreateTeams(org.id)"
+                    label="Create your first team"
+                    as="primary"
+                    :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                    v-popup="{
+                        component: TeamCreateForm,
+                        overlay: { position: 'center' },
+                        properties: {
+                            endpoint: `organizations/${org.id}/teams`,
+                            type: 'POST',
+                            callback: (event, data, response, success) => {
+                                popup.close();
+                                reloadData();
+                            },
+                            class: 'h-auto',
+                            title: `Create new team in ${org.name}`,
+                        }
+                    }"
+                />
+                <ButtonComponent
+                    v-else
+                    label="Upgrade plan to create teams"
+                    as="primary"
+                    :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                    @click="() => popup.open('billing-upgrade', null, BillingUpgradeModal, {
+                        organizationId: org.id,
+                        message: 'Unlock teams and more features',
+                        recommendedPlan: 'professional'
+                    })"
+                /></div>
+            </div>
+
             <TeamList
                 v-if="org.teams && org.teams.length"
                 :teams="org.teams"
@@ -361,21 +450,26 @@ onMounted(async () => {
                 :orgUsers="org.users || []"
                 :currentUserId="currentUserId"
                 :reloadData="reloadData"
+                :canCreateSubTeams="canCreateTeams(org.id)"
+                :isOrgAdmin="isOrgAdmin(org)"
             />
 
-            <div v-if="!canCreateTeams" class="upgrade-notice">
+            <!-- Show upgrade notice only for organizations on free plan and only for admins -->
+            <div v-if="!canCreateTeams(org.id) && isOrgAdmin(org) && org.teams && org.teams.length > 0" class="upgrade-notice">
                 <div class="upgrade-box">
-                    <PhWarning class="warning-icon" />
-                    <span>Creating teams is not available on your current plan</span>
-                    <ButtonComponent
-                        label="Upgrade Plan"
-                        as="primary mini"
-                        @click="() => popup.open('billing-upgrade', null, BillingUpgradeModal, {
-                            organizationId: org.id,
-                            message: 'Unlock teams and more features',
-                            recommendedPlan: 'professional'
-                        })"
-                    />
+                    <PhWarning weight="bold" class="warning-icon" />
+                    <span>Creating new teams is not available on your current plan</span>
+                    <div>
+                        <ButtonComponent
+                            label="Upgrade Plan"
+                            as="primary mini"
+                            @click="() => popup.open('billing-upgrade', null, BillingUpgradeModal, {
+                                organizationId: org.id,
+                                message: 'Unlock teams and more features',
+                                recommendedPlan: 'professional'
+                            })"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -480,6 +574,14 @@ onMounted(async () => {
     text-transform: uppercase;
 }
 
+.org-name p span.plan-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
 .org-url {
     color: var(--brand-blue);
     font-size: 14px;
@@ -548,19 +650,18 @@ onMounted(async () => {
     padding: 20px;
 }
 
-
 .upgrade-notice {
     margin: 20px 0;
 }
 
 .upgrade-box {
-    background: var(--warning-light);
-    border: 1px solid var(--warning);
+    background: var(--brand-yellow);
     border-radius: 8px;
     padding: 16px;
     display: flex;
     align-items: center;
     gap: 12px;
+    font-weight: 500;
 }
 
 .warning-icon {
@@ -571,5 +672,37 @@ onMounted(async () => {
 .upgrade-box span {
     flex: 1;
     color: var(--text-primary);
+}
+
+/* No teams empty state */
+.no-teams-box {
+    margin: 30px 0;
+    padding: 40px;
+    background: var(--background-1);
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.no-teams-icon {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.no-teams-box h3 {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.no-teams-box p {
+    margin: 0 0 24px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
 }
 </style>

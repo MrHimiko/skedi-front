@@ -381,11 +381,11 @@ function getStatusIcon(status) {
             <div v-if="isAdmin" class="invite-form">
                 <div class="input-group">
                     <InputComponent
-                        v-model="email"
+                        :value="email"
                         placeholder="Enter email address"
                         type="email"
                         :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold' }"
-                        @keyup.enter="sendInvitation"
+                        @onInput="(e, value) => email = value"
                     />
                 </div>
                 <div class="select-group">

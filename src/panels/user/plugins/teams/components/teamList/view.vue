@@ -49,7 +49,15 @@ const props = defineProps({
    isRootLevel: {
        type: Boolean,
        default: true
-   }
+   },
+   canCreateSubTeams: {
+        type: Boolean,
+        default: true
+    },
+    isOrgAdmin: {
+        type: Boolean,
+        default: false
+    }
 });
 
 // Check if user is organization admin
@@ -289,7 +297,7 @@ function getTeamMenuOptions(team) {
                        </div>
                    </div>
                    
-                   <div v-if="canPerformAdminActions(team)" class="team-footer">
+                   <div v-if="canPerformAdminActions(team) && canCreateSubTeams" class="team-footer">
                        <ButtonComponent
                            v-popup="{
                                component: TeamCreateForm,
@@ -375,7 +383,7 @@ function getTeamMenuOptions(team) {
                        <div class="right">
                            <div class="actions">
                                <ButtonComponent
-                                   v-if="canPerformAdminActions(team)"
+                                   v-if="canPerformAdminActions(team) && canCreateSubTeams"
                                    v-popup="{
                                        component: TeamCreateForm,
                                        overlay: { position: 'center' },

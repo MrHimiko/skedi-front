@@ -1,5 +1,3 @@
-// src/panels/user/plugins/billing/run.js
-
 export default class {
     constructor(app, router, stores) {
         this.app = app;

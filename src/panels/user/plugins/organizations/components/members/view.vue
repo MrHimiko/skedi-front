@@ -258,7 +258,7 @@ onMounted(() => {
                     placeholder="Enter email address to invite"
                     type="email"
                     :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold' }"
-                    @keyup.enter="inviteMember"
+                    @onInput="(e, value) => inviteEmail = value"
                 />
                 <div>
                     <ButtonComponent

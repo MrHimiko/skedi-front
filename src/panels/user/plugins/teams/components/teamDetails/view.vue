@@ -11,7 +11,9 @@ import { popup } from '@utils/popup';
 import { common } from '@utils/common';
 import { ref, computed } from 'vue';
 import { UserStore } from '@stores/user';
+import { BillingStore } from '@stores/billing';
 
+const billingStore = BillingStore();
 const userStore = UserStore();
 
 const props = defineProps({
@@ -62,6 +64,10 @@ const isOrgAdmin = computed(() => {
 const canPerformAdminActions = computed(() => {
     if (!teamData.value) return false;
     return isOrgAdmin.value || hasAdminAccess(teamData.value, props.currentUserId);
+});
+
+const canCreateSubTeams = computed(() => {
+    return billingStore.isProfessional(props.orgId);
 });
 
 // Function to refresh team data by fetching from store
@@ -208,7 +214,7 @@ function getSubteamCountText(team) {
                     <div class="subteams-header">
                         <h4>Sub-teams</h4>
                         <div><ButtonComponent
-                            v-if="canPerformAdminActions"
+                            v-if="canPerformAdminActions && canCreateSubTeams"
                             @click="createSubteam"
                             v-tooltip="{ content: 'Create subteam' }"
                             as="tertiary small"
@@ -224,6 +230,8 @@ function getSubteamCountText(team) {
                         :currentUserId="currentUserId"
                         :reloadData="refreshTeamData"
                         :isRootLevel="false"
+                        :canCreateSubTeams="canCreateSubTeams"
+                        :isOrgAdmin="isOrgAdmin"
                     />
                 </div>
                 
@@ -231,6 +239,7 @@ function getSubteamCountText(team) {
                 <div v-else-if="canPerformAdminActions" class="no-subteams">
                     <p>No sub-teams yet</p>
                     <ButtonComponent
+                        v-if="canPerformAdminActions && canCreateSubTeams"
                         @click="createSubteam"
                         as="secondary"
                         :iconLeft="{ component: PhPlus, weight: 'bold' }"

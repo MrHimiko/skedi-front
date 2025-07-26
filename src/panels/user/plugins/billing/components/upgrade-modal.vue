@@ -66,17 +66,11 @@
                                 @click="() => window.open('https://skedi.com/enterprise', '_blank')"
                             />
                             <ButtonComponent
-                                v-else-if="isPlanHigher(plan.slug)"
+                                v-else
                                 :label="loading ? 'Processing...' : 'Upgrade'"
                                 as="primary"
                                 :disabled="loading"
                                 @click="upgradeToPlan(plan)"
-                            />
-                            <ButtonComponent
-                                v-else
-                                label="Downgrade"
-                                as="secondary"
-                                disabled
                             />
                         </div>
                     </div>
@@ -122,7 +116,8 @@ let countdownInterval = null;
 
 const currentPlanSlug = computed(() => {
     const levels = ['free', 'professional', 'business', 'enterprise'];
-    return levels[billingStore.planLevel - 1] || 'free';
+    const planLevel = billingStore.getPlanLevel(props.organizationId);
+    return levels[planLevel - 1] || 'free';
 });
 
 onMounted(async () => {
