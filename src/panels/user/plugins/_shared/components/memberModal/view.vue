@@ -390,9 +390,10 @@ function getStatusIcon(status) {
                 </div>
                 <div class="select-group">
                     <SelectComponent
-                        v-model="role"
+                        :value="role"
                         :options="roleOptions"
-                        value="member"
+                        placeholder="Select role"
+                        @change="(value) => role = value"
                     />
                 </div>
                 <div>
@@ -597,7 +598,7 @@ function getStatusIcon(status) {
     justify-content: space-between;
     align-items: center;
     padding: 12px;
-    background: var(--background-1);
+    background: var(--background-0);
     border: 1px solid var(--border);
     border-radius: 8px;
 }
