@@ -11,7 +11,7 @@
 
 .c-textarea > .holder:focus-within
 {
-    border: 1px solid var(--brand-default);
+    border: 1px solid var(--black);
 }
 
 .c-textarea > div > label 
