@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import { BillingStore } from '@stores/billing';
 import { popup } from '@utils/popup';
+import { common } from '@utils/common';
 
 export function useBilling(organizationId = null) {
     const billingStore = BillingStore();
@@ -15,7 +16,7 @@ export function useBilling(organizationId = null) {
         }
         
         if (!billingStore.requiresPlan(checkOrgId, requiredLevel)) {
-            popup.notification(
+            common.notification(
                 `${featureName} requires a higher plan. Please upgrade.`, 
                 false
             );
@@ -33,9 +34,9 @@ export function useBilling(organizationId = null) {
         
         if (!billingStore.canAddMembers(checkOrgId)) {
             if (billingStore.isFreePlan(checkOrgId)) {
-                popup.notification('Free plan only allows 1 member. Please upgrade.', false);
+                common.notification('Free plan only allows 1 member. Please upgrade.', false);
             } else {
-                popup.notification('No seats available. Please purchase additional seats.', false);
+                common.notification('No seats available. Please purchase additional seats.', false);
             }
             return false;
         }

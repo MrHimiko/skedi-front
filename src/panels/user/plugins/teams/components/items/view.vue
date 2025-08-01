@@ -170,17 +170,7 @@ async function leaveOrganization(org) {
 
 // Add member to organization
 function addOrganizationMember(org) {
-    // Check if organization can add members based on their plan
-    if (!canAddMembers(org.id)) {
-        const planLevel = billingStore.getPlanLevel(org.id);
-        if (planLevel === 1) {
-            popup.notification('Free plan only allows 1 member. Please upgrade.', false);
-        } else {
-            popup.notification('No seats available. Please purchase additional seats.', false);
-        }
-        return;
-    }
-    
+    // Remove the canAddMembers check - let the modal handle seat validation
     popup.open(
         'org-members',
         null,

@@ -50,19 +50,28 @@
         <div class="members-header">
             <h2>Organization Members</h2>
             <div class="header-actions">
-                <div class="invite-form" v-if="userRole === 'admin'">
+                <div v-if="showNoSeatsMessage && userRole === 'admin'" class="no-seats-alert">
+                    <div class="alert-content">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span>Your organization has reached its seat limit ({{ seats.total }} seats).</span>
+                    </div>
+                    <button @click="openPurchaseSeats" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus"></i> Buy More Seats
+                    </button>
+                </div>
+                
+                <div v-else-if="userRole === 'admin'" class="invite-form">
                     <input
                         v-model="inviteEmail"
                         type="email"
                         placeholder="Enter email to invite"
                         class="invite-input"
-                        :disabled="seats.available === 0"
                         @keyup.enter="inviteMember"
                     />
                     <button 
                         @click="inviteMember"
                         class="btn btn-primary"
-                        :disabled="!inviteEmail || isInviting || seats.available === 0"
+                        :disabled="!inviteEmail || isInviting"
                     >
                         <span v-if="isInviting">
                             <i class="fas fa-spinner fa-spin"></i> Inviting...
@@ -71,11 +80,6 @@
                             <i class="fas fa-paper-plane"></i> Send Invite
                         </span>
                     </button>
-                </div>
-                
-                <div v-if="seats.available === 0 && userRole === 'admin'" class="no-seats-message">
-                    <i class="fas fa-info-circle"></i>
-                    No seats available. <a href="#" @click.prevent="openPurchaseSeats">Buy more seats</a> to invite new members.
                 </div>
             </div>
         </div>
@@ -244,6 +248,7 @@ export default {
         const loading = ref(false);
         const inviteEmail = ref('');
         const isInviting = ref(false);
+        const showNoSeatsMessage = ref(false);
         const seats = ref({
             total: 1,
             used: 0,
@@ -299,6 +304,13 @@ export default {
                 return;
             }
             
+            // Check seats availability first
+            if (seats.value.available === 0) {
+                showNoSeatsMessage.value = true;
+                common.notification(`No seats available. Your organization is using all ${seats.value.total} seats.`, false);
+                return;
+            }
+            
             try {
                 isInviting.value = true;
                 
@@ -310,13 +322,16 @@ export default {
                 if (response.success) {
                     common.notification('Invitation sent successfully', true);
                     inviteEmail.value = '';
+                    showNoSeatsMessage.value = false;
                     loadMembers();
                 } else {
                     if (response.data?.requires_purchase) {
-                        // No seats available
-                        openPurchaseSeats();
+                        // No seats available - show purchase UI
+                        showNoSeatsMessage.value = true;
+                        common.notification(response.message || 'No seats available', false);
+                    } else {
+                        common.notification(response.message || 'Failed to send invitation', false);
                     }
-                    common.notification(response.message || 'Failed to send invitation', false);
                 }
             } catch (error) {
                 console.error('Failed to invite member:', error);
@@ -340,6 +355,8 @@ export default {
         function closePurchaseModal() {
             showPurchaseModal.value = false;
             seatsToAdd.value = 1;
+            // Reset the no seats message when closing modal
+            showNoSeatsMessage.value = false;
         }
 
         function incrementSeats() {
@@ -469,6 +486,7 @@ export default {
             loading,
             inviteEmail,
             isInviting,
+            showNoSeatsMessage,
             seats,
             compliance,
             showPurchaseModal,
@@ -617,6 +635,30 @@ export default {
 .invite-input:disabled {
     background-color: #e9ecef;
     cursor: not-allowed;
+}
+
+.no-seats-alert {
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    width: 100%;
+}
+
+.no-seats-alert .alert-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #856404;
+}
+
+.no-seats-alert .alert-content i {
+    color: #f0ad4e;
+    font-size: 16px;
 }
 
 .no-seats-message {

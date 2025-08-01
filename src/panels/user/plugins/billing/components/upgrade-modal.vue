@@ -1,15 +1,18 @@
-// src/panels/user/plugins/billing/components/upgrade-modal.vue
-
 <template>
     <PopupLayout title="Upgrade Plan" class="upgrade-modal h-auto">
         <template #content>
             <div v-if="!isSuccess">
+                <!-- Plan Selection -->
                 <div class="plans-grid">
                     <div 
                         v-for="plan in plans" 
                         :key="plan.slug"
                         class="plan-card"
-                        :class="{ 'current': plan.slug === currentPlanSlug }"
+                        :class="{ 
+                            'current': plan.slug === currentPlanSlug,
+                            'selected': selectedPlan?.slug === plan.slug
+                        }"
+                        @click="selectPlan(plan)"
                     >
                         <div class="plan-content">
                             <div class="plan-header">
@@ -53,26 +56,80 @@
                         </div>
                         
                         <div class="plan-action">
-                            <ButtonComponent
-                                v-if="plan.slug === currentPlanSlug"
-                                label="Current Plan"
-                                as="tertiary"
-                                disabled
-                            />
-                            <ButtonComponent
-                                v-else-if="plan.slug === 'enterprise'"
-                                label="Contact Sales"
-                                as="primary"
-                                @click="() => window.open('https://skedi.com/enterprise', '_blank')"
-                            />
-                            <ButtonComponent
-                                v-else
-                                :label="loading ? 'Processing...' : 'Upgrade'"
-                                as="primary"
-                                :disabled="loading"
-                                @click="upgradeToPlan(plan)"
+                            <div v-if="plan.slug === currentPlanSlug" class="current-badge">
+                                Current Plan
+                            </div>
+                            <div v-else-if="selectedPlan?.slug === plan.slug" class="selected-badge">
+                                <PhCheck :size="16" weight="bold" /> Selected
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seat Selection (only for paid plans) -->
+                <div v-if="selectedPlan && selectedPlan.slug !== 'free' && selectedPlan.slug !== 'enterprise'" class="seats-section">
+                    <div>
+                        <h3>Additional Team Seats</h3>
+                        <p class="seats-info">Add team members to your organization ($9/seat/month)</p>
+                    </div>
+                    <div class="seats-selector">
+                        <ButtonComponent
+                            @click="additionalSeats = Math.max(0, additionalSeats - 1)"
+                            :disabled="additionalSeats <= 0"
+                            as="tertiary icon"
+                            :iconLeft="{ component: PhMinus }"
+                        />
+                        <div class="seats-display">
+                            <input 
+                                v-model.number="additionalSeats" 
+                                type="number" 
+                                min="0" 
+                                max="100"
+                                class="seats-input"
                             />
                         </div>
+                        <ButtonComponent
+                            @click="additionalSeats = Math.min(100, additionalSeats + 1)"
+                            :disabled="additionalSeats >= 100"
+                            as="tertiary icon"
+                            :iconLeft="{ component: PhPlus }"
+                        />
+                    </div>
+                </div>
+
+                <!-- Order Summary -->
+                <div v-if="selectedPlan" class="order-summary">
+                    <h3>Order Summary</h3>
+                    <div class="summary-lines">
+                        <div class="summary-line">
+                            <span>{{ selectedPlan.name }} Plan</span>
+                            <span>${{ selectedPlan.price_monthly / 100 }}/mo</span>
+                        </div>
+                        <div v-if="additionalSeats > 0" class="summary-line">
+                            <span>{{ additionalSeats }} Additional {{ additionalSeats === 1 ? 'Seat' : 'Seats' }}</span>
+                            <span>${{ additionalSeats * 9 }}/mo</span>
+                        </div>
+                        <div class="summary-line total">
+                            <span>Total</span>
+                            <span>${{ totalPrice }}/mo</span>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <ButtonComponent
+                            v-if="selectedPlan.slug === 'enterprise'"
+                            label="Contact Sales"
+                            as="primary"
+                            @click="() => window.open('https://skedi.com/enterprise', '_blank')"
+                        />
+                        <ButtonComponent
+                            v-else
+                            :label="loading ? 'Processing...' : 'Continue to Payment'"
+                            as="primary"
+                            :loading="loading"
+                            :disabled="loading || !selectedPlan"
+                            @click="proceedToCheckout"
+                        />
                     </div>
                 </div>
             </div>
@@ -95,6 +152,7 @@ import ButtonComponent from '@form/button/view.vue';
 import { api } from '@utils/api';
 import { popup } from '@utils/popup';
 import { BillingStore } from '@stores/billing';
+import { PhCheck, PhPlus, PhMinus } from "@phosphor-icons/vue";
 
 const props = defineProps({
     organizationId: {
@@ -109,6 +167,8 @@ const billingStore = BillingStore();
 
 const loading = ref(false);
 const plans = ref([]);
+const selectedPlan = ref(null);
+const additionalSeats = ref(0);
 const isSuccess = ref(false);
 const upgradedPlanName = ref('');
 const countdown = ref(5);
@@ -119,6 +179,41 @@ const currentPlanSlug = computed(() => {
     const planLevel = billingStore.getPlanLevel(props.organizationId);
     return levels[planLevel - 1] || 'free';
 });
+
+const totalPrice = computed(() => {
+    if (!selectedPlan.value) return 0;
+    const planPrice = selectedPlan.value.price_monthly / 100;
+    const seatsPrice = additionalSeats.value * 9;
+    return planPrice + seatsPrice;
+});
+
+function selectPlan(plan) {
+    if (plan.slug !== currentPlanSlug.value) {
+        selectedPlan.value = plan;
+    }
+}
+
+async function proceedToCheckout() {
+    if (!selectedPlan.value) return;
+    
+    loading.value = true;
+    
+    try {
+        const response = await api.post(`billing/organizations/${props.organizationId}/checkout`, {
+            plan_slug: selectedPlan.value.slug,
+            additional_seats: additionalSeats.value
+        });
+        
+        if (response.success && response.data.checkout_url) {
+            window.location.href = response.data.checkout_url;
+        } else {
+            throw new Error(response.message || 'Failed to create checkout session');
+        }
+    } catch (error) {
+        popup.notification(error.message || 'Failed to start checkout', false);
+        loading.value = false;
+    }
+}
 
 onMounted(async () => {
     const sessionId = route.query.session_id;
@@ -150,30 +245,6 @@ onMounted(async () => {
         console.error('Failed to load plans:', error);
     }
 });
-
-function isPlanHigher(planSlug) {
-    const levels = { free: 1, professional: 2, business: 3, enterprise: 4 };
-    return levels[planSlug] > billingStore.planLevel;
-}
-
-async function upgradeToPlan(plan) {
-    loading.value = true;
-    
-    try {
-        const response = await api.post(`billing/organizations/${props.organizationId}/checkout`, {
-            plan_slug: plan.slug
-        });
-        
-        if (response.success && response.data.checkout_url) {
-            window.location.href = response.data.checkout_url;
-        } else {
-            throw new Error(response.message || 'Failed to create checkout session');
-        }
-    } catch (error) {
-        popup.notification(error.message || 'Failed to start checkout', false);
-        loading.value = false;
-    }
-}
 
 async function handleStripeReturn(sessionId) {
     try {
@@ -210,34 +281,25 @@ onUnmounted(() => {
 
 <style scoped>
 .upgrade-modal {
-    min-width: 600px;
+    width: 100%;
+    max-width: 900px;
 }
 
 .plans-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-}
-
-@media (min-width: 768px) {
-    .plans-grid {
-        grid-template-columns: repeat(4, 1fr);
-    }
-    
-    .upgrade-modal {
-        min-width: 900px;
-    }
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
 }
 
 .plan-card {
-    border: 2px solid var(--border);
+    border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    min-height: 300px;
+    padding: 20px;
+    cursor: pointer;
     transition: all 0.2s;
+    position: relative;
+    background: var(--background-0);
 }
 
 .plan-card:hover {
@@ -245,58 +307,169 @@ onUnmounted(() => {
 }
 
 .plan-card.current {
-    background: var(--background-2);
-    opacity: 0.8;
+    cursor: default;
+    pointer-events: none;
+}
+
+.plan-card.selected {
+    border-color: var(--brand-primary);
 }
 
 .plan-content {
-    flex: 1;
+    min-height: 200px;
 }
 
 .plan-header {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .plan-header h3 {
     margin: 0 0 8px 0;
-    font-size: 20px;
+    font-size: 18px;
 }
 
 .plan-price {
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: 2px;
 }
 
 .plan-price .currency {
-    font-size: 16px;
+    font-size: 14px;
     color: var(--text-secondary);
 }
 
 .plan-price .amount {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
 }
 
 .plan-price .period {
-    font-size: 14px;
+    font-size: 12px;
     color: var(--text-secondary);
 }
 
 .plan-features {
-    margin-bottom: 24px;
+    font-size: 13px;
+    line-height: 1.6;
 }
 
 .plan-features p {
-    line-height: 1.8;
+    margin: 0;
     color: var(--text-secondary);
-    font-size: 14px;
 }
 
 .plan-action {
-    margin-top: auto;
+    margin-top: 16px;
 }
 
+.current-badge, .selected-badge {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.current-badge {
+    background: var(--background-3);
+    color: var(--text-secondary);
+}
+
+.selected-badge {
+    background: var(--brand-fill);
+    color: var(--brand-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+/* Seats Section */
+.seats-section {
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    background: var(--background-0);
+    align-items: center;
+}
+
+.seats-section h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+}
+
+.seats-info {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.seats-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.seats-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.seats-input {
+    width: 60px;
+    padding: 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.seats-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Order Summary */
+.order-summary {
+    background: var(--background-1);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.order-summary h3 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+}
+
+.summary-lines {
+    margin-bottom: 20px;
+}
+
+.summary-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+}
+
+.summary-line.total {
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 16px;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.action-buttons {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Success Message */
 .success-message {
     text-align: center;
     padding: 40px;
@@ -321,5 +494,16 @@ onUnmounted(() => {
 
 .success-message p {
     margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+    .upgrade-modal {
+        min-width: unset;
+        width: 90vw;
+    }
+    
+    .plans-grid {
+        grid-template-columns: 1fr;
+    }
 }
 </style>

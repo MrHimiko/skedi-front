@@ -13,6 +13,7 @@ import ButtonComponent from '@form/button/view.vue';
 import ConfirmComponent from '@floated/confirm/view.vue';
 import MenusComponent from '@global/menus/view.vue';
 
+import PurchaseSeatsModal from '@user_shared/components/purchaseSeatsModal/view.vue';
 import { 
     PhEnvelopeSimple, 
     PhPaperPlaneTilt,
@@ -24,7 +25,9 @@ import {
     PhTrash,
     PhCrown,
     PhUser,
-    PhSignOut
+    PhSignOut,
+    PhShoppingCart,
+    PhWarning
 } from "@phosphor-icons/vue";
 
 const props = defineProps({
@@ -55,14 +58,24 @@ const userStore = UserStore();
 const router = useRouter();
 
 // State
-const email = ref('');
-const role = ref('member');
-const isLoading = ref(false);
 const members = ref([]);
 const invitations = ref([]);
 const searchQuery = ref('');
 const currentUserId = computed(() => userStore.getId());
 const isAdmin = ref(false);
+const isLoading = ref(false);
+
+// Invitation form state
+const inviteEmail = ref('');
+const inviteRole = ref('member');
+const showNoSeatsMessage = ref(false);
+const seatInfo = ref({
+    total: 1,
+    used: 0,
+    current_members: 0,
+    pending_invitations: 0,
+    available: 1
+});
 
 // Check if current user is admin
 onMounted(async () => {
@@ -79,9 +92,13 @@ async function checkAdminStatus() {
         isAdmin.value = currentOrg && currentOrg.role === 'admin';
     } else {
         // For teams, check if user is team admin or org admin
-        const response = await api.get(`organizations/${props.organizationId}/teams/${props.entityId}`);
-        if (response.success && response.data) {
-            isAdmin.value = response.data.effective_role === 'admin';
+        try {
+            const response = await api.get(`organizations/${props.organizationId}/teams/${props.entityId}`);
+            if (response.success && response.data) {
+                isAdmin.value = response.data.effective_role === 'admin';
+            }
+        } catch (error) {
+            console.error('Failed to check admin status:', error);
         }
     }
 }
@@ -149,7 +166,24 @@ async function loadData() {
         ]);
         
         if (membersResponse.success) {
-            members.value = membersResponse.data || [];
+            // Handle different response structures
+            if (props.type === 'organization' && membersResponse.data.members) {
+                // New structure with seats info
+                members.value = membersResponse.data.members || [];
+                
+                // Update seat info if available
+                if (membersResponse.data.seats) {
+                    seatInfo.value = membersResponse.data.seats;
+                    
+                    // Automatically show no seats message if no seats available
+                    if (isAdmin.value && seatInfo.value.available === 0) {
+                        showNoSeatsMessage.value = true;
+                    }
+                }
+            } else {
+                // Old structure or team endpoint
+                members.value = membersResponse.data || [];
+            }
         }
         
         if (invitationsResponse.success) {
@@ -162,6 +196,11 @@ async function loadData() {
         isLoading.value = false;
     }
 }
+
+
+const shouldShowInviteForm = computed(() => {
+    return isAdmin.value && !showNoSeatsMessage.value;
+});
 
 // Leave entity
 async function leaveEntity() {
@@ -220,10 +259,16 @@ async function leaveEntity() {
 
 // Send invitation
 async function sendInvitation() {
-
-    console.log("EMAILK", email);
-
-    if (!email.value || !email.value.includes('@')) {
+    const emailValue = inviteEmail.value.trim();
+    
+    if (!emailValue) {
+        common.notification('Please enter an email address', false);
+        return;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailValue)) {
         common.notification('Please enter a valid email address', false);
         return;
     }
@@ -232,29 +277,33 @@ async function sendInvitation() {
         isLoading.value = true;
         
         let endpoint;
-        let data = {
-            email: email.value,
-            role: role.value
-        };
-        
         if (props.type === 'organization') {
             endpoint = `organizations/${props.entityId}/members/invite`;
         } else {
             endpoint = `organizations/${props.organizationId}/teams/${props.entityId}/members/invite`;
         }
         
-        const response = await api.post(endpoint, data);
+        const response = await api.post(endpoint, {
+            email: emailValue,
+            role: inviteRole.value
+        });
         
         if (response.success) {
             common.notification('Invitation sent successfully', true);
-            email.value = '';
-            role.value = 'member';
+            inviteEmail.value = '';
+            inviteRole.value = 'member';
+            showNoSeatsMessage.value = false;
             loadData();
             
             if (props.callback) {
                 props.callback();
             }
         } else {
+            // Check if it's a seat limitation error
+            if (response.data?.requires_purchase && response.data?.seats) {
+                seatInfo.value = response.data.seats;
+                showNoSeatsMessage.value = true;
+            }
             common.notification(response.message || 'Failed to send invitation', false);
         }
     } catch (error) {
@@ -289,6 +338,37 @@ async function updateMemberRole(member, newRole) {
     }
 }
 
+// Open purchase seats modal
+function openPurchaseSeats() {
+    const orgId = props.type === 'organization' ? props.entityId : props.organizationId;
+    
+    // Close current modal
+    popup.close();
+    
+    // Open purchase seats modal
+    popup.open(
+        'purchase-seats',
+        null,
+        PurchaseSeatsModal,
+        {
+            organizationId: orgId,
+            recommendedSeats: Math.max(1, seatInfo.value.used - seatInfo.value.total + 1),
+            callback: () => {
+                // Reopen member modal after purchase
+                popup.open(
+                    'members-modal',
+                    null,
+                    MemberModal,
+                    props
+                );
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
 // Remove member
 function removeMember(member) {
     const entityType = props.type === 'organization' ? 'organization' : 'team';
@@ -316,7 +396,7 @@ function removeMember(member) {
                         popup.close();
                         loadData();
                     } else {
-                        common.notification('Failed to remove member', false);
+                        common.notification(response.message || 'Failed to remove member', false);
                     }
                 } catch (error) {
                     console.error('Failed to remove member:', error);
@@ -370,50 +450,92 @@ function getStatusIcon(status) {
             return PhClock;
     }
 }
+
+// Get status color
+function getStatusColor(status) {
+    switch (status) {
+        case 'pending':
+            return 'var(--warning)';
+        case 'accepted':
+            return 'var(--success)';
+        case 'declined':
+            return 'var(--danger)';
+        default:
+            return 'var(--text-secondary)';
+    }
+}
 </script>
 
 <template>
     <PopupLayout :title="modalTitle" customClass="h-auto member-modal">
         <template #content>
-            
-            
-            <!-- Invite Form (Admin Only) -->
-            <div v-if="isAdmin" class="invite-form">
-                <div class="input-group">
-                    <InputComponent
-                        :value="email"
-                        placeholder="Enter email address"
-                        type="email"
-                        :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold' }"
-                        @onInput="(e, value) => email = value"
-                    />
+            <!-- Invite Form or No Seats Message (Admin Only) -->
+            <div v-if="isAdmin" class="invite-section">
+                <!-- No Seats Alert - Show immediately if no seats available -->
+                <div v-if="seatInfo.available === 0" class="no-seats-alert">
+                    <div class="alert-content">
+                        <h4>No seats available</h4>
+                        <p>Purchase additional seats to invite more members.</p>
+                    </div>
+                    <div class="alert-actions">
+                        <ButtonComponent
+                            @click="openPurchaseSeats"
+                            as="primary"
+                            :iconLeft="{ component: PhShoppingCart, weight: 'bold' }"
+                            label="Buy More Seats"
+                        />
+                    </div>
                 </div>
-                <div class="select-group">
-                    <SelectComponent
-                        :value="role"
-                        :options="roleOptions"
-                        placeholder="Select role"
-                        @change="(value) => role = value"
-                    />
-                </div>
-                <div>
-                    <ButtonComponent
-                        :iconLeft="{ component: PhPaperPlaneTilt, weight: 'bold' }"
-                        label="Invite"
-                        :loading="isLoading"
-                        @click="sendInvitation"
-                    />
+                
+                <!-- Invite Form - Only show if seats are available -->
+                <div v-else class="invite-form">
+                    <div class="input-group">
+                        <InputComponent
+                            :value="inviteEmail"
+                            placeholder="Enter email address"
+                            type="email"
+                            :iconLeft="{ component: PhEnvelopeSimple, weight: 'bold' }"
+                            @onInput="(e, value) => inviteEmail = value"
+                            @keyup.enter="sendInvitation"
+                        />
+                    </div>
+                    <div class="select-group">
+                        <SelectComponent
+                            :value="inviteRole"
+                            :options="roleOptions"
+                            placeholder="Select role"
+                            @change="(value) => inviteRole = value"
+                        />
+                    </div>
+                    <div>
+                        <ButtonComponent
+                            :iconLeft="{ component: PhPaperPlaneTilt, weight: 'bold' }"
+                            label="Invite"
+                            :loading="isLoading"
+                            @click="sendInvitation"
+                            :disabled="!inviteEmail"
+                        />
+                    </div>
                 </div>
             </div>
               
             <!-- Loading State -->
-            <div v-if="isLoading" class="loading-state">
+            <div v-if="isLoading && members.length === 0" class="loading-state">
                 <PhArrowsClockwise :size="24" class="spin" />
                 <span>Loading members...</span>
             </div>
             
             <!-- Content -->
             <div v-else>
+                <!-- Search Input -->
+                <div v-if="members.length > 5 || invitations.length > 5" class="search-section">
+                    <InputComponent
+                        :value="searchQuery"
+                        placeholder="Search members or invitations..."
+                        @onInput="(e, value) => searchQuery = value"
+                    />
+                </div>
+                
                 <!-- Pending Invitations -->
                 <div v-if="filteredItems.invitations.length > 0" class="section">
                     <h3 class="section-title">PENDING INVITATIONS ({{ filteredItems.invitations.length }})</h3>
@@ -426,10 +548,16 @@ function getStatusIcon(status) {
                             <div class="invitation-info">
                                 <div class="invitation-email">{{ invitation.email }}</div>
                                 <div class="invitation-meta">
-                                    <component :is="getStatusIcon(invitation.status)" :size="14" />
-                                    <span>{{ invitation.status }}</span>
+                                    <component 
+                                        :is="getStatusIcon(invitation.status)" 
+                                        :size="14"
+                                        :color="getStatusColor(invitation.status)"
+                                    />
+                                    <span :style="{ color: getStatusColor(invitation.status) }">
+                                        {{ invitation.status }}
+                                    </span>
                                     <span>•</span>
-                                    <span>{{ invitation.role }}</span>
+                                    <span class="invitation-role">{{ invitation.role }}</span>
                                 </div>
                             </div>
                             <div v-if="isAdmin" class="invitation-actions">
@@ -438,6 +566,7 @@ function getStatusIcon(status) {
                                     size="small"
                                     :iconLeft="{ component: PhX, weight: 'bold' }"
                                     @click="deleteInvitation(invitation)"
+                                    v-tooltip="{ content: 'Cancel invitation' }"
                                 />
                             </div>
                         </div>
@@ -452,11 +581,15 @@ function getStatusIcon(status) {
                             v-for="member in filteredItems.members" 
                             :key="member.id"
                             class="member-item"
+                            :class="{ 'is-current-user': member.user.id === currentUserId }"
                         >
                             <div class="member-info">
                                 <div class="member-avatar">{{ getUserInitials(member.user.name) }}</div>
                                 <div class="member-details">
-                                    <h4>{{ member.user.name }}</h4>
+                                    <h4>
+                                        {{ member.user.name }}
+                                        <span v-if="member.user.id === currentUserId" class="you-badge">(You)</span>
+                                    </h4>
                                     <p>{{ member.user.email }}</p>
                                 </div>
                             </div>
@@ -503,24 +636,23 @@ function getStatusIcon(status) {
                 
                 <!-- Empty State -->
                 <div v-if="!isLoading && filteredItems.members.length === 0 && filteredItems.invitations.length === 0" class="empty-state">
-                    <p>No members or pending invitations found.</p>
+                    <p v-if="searchQuery">No results found for "{{ searchQuery }}"</p>
+                    <p v-else>No members or pending invitations found.</p>
                 </div>
 
                 <!-- Leave Button -->
-                <div class="leave-section">
+                <div v-if="members.length > 0" class="leave-section">
                     <ButtonComponent
                         :iconLeft="{ component: PhSignOut, weight: 'bold' }"
-                        :label="`Leave ${type}`"
+                        :label="`Leave ${props.type}`"
                         as="tertiary"
                         @click="leaveEntity"
                         v-tooltip="{ 
-                            content: !canLeave ? 'You are the only admin. Assign another admin first.' : `Leave this ${type}` 
+                            content: !canLeave ? 'You are the only admin. Assign another admin first.' : `Leave this ${props.type}` 
                         }"
-                        :style="{ opacity: !canLeave ? 0.5 : 1 }"
+                        :disabled="!canLeave"
                     />
                 </div>
-
-
             </div>
         </template>
     </PopupLayout>
@@ -529,19 +661,25 @@ function getStatusIcon(status) {
 <style scoped>
 .member-modal {
     max-width: 600px !important;
+    min-width: 500px;
+}
+
+.invite-section {
+    margin-bottom: 20px;
 }
 
 .leave-section {
     display: flex;
     justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
 }
 
 .invite-form {
     display: flex;
     gap: 10px;
     background: var(--background-1);
-    border-radius: 8px;
-    margin-bottom: 20px;
 }
 
 .input-group {
@@ -575,7 +713,11 @@ function getStatusIcon(status) {
 }
 
 .section {
-    margin-bottom: 30px;
+    margin-bottom: 25px;
+}
+
+.section:last-child {
+    margin-bottom: 0;
 }
 
 .section-title {
@@ -601,6 +743,11 @@ function getStatusIcon(status) {
     background: var(--background-0);
     border: 1px solid var(--border);
     border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.invitation-item:hover {
+    border-color: var(--border-hover);
 }
 
 .invitation-info {
@@ -621,6 +768,10 @@ function getStatusIcon(status) {
     color: var(--text-secondary);
 }
 
+.invitation-role {
+    text-transform: capitalize;
+}
+
 /* Member Styles */
 .member-list {
     display: flex;
@@ -635,6 +786,15 @@ function getStatusIcon(status) {
     background: var(--background-0);
     border: 1px solid var(--border);
     border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.member-item:hover {
+    border-color: var(--border-hover);
+}
+
+.member-item.is-current-user {
+    background: var(--background-1);
 }
 
 .member-info {
@@ -655,12 +815,22 @@ function getStatusIcon(status) {
     color: white;
     font-weight: 600;
     font-size: 13px;
+    flex-shrink: 0;
 }
 
 .member-details h4 {
     margin: 0;
     font-size: 14px;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.you-badge {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 400;
 }
 
 .member-details p {
@@ -708,5 +878,56 @@ function getStatusIcon(status) {
     text-align: center;
     padding: 40px;
     color: var(--text-secondary);
+}
+
+/* No Seats Alert */
+.no-seats-alert {
+background: var(--brand-yellow);
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    display: flex;
+    text-align: left;
+    gap: 50px;
+    align-items: center;
+}
+
+
+
+
+.no-seats-alert .alert-content h4 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+}
+
+.no-seats-alert .alert-content p {
+    margin: 0;
+    font-size: 13px;
+}
+
+.no-seats-alert .alert-content .seat-breakdown {
+    font-weight: 500;
+}
+
+.no-seats-alert .alert-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .member-modal {
+        min-width: unset;
+        width: 90vw;
+    }
+    
+    .invite-form {
+        flex-direction: column;
+    }
+    
+    .select-group {
+        width: 100%;
+    }
 }
 </style>
