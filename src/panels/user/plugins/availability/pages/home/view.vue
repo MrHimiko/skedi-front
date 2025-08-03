@@ -66,8 +66,11 @@
                                             </div>
                                             <div class="table-cell-subtitle">
                                                 <span>No forwarding</span>
-                                                <span v-if="entry.notes || entry.reason !== 'Unspecified'">
-                                                    • Notes: {{ entry.reason }}{{ entry.notes ? ': ' + entry.notes : '' }}
+                                                <span v-if="entry.reason !== 'Unspecified'">
+                                                    • Reason: {{ entry.reason }}
+                                                </span>
+                                                <span v-if="entry.notes">
+                                                    • Notes: {{ entry.notes }}
                                                 </span>
                                             </div>
                                         </div>
@@ -196,20 +199,22 @@ function handleAddCallback() {
 }
 
 function formatDateRange(startTime, endTime) {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
+    // Ensure we're parsing UTC strings as UTC, then converting to local
+    const start = new Date(startTime + (startTime.endsWith('Z') ? '' : 'Z'));
+    const end = new Date(endTime + (endTime.endsWith('Z') ? '' : 'Z'));
     
     const formatOptions = {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     };
     
     // Same day
     if (start.toDateString() === end.toDateString()) {
-        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - ${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - ${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
     }
     
     // Different days

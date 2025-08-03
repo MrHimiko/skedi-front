@@ -8,7 +8,7 @@
             <div class="purchase-info">
                 <p>Add more seats to invite additional team members to your organization.</p>
                 <div class="price-info">
-                    <i class="fas fa-tag"></i>
+                    <PhTag :size="20" />
                     <span>$9 per seat / month</span>
                 </div>
             </div>
@@ -16,19 +16,32 @@
             <div class="seat-selector">
                 <label>Number of seats to add:</label>
                 <div class="seat-controls">
-                    <button @click="decrementSeats" :disabled="seatsToAdd <= 1" class="btn btn-sm">
-                        <i class="fas fa-minus"></i>
-                    </button>
-                    <input 
-                        v-model.number="seatsToAdd" 
-                        type="number" 
-                        min="1" 
-                        max="100"
+                    <ButtonComponent 
+                        @click="decrementSeats" 
+                        :disabled="seatsToAdd <= 1"
+                        size="small"
+                        as="secondary icon size36"
+                         label="-"
+                    >
+                    </ButtonComponent>
+                    
+                    <InputComponent
+                        :value="seatsToAdd"
+                        type="number"
+                        :min="1"
+                        :max="100"
                         class="seat-input"
+                        @onInput="(e, value) => handleSeatsChange(value)"
                     />
-                    <button @click="incrementSeats" :disabled="seatsToAdd >= 100" class="btn btn-sm">
-                        <i class="fas fa-plus"></i>
-                    </button>
+                                        
+                    <ButtonComponent 
+                        @click="incrementSeats" 
+                        :disabled="seatsToAdd >= 100"
+                        size="small"
+                        as="secondary icon size36"
+                        label="+"
+                    >
+                    </ButtonComponent>
                 </div>
             </div>
             
@@ -46,34 +59,45 @@
                     <span>Total additional cost:</span>
                     <span>${{ seatsToAdd * 9 }}/month</span>
                 </div>
+                <div class="proration-notice">
+                    <span>You won't be charged right now — the prorated amount for this billing period will be added to your next scheduled plan payment.</span>
+                </div>
             </div>
         </div>
         
         <div class="modal-footer">
-            <button @click="closeModal" class="btn btn-secondary">
-                Cancel
-            </button>
-            <button 
-                @click="purchaseSeats" 
-                class="btn btn-primary"
+            <ButtonComponent 
+                @click="closeModal"
+                as="secondary"
+                label="Cancel"
+            >
+                
+            </ButtonComponent>
+            <ButtonComponent 
+                label="Get Seats"
+                @click="purchaseSeats"
+                as="brand"
+                :loading="isPurchasing"
                 :disabled="isPurchasing"
             >
-                <span v-if="isPurchasing">
-                    <i class="fas fa-spinner fa-spin"></i> Processing...
-                </span>
-                <span v-else>
-                    <i class="fas fa-credit-card"></i> Purchase {{ seatsToAdd }} {{ seatsToAdd === 1 ? 'Seat' : 'Seats' }}
-                </span>
-            </button>
+                <PhCreditCard :size="20" />
+            </ButtonComponent>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
+
+// Global components
+import ButtonComponent from '@form/button/view.vue';
+import InputComponent from '@form/input/view.vue';
+
+// Icons
+import { PhTag, PhMinus, PhPlus, PhCreditCard, PhInfo } from '@phosphor-icons/vue';
 
 const props = defineProps({
     organizationId: {
@@ -90,7 +114,7 @@ const props = defineProps({
     }
 });
 
-const seatsToAdd = ref(props.recommendedSeats || 1);
+const seatsToAdd = ref(1);
 const isPurchasing = ref(false);
 
 function incrementSeats() {
@@ -102,6 +126,17 @@ function incrementSeats() {
 function decrementSeats() {
     if (seatsToAdd.value > 1) {
         seatsToAdd.value--;
+    }
+}
+
+function handleSeatsChange(value) {
+    const numValue = parseInt(value) || 1;
+    if (numValue < 1) {
+        seatsToAdd.value = 1;
+    } else if (numValue > 100) {
+        seatsToAdd.value = 100;
+    } else {
+        seatsToAdd.value = numValue;
     }
 }
 
@@ -118,17 +153,11 @@ async function purchaseSeats() {
         });
         
         if (response.success) {
-            if (response.data.checkout_url) {
-                // Redirect to Stripe checkout
-                window.location.href = response.data.checkout_url;
-            } else {
-                // Seats added successfully
-                common.notification(`Successfully added ${seatsToAdd.value} seats`, true);
-                popup.close();
-                
-                if (props.callback) {
-                    props.callback();
-                }
+            common.notification(`Successfully added ${seatsToAdd.value} seats`, true);
+            popup.close();
+            
+            if (props.callback) {
+                props.callback();
             }
         } else {
             common.notification(response.message || 'Failed to purchase seats', false);
@@ -144,7 +173,7 @@ async function purchaseSeats() {
 
 <style scoped>
 .purchase-seats-modal {
-    width: 480px;
+    width: 500px;
     background: white;
     border-radius: 8px;
     overflow: hidden;
@@ -152,7 +181,7 @@ async function purchaseSeats() {
 
 .modal-header {
     padding: 20px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border);
 }
 
 .modal-header h3 {
@@ -171,17 +200,17 @@ async function purchaseSeats() {
 
 .purchase-info p {
     margin: 0 0 15px 0;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 .price-info {
-    background: #e7f3ff;
+    background: var(--brand-yellow);
     padding: 12px 16px;
-    border-radius: 4px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     gap: 10px;
-    color: #0066cc;
+    color: var(--text-primary);
     font-weight: 500;
 }
 
@@ -193,94 +222,82 @@ async function purchaseSeats() {
     display: block;
     margin-bottom: 10px;
     font-weight: 500;
+    color: var(--text-primary);
 }
 
 .seat-controls {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 5px;
 }
 
 .seat-input {
     width: 80px;
-    padding: 8px;
+}
+
+.seat-input :deep(input) {
     text-align: center;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 16px;
+    font-size: 18px;
+    font-weight: 500;
 }
 
 .purchase-summary {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 4px;
+    background: var(--background-1);
+    padding: 20px;
+    border-radius: 8px;
 }
 
 .summary-item {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 8px;
+    padding: 8px 0;
     font-size: 14px;
+    color: var(--text-secondary);
 }
 
 .summary-divider {
     height: 1px;
-    background: #dee2e6;
+    background: var(--border);
     margin: 12px 0;
 }
 
 .summary-item.total {
     font-weight: 600;
     font-size: 16px;
-    margin-bottom: 0;
+    color: var(--text-primary);
+}
+
+.proration-notice {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--red-default);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: white;
+    font-weight: 500;
+    font-size: 16px;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    padding: 13px;
+}
+
+.proration-notice svg {
+    flex-shrink: 0;
 }
 
 .modal-footer {
     padding: 20px;
-    border-top: 1px solid #e9ecef;
+    border-top: 1px solid var(--border);
     display: flex;
     gap: 10px;
     justify-content: flex-end;
-}
-
-.btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.btn-primary {
-    background: #007bff;
-    color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: #0056b3;
-}
-
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-    background: #545b62;
-}
-
-.btn-sm {
-    padding: 6px 12px;
-    font-size: 12px;
 }
 </style>

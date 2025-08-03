@@ -64,7 +64,8 @@
                             />
                         </div>
                         <SelectComponent
-                            v-model="form.start_time"
+                            :value="form.start_time"
+                            @change="(value) => form.start_time = value"
                             :options="timeOptions"
                             placeholder="Select time"
                         />
@@ -91,7 +92,8 @@
                             />
                         </div>
                         <SelectComponent
-                            v-model="form.end_time"
+                            :value="form.end_time"
+                            @change="(value) => form.end_time = value"
                             :options="timeOptions"
                             placeholder="Select time"
                         />
@@ -101,20 +103,14 @@
                 <div class="form-group">
                     <label>Reason</label>
                     <SelectComponent
-                        v-model="form.reason"
+                        :value="form.reason"
+                        @change="(value) => form.reason = value"
                         :options="reasonOptions"
                         placeholder="Select reason"
                     />
                 </div>
 
-                <div class="form-group">
-                    <label>Notes</label>
-                    <TextareaComponent
-                        v-model="form.notes"
-                        placeholder="Additional notes"
-                        rows="4"
-                    />
-                </div>
+
 
                 <div class="form-actions">
                     <ButtonComponent
@@ -135,9 +131,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, defineComponent, h, watch } from 'vue';
+import { ref, computed, defineComponent, h, watch } from 'vue';
 import { api } from '@utils/api';
-import { popup } from '@utils/popup';
 import { common } from '@utils/common';
 import VueDatePicker from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
@@ -230,6 +225,11 @@ const timeOptions = computed(() => {
             });
         }
     }
+    // Add 23:59 as the last option
+    options.push({ 
+        value: '23:59', 
+        label: '23:59' 
+    });
     return options;
 });
 
@@ -248,11 +248,10 @@ const initializeForm = () => {
             end_date: formatDateForInput(endDate),
             end_time: formatTimeForInput(endDate),
             reason: props.entry.reason || 'Unspecified',
-            notes: props.entry.notes || ''
         };
     }
     
-    // Default: tomorrow 00:00 to 23:30
+    // Default: tomorrow 00:00 to 23:59
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     
@@ -260,9 +259,8 @@ const initializeForm = () => {
         start_date: formatDateForInput(tomorrow),
         start_time: '00:00',
         end_date: formatDateForInput(tomorrow),
-        end_time: '23:30',
+        end_time: '23:59',
         reason: 'Unspecified',
-        notes: ''
     };
 };
 
@@ -329,8 +327,9 @@ async function saveEntry() {
             start_time: combineDateTimeToISO(form.value.start_date, form.value.start_time),
             end_time: combineDateTimeToISO(form.value.end_date, form.value.end_time),
             reason: form.value.reason,
-            notes: form.value.notes
         };
+        
+        console.log('Saving OOO data:', data);
         
         // Validate that end time is after start time
         if (new Date(data.start_time) >= new Date(data.end_time)) {
