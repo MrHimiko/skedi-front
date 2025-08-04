@@ -17,6 +17,7 @@ import RunUserAvailability from '@user_availability/run';
 import RunUserPotentialLeads from '@user_potential_leads/run';
 import RunUserOrganizations from '@user_organizations/run';
 import RunUserBilling from '@user_billing/run';
+import RunUserWorkflows from '@user_workflows/run';
 
 
 
@@ -40,7 +41,8 @@ initializeApp((app, router, stores) =>
         RunUserOrganizations,
         RunUserPotentialLeads,
         RunUserBilling,
-        RunUserAvailability
+        RunUserAvailability,
+        RunUserWorkflows
     ];
 
     if(stores.extension.has(1))

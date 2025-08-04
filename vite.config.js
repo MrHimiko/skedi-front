@@ -32,6 +32,7 @@ export default defineConfig({
             '@user_potential_leads': path.resolve(__dirname, './src/panels/user/plugins/potential-leads'),
             '@user_organizations': path.resolve(__dirname, './src/panels/user/plugins/organizations'),
             '@user_integrations': path.resolve(__dirname, './src/panels/user/plugins/integrations'),
+            '@user_workflows': path.resolve(__dirname, './src/panels/user/plugins/workflows'),
             '@user_forms': path.resolve(__dirname, './src/panels/user/plugins/forms'),
 
 
