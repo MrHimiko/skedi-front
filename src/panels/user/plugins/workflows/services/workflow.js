@@ -161,4 +161,17 @@ export class WorkflowService {
             throw error;
         }
     }
+    
+    /**
+     * Test a workflow
+     */
+    static async testWorkflow(workflowId, testData = {}) {
+        try {
+            const response = await api.post(`user/workflows/${workflowId}/test`, testData);
+            return response;
+        } catch (error) {
+            console.error('Failed to test workflow:', error);
+            throw error;
+        }
+    }
 }

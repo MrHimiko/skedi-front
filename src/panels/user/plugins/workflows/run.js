@@ -28,15 +28,12 @@ export default class
             }
         })
 
-        this.router.addRoute(
-        {
+        this.router.addRoute({
             path: '/workflows/:id',
             name: 'WorkflowBuilder',
-            component: () => import('./components/builder/view.vue'),
-            beforeEnter: (to, from, next) => 
-            {
-                next();
-                //this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
+            component: () => import('./pages/view/view.vue'),
+            beforeEnter: (to, from, next) => {
+                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
             }
         })
     }

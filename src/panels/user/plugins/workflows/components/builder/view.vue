@@ -1,4 +1,3 @@
-// src/panels/user/plugins/workflows/components/builder/view.vue
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -12,9 +11,9 @@ import SelectComponent from '@form/select/view.vue';
 import MenusComponent from '@global/menus/view.vue';
 
 // Workflow components
-import WorkflowNode from './workflow-node.vue';
-import ActionConfigModal from '../modals/action-config.vue';
-import ConditionConfigModal from '../modals/condition-config.vue';
+import WorkflowNode from '@user_workflows/components/node/view.vue';
+import ActionConfigModal from '@user_workflows/components/modals/action-config.vue';
+import ConditionConfigModal from '@user_workflows/components/modals/condition-config.vue';
 
 // Icons
 import { 

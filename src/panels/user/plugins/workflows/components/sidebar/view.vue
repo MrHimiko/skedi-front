@@ -4,7 +4,6 @@ import { ref, computed } from 'vue';
 import { 
     PhBell,
     PhEnvelope, 
-    PhWebhook,
     PhTimer,
     PhCalendar,
     PhUser,
@@ -62,7 +61,7 @@ const categories = ref([
                 action: 'webhook',
                 name: 'Webhook',
                 description: 'Triggered by external webhook',
-                icon: PhWebhook,
+                icon: PhTimer,
                 color: '#8B5CF6'
             },
             {
