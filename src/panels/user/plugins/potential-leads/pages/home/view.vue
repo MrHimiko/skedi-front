@@ -60,7 +60,7 @@ const organizationOptions = computed(() => {
         const isAdmin = isUserAdminOfOrg(orgId);
         
         options.push({
-            label: isAdmin ? orgName : `${orgName} (View Only)`,
+            label: orgName,
             value: orgId,
             disabled: !isAdmin
         });
@@ -138,7 +138,6 @@ async function loadLeads() {
     }
 }
 
-// Actions
 async function handleDeleteLead(lead) {
     try {
         if (selectedOrganization.value === 'my-leads') {
@@ -149,7 +148,7 @@ async function handleDeleteLead(lead) {
         }
         
         common.notification('Lead removed successfully', true);
-        await loadLeads();
+        await loadLeads(); // This line already reloads the data
     } catch (error) {
         console.error('Failed to delete lead:', error);
         common.notification('Failed to remove lead', false);

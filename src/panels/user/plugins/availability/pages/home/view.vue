@@ -7,7 +7,6 @@
                         title="Out of office"
                         description="Let your bookers know when you're OOO."
                     />
-                    
                 </div>
 
                 <!-- Search and Filter Bar -->
@@ -23,21 +22,20 @@
                     </div>
 
                     <div>
-                    <ButtonComponent
-                        label="Add new OOO"
-                        :iconLeft="{ component: PhPlus }"
-                        type="primary"
-                        size="sm"
-                        v-popup="{
-                            component: OutOfOfficeForm,
-                            overlay: { position: 'center' },
-                            properties: {
-                                callback: handleAddCallback
-                            }
-                        }"
-                    /></div>
-                    
-                   
+                        <ButtonComponent
+                            label="Add new OOO"
+                            :iconLeft="{ component: PhPlus }"
+                            type="primary"
+                            size="sm"
+                            v-popup="{
+                                component: OutOfOfficeForm,
+                                overlay: { position: 'center' },
+                                properties: {
+                                    callback: handleAddCallback
+                                }
+                            }"
+                        />
+                    </div>
                 </div>
 
                 <!-- Out of Office Table -->
@@ -58,20 +56,18 @@
                                 <td>
                                     <div class="table-cell-with-avatar">
                                         <div class="table-avatar">
-                                            <PhXCircle :size="20" weight="light" />
+                                            <component 
+                                                :is="getReasonIcon(entry.reason)" 
+                                                :size="20" 
+                                                weight="light" 
+                                            />
                                         </div>
                                         <div class="table-cell-details">
                                             <div class="table-cell-title">
                                                 {{ formatDateRange(entry.start_time, entry.end_time) }}
                                             </div>
-                                            <div class="table-cell-subtitle">
-                                                <span>No forwarding</span>
-                                                <span v-if="entry.reason !== 'Unspecified'">
-                                                    • Reason: {{ entry.reason }}
-                                                </span>
-                                                <span v-if="entry.notes">
-                                                    • Notes: {{ entry.notes }}
-                                                </span>
+                                            <div class="table-cell-subtitle" v-if="entry.reason && entry.reason !== 'Unspecified'">
+                                                {{ entry.reason }}
                                             </div>
                                         </div>
                                     </div>
@@ -130,7 +126,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, h } from 'vue';
 import { api } from '@utils/api';
 import { popup } from '@utils/popup';
 import { common } from '@utils/common';
@@ -140,18 +136,38 @@ import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
 import ButtonComponent from '@form/button/view.vue';
 import InputComponent from '@form/input/view.vue';
-import SelectComponent from '@form/select/view.vue';
-import TextareaComponent from '@form/textarea/view.vue';
 import OutOfOfficeForm from '@user_availability/components/outOfOfficeForm.vue';
 import MenusComponent from '@global/menus/view.vue';
 import ConfirmComponent from '@floated/confirm/view.vue';
 
+
+// Add this method
+function getReasonIcon(reason) {
+    const iconMap = {
+        'Vacation': '🏝️',
+        'Travel': '✈️',
+        'Sick leave': '🤒',
+        'Public holiday': '📅'
+    };
+    
+    // For emojis, return a span component
+    if (iconMap[reason]) {
+        return {
+            render() {
+                return h('span', { style: 'font-size: 16px;' }, iconMap[reason]);
+            }
+        };
+    }
+    
+    // Default to PhXCircle for Unspecified or unknown reasons
+    return PhXCircle;
+}
+
+
 // Icons
 import { 
     PhPlus, 
-    PhMagnifyingGlass, 
-    PhFaders, 
-    PhCaretDown,
+    PhMagnifyingGlass,
     PhCalendarBlank,
     PhXCircle,
     PhPencil,
@@ -165,7 +181,6 @@ const loading = ref(false);
 const searchQuery = ref('');
 
 // Computed
-
 const filteredEntries = computed(() => {
     if (!searchQuery.value) return entries.value;
     
@@ -173,9 +188,8 @@ const filteredEntries = computed(() => {
     return entries.value.filter(entry => {
         const dateRange = formatDateRange(entry.start_time, entry.end_time).toLowerCase();
         const reason = entry.reason?.toLowerCase() || '';
-        const notes = entry.notes?.toLowerCase() || '';
         
-        return dateRange.includes(query) || reason.includes(query) || notes.includes(query);
+        return dateRange.includes(query) || reason.includes(query);
     });
 });
 
@@ -208,13 +222,12 @@ function formatDateRange(startTime, endTime) {
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
+        minute: '2-digit'
     };
     
     // Same day
     if (start.toDateString() === end.toDateString()) {
-        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - ${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - ${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
     }
     
     // Different days
@@ -248,25 +261,33 @@ function getEntryMenus(entry) {
     ];
 }
 
-async function deleteEntry(entry) {
-    const confirmed = await popup.confirm(
-        'Delete out of office entry?',
-        'This action cannot be undone.'
-    );
-    
-    if (confirmed) {
-        try {
-            const response = await api.delete(`user/out-of-office/${entry.id}`);
-            if (response.success) {
-                common.notification('Out of office deleted', true);
-                await loadEntries();
-            } else {
-                common.notification('Failed to delete', false);
+function deleteEntry(entry) {
+    popup.open(
+        'delete-ooo-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to delete this out of office entry?`,
+            callback: async () => {
+                try {
+                    const response = await api.delete(`user/out-of-office/${entry.id}`);
+                    if (response.success) {
+                        common.notification('Out of office deleted', true);
+                        popup.close();
+                        await loadEntries();
+                    } else {
+                        common.notification('Failed to delete', false);
+                    }
+                } catch (error) {
+                    common.notification('An error occurred', false);
+                }
             }
-        } catch (error) {
-            common.notification('An error occurred', false);
+        },
+        {
+            position: 'center'
         }
-    }
+    );
 }
 
 // Lifecycle
@@ -276,7 +297,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
 @import '@global/common-table/style.css';
 
 .availability-page {
@@ -284,7 +304,6 @@ onMounted(() => {
     max-width: 1200px;
     margin: 0 auto;
 }
-
 
 .toolbar {
     display: flex;
@@ -299,25 +318,6 @@ onMounted(() => {
     max-width: 320px;
 }
 
-.filter-actions {
-    display: flex;
-    gap: 8px;
-}
-
-.ooo-list {
-    background: var(--background-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-}
-
-.list-header {
-    padding: 16px;
-    border-bottom: 1px solid var(--border);
-    font-weight: 600;
-    color: var(--text-secondary);
-}
-
 .loading-state,
 .empty-state {
     display: flex;
@@ -328,64 +328,42 @@ onMounted(() => {
     color: var(--text-secondary);
 }
 
-.empty-state p {
-    margin-top: 16px;
+.empty-state-content {
+    text-align: center;
 }
 
-.entries-list {
-    /* No padding needed */
+.empty-icon {
+    margin-bottom: 16px;
 }
 
-.ooo-entry {
-    display: flex;
-    align-items: center;
-    padding: 16px;
-    border-bottom: 1px solid var(--border);
-    gap: 16px;
+.empty-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
 }
 
-.ooo-entry:last-child {
-    border-bottom: none;
-}
-
-.ooo-entry:hover {
-    background: var(--background-hover);
-}
-
-.entry-icon {
+.empty-description {
+    margin-bottom: 20px;
     color: var(--text-secondary);
 }
 
-.entry-content {
-    flex: 1;
+.loading-content {
+    text-align: center;
 }
 
-.entry-dates {
-    font-weight: 500;
-    margin-bottom: 4px;
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
 }
 
-.entry-details {
-    display: flex;
-    gap: 12px;
-    font-size: 14px;
-    color: var(--text-secondary);
-}
-
-.no-forwarding {
-    display: inline-flex;
-    align-items: center;
-}
-
-.entry-notes {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.entry-actions {
-    display: flex;
-    gap: 4px;
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>

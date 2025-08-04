@@ -1,8 +1,6 @@
-import { api } from '@utils/api';
-import { storage } from '@utils/storage';
+// Updated src/panels/user/plugins/potential-leads/services/potential-leads.js without caching
 
-const CACHE_KEY = 'potential_leads_cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+import { api } from '@utils/api';
 
 export const PotentialLeadsService = {
     /**
@@ -10,13 +8,6 @@ export const PotentialLeadsService = {
      */
     async getMyLeads(filters = {}, page = 1, limit = 50) {
         try {
-            const cacheKey = `${CACHE_KEY}_my_${JSON.stringify(filters)}_${page}_${limit}`;
-            const cached = storage.get(cacheKey);
-            
-            if (cached && cached.timestamp > Date.now() - CACHE_DURATION) {
-                return cached.data;
-            }
-
             const params = {
                 page,
                 limit,
@@ -40,10 +31,6 @@ export const PotentialLeadsService = {
                     }))
                 };
                 
-                storage.set(cacheKey, {
-                    data: transformedData,
-                    timestamp: Date.now()
-                });
                 return transformedData;
             }
 
@@ -59,13 +46,6 @@ export const PotentialLeadsService = {
      */
     async getOrganizationLeads(organizationId, filters = {}, page = 1, limit = 50) {
         try {
-            const cacheKey = `${CACHE_KEY}_org_${organizationId}_${JSON.stringify(filters)}_${page}_${limit}`;
-            const cached = storage.get(cacheKey);
-            
-            if (cached && cached.timestamp > Date.now() - CACHE_DURATION) {
-                return cached.data;
-            }
-
             const params = {
                 page,
                 limit,
@@ -75,10 +55,6 @@ export const PotentialLeadsService = {
             const response = await api.get(`user/organizations/${organizationId}/potential-leads`, params);
             
             if (response && response.success) {
-                storage.set(cacheKey, {
-                    data: response.data,
-                    timestamp: Date.now()
-                });
                 return response.data;
             }
 
@@ -97,8 +73,6 @@ export const PotentialLeadsService = {
             const response = await api.delete(`user/organizations/${organizationId}/potential-leads/${leadId}`);
             
             if (response && response.success) {
-                // Clear cache
-                storage.remove(CACHE_KEY);
                 return response.data;
             }
 
@@ -117,7 +91,6 @@ export const PotentialLeadsService = {
             const response = await api.delete(`user/potential-leads/${leadId}`);
             
             if (response && response.success) {
-                storage.remove(CACHE_KEY);
                 return response.data;
             }
 
@@ -154,12 +127,5 @@ export const PotentialLeadsService = {
             console.error('Export failed:', error);
             throw error;
         }
-    },
-
-    /**
-     * Clear leads cache
-     */
-    clearCache() {
-        storage.remove(CACHE_KEY);
     }
 };

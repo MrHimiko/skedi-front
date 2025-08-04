@@ -1,46 +1,4 @@
-.date-picker-wrapper {
-    flex: 2;
-}
-
-.date-picker-dropdown {
-    background-color: var(--white);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    padding: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Override VueDatePicker styles for date-only mode */
-.date-picker-dropdown :deep(.dp__action_buttons) {
-    display: none !important;
-}
-
-.date-picker-dropdown :deep(.dp__time_input) {
-    display: none !important;
-}
-
-/* Light theme overrides for VueDatePicker */
-.date-picker-dropdown :deep(.dp__theme_light) {
-    --dp-background-color: #ffffff;
-    --dp-text-color: #212121;
-    --dp-hover-color: #f3f3f3;
-    --dp-hover-text-color: #212121;
-    --dp-hover-icon-color: #959595;
-    --dp-primary-color: #1976d2;
-    --dp-primary-text-color: #f8f5f5;
-    --dp-secondary-color: #c0c4cc;
-    --dp-border-color: #ddd;
-    --dp-menu-border-color: #ddd;
-    --dp-border-color-hover: #aaaeb7;
-    --dp-disabled-color: #f6f6f6;
-    --dp-scroll-bar-background: #f3f3f3;
-    --dp-scroll-bar-color: #959595;
-    --dp-success-color: #76d275;
-    --dp-success-color-disabled: #a3d9b1;
-    --dp-icon-color: #959595;
-    --dp-danger-color: #ff6f60;
-    --dp-highlight-color: rgba(25, 118, 210, 0.1);
-}<template>
+<template>
     <PopupLayout title="Go Out of Office" customClass="h-auto">
         <template #content>
             <div class="ooo-form">
@@ -110,8 +68,6 @@
                     />
                 </div>
 
-
-
                 <div class="form-actions">
                     <ButtonComponent
                         label="Cancel"
@@ -142,7 +98,6 @@ import PopupLayout from '@layouts/popup/view.vue';
 import ButtonComponent from '@form/button/view.vue';
 import InputComponent from '@form/input/view.vue';
 import SelectComponent from '@form/select/view.vue';
-import TextareaComponent from '@form/textarea/view.vue';
 
 // Icons
 import { PhCalendar } from "@phosphor-icons/vue";
@@ -239,8 +194,13 @@ const saving = ref(false);
 // Initialize form with separate date and time fields
 const initializeForm = () => {
     if (props.entry) {
-        const startDate = new Date(props.entry.start_time);
-        const endDate = new Date(props.entry.end_time);
+        // Parse UTC time and convert to local time
+        // Ensure we're parsing as UTC by adding 'Z' if not present
+        const startTimeStr = props.entry.start_time + (props.entry.start_time.endsWith('Z') ? '' : 'Z');
+        const endTimeStr = props.entry.end_time + (props.entry.end_time.endsWith('Z') ? '' : 'Z');
+        
+        const startDate = new Date(startTimeStr);
+        const endDate = new Date(endTimeStr);
         
         return {
             start_date: formatDateForInput(startDate),
@@ -266,7 +226,7 @@ const initializeForm = () => {
 
 const form = ref(initializeForm());
 
-// Format date for date component (dd/mm/yyyy)
+// Format date for date component (dd/mm/yyyy) - uses local timezone
 function formatDateForInput(date) {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -274,7 +234,7 @@ function formatDateForInput(date) {
     return `${day}/${month}/${year}`;
 }
 
-// Format time for select (HH:mm)
+// Format time for select (HH:mm) - uses local timezone
 function formatTimeForInput(date) {
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = Math.floor(date.getMinutes() / 30) * 30; // Round to nearest 30 min
@@ -287,7 +247,7 @@ function parseDateFromInput(dateStr) {
     return new Date(year, month - 1, day);
 }
 
-// Combine date and time into ISO string
+// Combine date and time into ISO string (will be in UTC)
 function combineDateTimeToISO(dateStr, timeStr) {
     const date = parseDateFromInput(dateStr);
     const [hours, minutes] = timeStr.split(':');
@@ -397,5 +357,49 @@ async function saveEntry() {
     margin-top: 24px;
     padding-top: 24px;
     border-top: 1px solid var(--border);
+}
+
+.date-picker-wrapper {
+    flex: 2;
+}
+
+.date-picker-dropdown {
+    background-color: var(--white);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    padding: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Override VueDatePicker styles for date-only mode */
+.date-picker-dropdown :deep(.dp__action_buttons) {
+    display: none !important;
+}
+
+.date-picker-dropdown :deep(.dp__time_input) {
+    display: none !important;
+}
+
+/* Light theme overrides for VueDatePicker */
+.date-picker-dropdown :deep(.dp__theme_light) {
+    --dp-background-color: #ffffff;
+    --dp-text-color: #212121;
+    --dp-hover-color: #f3f3f3;
+    --dp-hover-text-color: #212121;
+    --dp-hover-icon-color: #959595;
+    --dp-primary-color: #1976d2;
+    --dp-primary-text-color: #f8f5f5;
+    --dp-secondary-color: #c0c4cc;
+    --dp-border-color: #ddd;
+    --dp-menu-border-color: #ddd;
+    --dp-border-color-hover: #aaaeb7;
+    --dp-disabled-color: #f6f6f6;
+    --dp-scroll-bar-background: #f3f3f3;
+    --dp-scroll-bar-color: #959595;
+    --dp-success-color: #76d275;
+    --dp-success-color-disabled: #a3d9b1;
+    --dp-icon-color: #959595;
+    --dp-danger-color: #ff6f60;
+    --dp-highlight-color: rgba(25, 118, 210, 0.1);
 }
 </style>
