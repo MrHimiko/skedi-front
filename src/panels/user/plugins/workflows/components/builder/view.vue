@@ -12,8 +12,9 @@ import MenusComponent from '@global/menus/view.vue';
 
 // Workflow components
 import WorkflowNode from '@user_workflows/components/node/view.vue';
-import ActionConfigModal from '@user_workflows/components/modals/action-config.vue';
-import ConditionConfigModal from '@user_workflows/components/modals/condition-config.vue';
+import ConditionNode from '@user_workflows/components/node/condition-node.vue';
+import ActionConfigPopup from '@user_workflows/components/popups/action-config.vue';
+import ConditionConfigPopup from '@user_workflows/components/popups/condition-config.vue';
 
 // Icons
 import { 
@@ -314,6 +315,62 @@ function getActionMenus() {
     return menus;
 }
 
+
+function addPathToCondition(node) {
+    // This is handled in the configuration popup
+    configureNode(node);
+}
+
+function configureNode(node) {
+    if (node.node_type === 'action') {
+        const action = availableActions.value.find(a => a.id === node.action_type);
+        popup({
+            component: ActionConfigPopup,
+            overlay: { position: 'center' },
+            properties: {
+                action: action,
+                config: node.config,
+                onSave: async (config) => {
+                    try {
+                        const response = await api.patch(`user/workflows/nodes/${node.id}`, {
+                            config: config
+                        });
+                        
+                        if (response.success) {
+                            node.config = config;
+                        }
+                    } catch (error) {
+                        console.error('Failed to update node:', error);
+                    }
+                }
+            }
+        });
+    } else if (node.node_type === 'condition') {
+        popup({
+            component: ConditionConfigPopup,
+            overlay: { position: 'center' },
+            properties: {
+                variables: getAvailableVariables(),
+                config: node.config,
+                onSave: async (config) => {
+                    try {
+                        const response = await api.patch(`user/workflows/nodes/${node.id}`, {
+                            config: config
+                        });
+                        
+                        if (response.success) {
+                            node.config = config;
+                        }
+                    } catch (error) {
+                        console.error('Failed to update node:', error);
+                    }
+                }
+            }
+        });
+    }
+}
+
+
 // SVG path for connections
 function getConnectionPath(fromNode, toNode) {
     const from = {
@@ -430,14 +487,18 @@ onMounted(() => {
                 </svg>
                 
                 <div class="nodes-container">
-                    <WorkflowNode
+                    <component 
+                        :is="node.node_type === 'condition' ? ConditionNode : WorkflowNode"
                         v-for="node in nodes"
                         :key="node.id"
                         :node="node"
                         :selected="selectedNode?.id === node.id"
-                        @click="selectedNode = node"
+                        :connections="connections"
+                        @select="selectedNode = node"
                         @configure="configureNode"
                         @delete="deleteNode"
+                        @add-action="addActionAfterNode"
+                        @add-path="addPathToCondition"
                     />
                 </div>
                 

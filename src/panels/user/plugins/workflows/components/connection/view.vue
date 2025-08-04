@@ -26,8 +26,8 @@ const connectionClass = computed(() => ({
 
 const strokeColor = computed(() => {
     if (props.selected) return 'var(--primary)';
-    if (props.connection.condition_type === 'true') return 'var(--success)';
-    if (props.connection.condition_type === 'false') return 'var(--danger)';
+    if (props.connection.condition_type?.startsWith('if_')) return 'var(--success)';
+    if (props.connection.condition_type === 'else') return 'var(--warning)';
     return 'var(--border-strong)';
 });
 

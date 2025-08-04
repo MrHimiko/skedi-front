@@ -74,6 +74,20 @@ const nodeNumber = computed(() => {
     // Calculate node number based on position in flow
     return props.node.node_type === 'trigger' ? '1' : '2';
 });
+
+// Node menus
+const nodeMenus = computed(() => [
+    {
+        label: 'Configure',
+        icon: 'settings',
+        onClick: () => emit('configure', props.node)
+    },
+    {
+        label: 'Delete',
+        icon: 'delete',
+        onClick: () => emit('delete', props.node)
+    }
+]);
 </script>
 
 <template>
@@ -93,40 +107,27 @@ const nodeNumber = computed(() => {
             
             <div class="node-info">
                 <div class="node-type">
-                    {{ node.node_type === 'trigger' ? 'Trigger' : 'Action' }}
+                    {{ node.node_type === 'trigger' ? 'Trigger' : node.node_type === 'action' ? 'Action' : 'Condition' }}
                 </div>
                 <div class="node-name">
-                    {{ node.name || node.action_type }}
+                    {{ node.name || node.action_type || 'Untitled' }}
                 </div>
             </div>
             
-            <div class="node-actions">
+            <!-- Node actions menu -->
+            <div 
+                class="node-actions"
+                v-dropdown="{ component: MenusComponent, properties: { menus: nodeMenus } }"
+            >
                 <Button
-                    as="tertiary icon small"
+                    as="tertiary icon"
                     :iconLeft="{ component: PhDotsThreeVertical }"
-                    v-dropdown="{
-                        component: MenusComponent,
-                        properties: {
-                            menus: [
-                                {
-                                    icon: PhGearSix,
-                                    label: 'Configure',
-                                    action: () => $emit('configure', node)
-                                },
-                                {
-                                    icon: PhTrash,
-                                    label: 'Delete',
-                                    class: 'danger',
-                                    action: () => $emit('delete', node.id)
-                                }
-                            ]
-                        }
-                    }"
+                    v-tooltip="{ content: 'Actions' }"
                 />
             </div>
         </div>
         
-        <!-- Add button -->
+        <!-- Add node button -->
         <div v-if="!hasOutgoingConnection" class="add-node-button">
             <Button
                 as="tertiary icon"
