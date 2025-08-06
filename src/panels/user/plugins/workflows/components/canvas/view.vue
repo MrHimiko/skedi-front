@@ -193,18 +193,37 @@ onUnmounted(() => {
                             :d="getConnectionPath(connection)"
                             class="connection-path"
                             :class="{ 
-                                'condition-true': connection.condition_type === 'true',
-                                'condition-false': connection.condition_type === 'false'
+                                'condition-true': connection.condition_type === 'path_a',
+                                'condition-false': connection.condition_type === 'path_b'
                             }"
+                            stroke="#94A3B8" 
+                            stroke-width="2"
+                            fill="none"
+                        />
+                        <!-- Arrow marker -->
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                    refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#94A3B8" />
+                            </marker>
+                        </defs>
+                        <path
+                            :d="getConnectionPath(connection)"
+                            class="connection-path"
+                            stroke="#94A3B8" 
+                            stroke-width="2"
+                            fill="none"
+                            marker-end="url(#arrowhead)"
                         />
                     </g>
                 </svg>
                 
                 <!-- Nodes -->
-                <WorkflowNode
-                    v-for="node in workflow.nodes"
+                 <WorkflowNode
+                    v-for="(node, index) in workflow.nodes"
                     :key="node.id"
                     :node="node"
+                    :nodeNumber="index + 1"
                     :selected="selectedNode?.id === node.id"
                     :connections="workflow.connections"
                     @select="$emit('node-select', node)"

@@ -189,12 +189,12 @@ function addActionAfterNode(previousNode) {
             showPaths: previousNode?.node_type === 'condition',
             onSelect: async (action, path) => {
                 const nodeData = {
-                    node_type: 'action',
+                    node_type: action.node_type || 'action', // Use the node_type from action definition
                     action_type: action.id,
                     name: action.name,
                     config: {},
-                    position_x: previousNode.position_x,
-                    position_y: previousNode.position_y + 150
+                    position_x: previousNode ? previousNode.position_x : 400,
+                    position_y: previousNode ? previousNode.position_y + 150 : 100
                 };
                 
                 const newNode = await addNode(nodeData);

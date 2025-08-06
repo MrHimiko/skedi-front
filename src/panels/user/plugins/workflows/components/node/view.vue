@@ -27,6 +27,10 @@ const props = defineProps({
     connections: {
         type: Array,
         default: () => []
+    },
+    nodeNumber: {
+        type: Number,
+        default: 1
     }
 });
 
@@ -99,8 +103,8 @@ const nodeMenus = computed(() => [
         <!-- Node number -->
         <div class="node-number">{{ nodeNumber }}</div>
         
-        <!-- Node content -->
-        <div class="node-content">
+        <!-- Regular node content -->
+        <div v-if="node.node_type !== 'condition'" class="node-content">
             <div class="node-icon">
                 <component :is="nodeIcon" :size="20" weight="bold" />
             </div>
@@ -127,8 +131,66 @@ const nodeMenus = computed(() => [
             </div>
         </div>
         
-        <!-- Add node button -->
-        <div v-if="!hasOutgoingConnection" class="add-node-button">
+        <!-- Condition node content -->
+        <div v-else class="condition-content">
+            <div class="node-header">
+                <div class="node-icon">
+                    <PhGitBranch :size="20" weight="bold" />
+                </div>
+                <div class="node-title">
+                    <span class="node-type">CONDITION</span>
+                    <span class="node-name">{{ node.name || 'Path Conditions' }}</span>
+                </div>
+            </div>
+            
+            <!-- Condition paths -->
+            <div class="condition-paths">
+                <div 
+                    v-for="path in conditionPaths" 
+                    :key="path.id"
+                    class="condition-path"
+                    :class="{ 'has-connection': hasConnectionForPath(path.id) }"
+                >
+                    <div class="path-content">
+                        <span class="path-label">{{ path.label }}</span>
+                        <div class="path-conditions">
+                            <div v-if="!path.conditions || path.conditions.length === 0" class="no-conditions">
+                                Not configured
+                            </div>
+                            <div v-else class="conditions-summary">
+                                {{ path.conditions.length }} condition{{ path.conditions.length !== 1 ? 's' : '' }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="path-connector">
+                        <div class="connector-dot" :data-path-id="path.id"></div>
+                        
+                        <!-- Add action button for each path -->
+                        <Button
+                            as="tertiary icon small"
+                            :iconLeft="{ component: PhPlus }"
+                            @click.stop="$emit('add-action', node, path.id)"
+                            v-tooltip="{ content: `Add action to ${path.label}` }"
+                            class="path-add-btn"
+                        />
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Configure button -->
+            <div class="node-footer">
+                <Button
+                    as="tertiary small"
+                    :iconLeft="{ component: PhGearSix }"
+                    label="Configure"
+                    @click.stop="$emit('configure', node)"
+                />
+            </div>
+        </div>
+        
+        <!-- Add node button (for regular nodes) -->
+        <div v-if="node.node_type !== 'condition' && !hasOutgoingConnection" class="add-node-button">
             <Button
                 as="tertiary icon"
                 :iconLeft="{ component: PhPlus }"
@@ -138,6 +200,7 @@ const nodeMenus = computed(() => [
         </div>
     </div>
 </template>
+
 
 <style scoped>
 .workflow-node {
@@ -251,4 +314,16 @@ const nodeMenus = computed(() => [
 .add-node-button button {
     border-radius: 50%;
 }
+
+/* Path add button */
+.workflow-node .path-add-btn {
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.workflow-node .condition-path:hover .path-add-btn {
+    opacity: 1;
+}
+
 </style>

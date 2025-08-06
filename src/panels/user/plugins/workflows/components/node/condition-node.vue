@@ -5,8 +5,8 @@ import Button from '@form/button/view.vue';
 import { 
     PhGitBranch,
     PhPlus,
-    PhArrowRight,
-    PhTrash
+    PhTrash,
+    PhGearSix
 } from "@phosphor-icons/vue";
 
 const props = defineProps({
@@ -21,10 +21,14 @@ const props = defineProps({
     connections: {
         type: Array,
         default: () => []
+    },
+    nodeNumber: {
+        type: Number,
+        default: 1
     }
 });
 
-const emit = defineEmits(['select', 'configure', 'delete', 'add-path']);
+const emit = defineEmits(['select', 'configure', 'delete', 'add-path', 'delete-path']);
 
 // Get outgoing connections from this node
 const outgoingConnections = computed(() => {
@@ -33,21 +37,26 @@ const outgoingConnections = computed(() => {
 
 // Get condition paths configured for this node
 const conditionPaths = computed(() => {
-    const paths = props.node.config?.paths || [];
+    const config = props.node.config || {};
+    let paths = config.paths || [];
     
-    // Always ensure we have at least IF and ELSE
-    const defaultPaths = [
-        { id: 'if_1', label: 'IF', type: 'if', conditions: [] },
-        { id: 'else', label: 'ELSE', type: 'else', conditions: [] }
-    ];
-    
-    // Merge with existing paths
-    const existingPathIds = paths.map(p => p.id);
-    defaultPaths.forEach(defaultPath => {
-        if (!existingPathIds.includes(defaultPath.id)) {
-            paths.push(defaultPath);
-        }
-    });
+    // If no paths configured, create default A and B paths (like Zapier)
+    if (paths.length === 0) {
+        paths = [
+            { 
+                id: 'path_a', 
+                label: 'Path A', 
+                type: 'condition',
+                conditions: []
+            },
+            { 
+                id: 'path_b', 
+                label: 'Path B', 
+                type: 'condition',
+                conditions: []
+            }
+        ];
+    }
     
     return paths;
 });
@@ -75,6 +84,9 @@ const nodeStyle = computed(() => ({
         :style="nodeStyle"
         @click="$emit('select', node)"
     >
+        <!-- Node number -->
+        <div class="node-number">{{ nodeNumber }}</div>
+        
         <!-- Node header -->
         <div class="node-header">
             <div class="node-icon">
@@ -83,14 +95,6 @@ const nodeStyle = computed(() => ({
             <div class="node-title">
                 <span class="node-type">CONDITION</span>
                 <span class="node-name">{{ node.name || 'Path Conditions' }}</span>
-            </div>
-            <div class="node-actions">
-                <Button
-                    as="tertiary icon small"
-                    :iconLeft="{ component: PhPlus }"
-                    @click.stop="$emit('add-path', node)"
-                    v-tooltip="{ content: 'Add condition path' }"
-                />
             </div>
         </div>
         
@@ -101,32 +105,23 @@ const nodeStyle = computed(() => ({
                 :key="path.id"
                 class="condition-path"
                 :class="{ 
-                    'has-connection': hasConnectionForPath(path.id),
-                    'is-else': path.type === 'else'
+                    'has-connection': hasConnectionForPath(path.id)
                 }"
             >
-                <div class="path-header">
+                <div class="path-content">
                     <span class="path-label">{{ path.label }}</span>
-                    <Button
-                        v-if="path.type !== 'else' && conditionPaths.filter(p => p.type === 'if').length > 1"
-                        as="tertiary icon small"
-                        :iconLeft="{ component: PhTrash }"
-                        @click.stop="$emit('delete-path', node, path.id)"
-                    />
-                </div>
-                
-                <div class="path-conditions" v-if="path.type !== 'else'">
-                    <div v-if="path.conditions.length === 0" class="no-conditions">
-                        Click to configure
-                    </div>
-                    <div v-else class="conditions-summary">
-                        {{ path.conditions.length }} condition{{ path.conditions.length > 1 ? 's' : '' }}
+                    <div class="path-conditions">
+                        <div v-if="path.conditions && path.conditions.length === 0" class="no-conditions">
+                            Not configured
+                        </div>
+                        <div v-else class="conditions-summary">
+                            {{ (path.conditions || []).length }} condition{{ (path.conditions || []).length !== 1 ? 's' : '' }}
+                        </div>
                     </div>
                 </div>
                 
                 <div class="path-connector">
                     <div class="connector-dot" :data-path-id="path.id"></div>
-                    <PhArrowRight :size="16" />
                 </div>
             </div>
         </div>
@@ -135,8 +130,19 @@ const nodeStyle = computed(() => ({
         <div class="node-footer">
             <Button
                 as="tertiary small"
-                label="Configure Paths"
+                :iconLeft="{ component: PhGearSix }"
+                label="Configure"
                 @click.stop="$emit('configure', node)"
+            />
+        </div>
+        
+        <!-- Add action button -->
+        <div class="add-node-button">
+            <Button
+                as="tertiary icon"
+                :iconLeft="{ component: PhPlus }"
+                @click.stop="$emit('add-action', node)"
+                v-tooltip="{ content: 'Add action' }"
             />
         </div>
     </div>
@@ -163,20 +169,37 @@ const nodeStyle = computed(() => ({
     box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
 }
 
+.node-number {
+    position: absolute;
+    top: -12px;
+    left: 20px;
+    background: var(--background-1);
+    border: 2px solid var(--border);
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
 .node-header {
     display: flex;
     align-items: center;
-    padding: 12px;
+    padding: 16px;
     border-bottom: 1px solid var(--border);
-    gap: 8px;
+    gap: 12px;
 }
 
 .node-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     background: rgba(var(--primary-rgb), 0.1);
     border-radius: var(--radius-sm);
     color: var(--primary);
@@ -190,7 +213,7 @@ const nodeStyle = computed(() => ({
 }
 
 .node-type {
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
     color: var(--text-secondary);
     font-weight: 600;
@@ -202,25 +225,19 @@ const nodeStyle = computed(() => ({
     color: var(--text-primary);
 }
 
-.node-actions {
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.condition-node:hover .node-actions {
-    opacity: 1;
-}
-
 .condition-paths {
-    padding: 8px;
+    padding: 12px;
 }
 
 .condition-path {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     background: var(--background-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     margin-bottom: 8px;
-    padding: 8px;
+    padding: 12px;
     transition: all 0.2s;
 }
 
@@ -233,29 +250,21 @@ const nodeStyle = computed(() => ({
     background: rgba(var(--success-rgb), 0.05);
 }
 
-.condition-path.is-else {
-    border-color: var(--warning);
-    background: rgba(var(--warning-rgb), 0.05);
-}
-
-.path-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
+.path-content {
+    flex: 1;
 }
 
 .path-label {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
-    text-transform: uppercase;
     color: var(--text-primary);
+    display: block;
+    margin-bottom: 4px;
 }
 
 .path-conditions {
     font-size: 12px;
     color: var(--text-secondary);
-    margin-bottom: 8px;
 }
 
 .no-conditions {
@@ -270,9 +279,7 @@ const nodeStyle = computed(() => ({
 .path-connector {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
-    color: var(--text-secondary);
+    margin-left: 8px;
 }
 
 .connector-dot {
@@ -285,9 +292,23 @@ const nodeStyle = computed(() => ({
 }
 
 .node-footer {
-    padding: 8px;
+    padding: 12px 16px;
     border-top: 1px solid var(--border);
     display: flex;
     justify-content: center;
+}
+
+.add-node-button {
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--background-1);
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.add-node-button button {
+    border-radius: 50%;
 }
 </style>

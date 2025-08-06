@@ -198,7 +198,6 @@ const hasConfig = computed(() => {
                 <!-- Node info -->
                 <div class="node-info-section">
                     <div class="node-type">{{ props.node.node_type }}</div>
-                    <p class="node-description">{{ props.config.description }}</p>
                 </div>
                 
                 <!-- Configuration form -->
