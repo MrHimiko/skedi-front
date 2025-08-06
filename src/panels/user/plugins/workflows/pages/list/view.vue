@@ -1,6 +1,6 @@
 <!-- src/panels/user/plugins/workflows/pages/list/view.vue -->
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
@@ -11,7 +11,6 @@ import { UserStore } from '@stores/user';
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
 import Button from '@form/button/view.vue';
-import TabsComponent from '@global/tabs/view.vue';
 import MenusComponent from '@global/menus/view.vue';
 import ConfirmComponent from '@floated/confirm/view.vue';
 
@@ -27,10 +26,7 @@ import {
     PhCopy,
     PhPlay,
     PhPause,
-    PhGitBranch,
-    PhClock,
-    PhCheck,
-    PhWarning
+    PhGitBranch
 } from "@phosphor-icons/vue";
 
 const router = useRouter();
@@ -39,71 +35,12 @@ const userStore = UserStore();
 // State
 const workflows = ref([]);
 const isLoading = ref(true);
-const searchQuery = ref('');
-const activeTab = ref('all');
-const selectedOrganizationId = ref(null);
 
-// Get user organizations
-const userOrganizations = computed(() => {
-    const orgs = userStore.getOrganizations() || [];
-    return orgs.map(org => ({
-        label: org.entity?.name || 'Unknown Organization',
-        value: org.entity?.id
-    }));
-});
-
-// Set default organization
-if (userOrganizations.value.length > 0) {
-    selectedOrganizationId.value = userOrganizations.value[0].value;
-}
-
-// Tabs
-const tabs = [
-    { title: 'All', value: 'all' },
-    { title: 'Active', value: 'active' },
-    { title: 'Inactive', value: 'inactive' },
-    { title: 'Draft', value: 'draft' }
-];
-
-// Filtered workflows
-const filteredWorkflows = computed(() => {
-    let filtered = workflows.value;
-    
-    // Filter by status
-    if (activeTab.value !== 'all') {
-        filtered = filtered.filter(w => w.status === activeTab.value);
-    }
-    
-    // Filter by search
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase();
-        filtered = filtered.filter(w => 
-            w.name.toLowerCase().includes(query) ||
-            w.description?.toLowerCase().includes(query) ||
-            w.trigger_type?.toLowerCase().includes(query)
-        );
-    }
-    
-    return filtered;
-});
-
-// Workflow stats
-const workflowStats = computed(() => {
-    return {
-        total: workflows.value.length,
-        active: workflows.value.filter(w => w.status === 'active').length,
-        inactive: workflows.value.filter(w => w.status === 'inactive').length,
-        draft: workflows.value.filter(w => w.status === 'draft').length
-    };
-});
-
-// Load workflows
+// Load workflows from all user organizations
 async function loadWorkflows() {
     try {
         isLoading.value = true;
-        const response = await api.get('user/workflows', {
-            organization_id: selectedOrganizationId.value
-        });
+        const response = await api.get('user/workflows');
         
         if (response && response.success) {
             workflows.value = response.data.data || [];
@@ -130,6 +67,34 @@ function createWorkflow() {
             }
         }
     );
+}
+
+// Edit workflow
+function editWorkflow(workflow) {
+    router.push(`/workflows/${workflow.id}`);
+}
+
+// Duplicate workflow
+async function duplicateWorkflow(workflow) {
+    try {
+        const duplicateData = {
+            organization_id: workflow.organization_id,
+            name: `${workflow.name} (Copy)`,
+            description: workflow.description,
+            trigger_type: workflow.trigger_type,
+            trigger_config: workflow.trigger_config,
+            status: 'draft'
+        };
+        
+        const response = await api.post('user/workflows', duplicateData);
+        
+        if (response && response.success) {
+            common.notification('Workflow duplicated successfully', true);
+            loadWorkflows();
+        }
+    } catch (error) {
+        common.notification('Failed to duplicate workflow', false);
+    }
 }
 
 // Toggle workflow status
@@ -159,99 +124,85 @@ function deleteWorkflow(workflow) {
         {
             as: 'red',
             description: `Are you sure you want to delete "${workflow.name}"? This action cannot be undone.`,
-            endpoint: `user/workflows/${workflow.id}`,
-            type: 'delete',
-            callback: (response, success) => {
-                if (success) {
-                    workflows.value = workflows.value.filter(w => w.id !== workflow.id);
-                    common.notification('Workflow deleted successfully', true);
+            callback: async (confirmed) => {
+                if (confirmed) {
+                    try {
+                        const response = await api.delete(`user/workflows/${workflow.id}`);
+                        
+                        if (response && response.success) {
+                            common.notification('Workflow deleted successfully', true);
+                            loadWorkflows();
+                        }
+                    } catch (error) {
+                        common.notification('Failed to delete workflow', false);
+                    }
                 }
+                popup.close();
             }
         }
     );
 }
 
-// Duplicate workflow
-async function duplicateWorkflow(workflow) {
-    try {
-        const response = await api.post('user/workflows', {
-            ...workflow,
-            name: `${workflow.name} (Copy)`,
-            status: 'draft'
-        });
-        
-        if (response && response.success) {
-            workflows.value.push(response.data);
-            common.notification('Workflow duplicated successfully', true);
-        }
-    } catch (error) {
-        common.notification('Failed to duplicate workflow', false);
-    }
-}
-
 // Get workflow menus
 function getWorkflowMenus(workflow) {
-    const menus = [
+    return [
         {
             label: 'Edit',
-            icon: PhPencil,
-            action: () => router.push(`/workflows/${workflow.id}`)
-        },
-        {
-            label: workflow.status === 'active' ? 'Deactivate' : 'Activate',
-            icon: workflow.status === 'active' ? PhPause : PhPlay,
-            action: () => toggleWorkflowStatus(workflow)
+            iconComponent: PhPencil,
+            onClick: () => editWorkflow(workflow)
         },
         {
             label: 'Duplicate',
-            icon: PhCopy,
-            action: () => duplicateWorkflow(workflow)
+            iconComponent: PhCopy,
+            onClick: () => duplicateWorkflow(workflow)
         },
         {
-            type: 'divider'
+            label: workflow.status === 'active' ? 'Deactivate' : 'Activate',
+            iconComponent: workflow.status === 'active' ? PhPause : PhPlay,
+            onClick: () => toggleWorkflowStatus(workflow)
         },
         {
             label: 'Delete',
-            icon: PhTrash,
-            action: () => deleteWorkflow(workflow),
-            className: 'danger'
+            iconComponent: PhTrash,
+            onClick: () => deleteWorkflow(workflow),
+            as: 'danger'
         }
     ];
+}
+
+// Format date
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+}
+
+// Get status badge class
+function getStatusClass(status) {
+    switch (status) {
+        case 'active':
+            return 'status-active';
+        case 'inactive':
+            return 'status-inactive';
+        case 'draft':
+            return 'status-draft';
+        default:
+            return '';
+    }
+}
+
+// Get trigger type display name
+function getTriggerDisplayName(triggerType) {
+    const triggerMap = {
+        'booking.created': 'Booking Created',
+        'booking.updated': 'Booking Updated',
+        'booking.cancelled': 'Booking Cancelled',
+        'booking.reminder': 'Booking Reminder',
+        'form.submitted': 'Form Submitted',
+        'time.scheduled': 'Scheduled Time'
+    };
     
-    return menus;
-}
-
-// Get status icon
-function getStatusIcon(status) {
-    switch (status) {
-        case 'active':
-            return PhCheck;
-        case 'inactive':
-            return PhPause;
-        case 'draft':
-            return PhClock;
-        default:
-            return PhWarning;
-    }
-}
-
-// Get status color
-function getStatusColor(status) {
-    switch (status) {
-        case 'active':
-            return 'var(--success)';
-        case 'inactive':
-            return 'var(--warning)';
-        case 'draft':
-            return 'var(--text-secondary)';
-        default:
-            return 'var(--text-secondary)';
-    }
-}
-
-// Handle tab change
-function handleTabChange(event, tab) {
-    activeTab.value = tab.value;
+    return triggerMap[triggerType] || triggerType;
 }
 
 // Lifecycle
@@ -262,330 +213,229 @@ onMounted(() => {
 
 <template>
     <MainLayout>
+
         <template #content>
-            <div class="workflows-page">
-                <!-- Header -->
-                <HeadingComponent 
-                    title="Workflows" 
-                    description="Automate your business processes with custom workflows"
-                >
-                    <template #right>
-                        <div class="header-actions">
-                            <div class="search-container">
-                                <input 
-                                    v-model="searchQuery" 
-                                    type="text"
-                                    placeholder="Search workflows..."
-                                    class="search-input"
-                                />
-                            </div>
-                            <Button
-                                :iconLeft="{ component: PhPlus }"
-                                label="Create Workflow"
-                                @click="createWorkflow"
-                            />
-                        </div>
-                    </template>
-                </HeadingComponent>
-                
-                <!-- Stats -->
-                <div class="workflow-stats">
-                    <div class="stat-card">
-                        <div class="stat-value">{{ workflowStats.total }}</div>
-                        <div class="stat-label">Total Workflows</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" style="color: var(--success)">{{ workflowStats.active }}</div>
-                        <div class="stat-label">Active</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" style="color: var(--warning)">{{ workflowStats.inactive }}</div>
-                        <div class="stat-label">Inactive</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">{{ workflowStats.draft }}</div>
-                        <div class="stat-label">Drafts</div>
-                    </div>
-                </div>
-                
-                <!-- Tabs -->
-                <div class="tabs-container">
-                    <TabsComponent
-                        :tabs="tabs"
-                        :active="activeTab"
-                        :onClick="handleTabChange"
-                    />
-                </div>
-                
-                <!-- Workflows list -->
-                <div class="workflows-container">
-                    <!-- Loading state -->
-                    <div v-if="isLoading" class="loading-state">
-                        <div class="loading-spinner"></div>
-                        <p>Loading workflows...</p>
-                    </div>
-                    
-                    <!-- Empty state -->
-                    <div v-else-if="filteredWorkflows.length === 0" class="empty-state">
-                        <PhGitBranch :size="48" />
-                        <h3>No workflows found</h3>
-                        <p v-if="searchQuery">Try adjusting your search criteria</p>
-                        <p v-else>Create your first workflow to get started</p>
-                        <Button
-                            v-if="!searchQuery"
-                            :iconLeft="{ component: PhPlus }"
-                            label="Create Workflow"
-                            @click="createWorkflow"
-                        />
-                    </div>
-                    
-                    <!-- Workflows grid -->
-                    <div v-else class="workflows-grid">
-                        <div 
-                            v-for="workflow in filteredWorkflows"
-                            :key="workflow.id"
-                            class="workflow-card"
-                            @click="router.push(`/workflows/${workflow.id}`)"
-                        >
-                            <div class="workflow-header">
-                                <div class="workflow-icon">
-                                    <PhGitBranch :size="24" />
-                                </div>
-                                <div class="workflow-actions">
-                                    <button
-                                        class="menu-trigger"
-                                        @click.stop="event => popup.mini(
-                                            event, 
-                                            null, 
-                                            MenusComponent, 
-                                            {
-                                                menus: getWorkflowMenus(workflow)
-                                            }
-                                        )"
-                                    >
-                                        <PhDotsThree :size="20" weight="bold" />
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div class="workflow-content">
-                                <h3 class="workflow-name">{{ workflow.name }}</h3>
-                                <p class="workflow-description">{{ workflow.description || 'No description' }}</p>
-                                
-                                <div class="workflow-meta">
-                                    <div class="workflow-trigger">
-                                        <PhClock :size="14" />
-                                        <span>{{ workflow.trigger_type || 'No trigger' }}</span>
-                                    </div>
-                                    <div class="workflow-status" :style="{ color: getStatusColor(workflow.status) }">
-                                        <component :is="getStatusIcon(workflow.status)" :size="14" />
-                                        <span>{{ workflow.status }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+
+            <HeadingComponent 
+                title="Workflows"
+                description="Automate your scheduling with powerful workflows"
+            />
+
+
+            <!-- Loading State -->
+            <div v-if="isLoading" class="loading-state">
+                <div class="loading-content">
+                    <div class="loading-spinner"></div>
+                    <p>Loading workflows...</p>
                 </div>
             </div>
+            
+            <!-- Empty State -->
+            <div v-else-if="!workflows.length" class="empty-state">
+                <div class="empty-state-content">
+                    <PhGitBranch :size="48" weight="thin" />
+                    <h3>No workflows yet</h3>
+                    <p>Create your first workflow to start automating your scheduling tasks</p>
+                    <Button
+                        :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                        label="Create Workflow"
+                        @click="createWorkflow"
+                    />
+                </div>
+            </div>
+            
+            <!-- Workflows Table -->
+            <div v-else class="common-table-wrapper">
+                <table class="common-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Organization</th>
+                            <th>Trigger</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Updated</th>
+                            <th width="50"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="workflow in workflows" :key="workflow.id">
+                            <td>
+                                <div class="workflow-name-cell" @click="editWorkflow(workflow)">
+                                    {{ workflow.name }}
+                                    <span v-if="workflow.description" class="workflow-description">
+                                        {{ workflow.description }}
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="org-name">{{ workflow.organization_name }}</span>
+                            </td>
+                            <td>
+                                <span class="trigger-type">
+                                    {{ getTriggerDisplayName(workflow.trigger_type) }}
+                                </span>
+                            </td>
+                            <td>
+                                <span 
+                                    class="status-badge"
+                                    :class="getStatusClass(workflow.status)"
+                                >
+                                    {{ workflow.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="date-text">{{ formatDate(workflow.created_at) }}</span>
+                            </td>
+                            <td>
+                                <span class="date-text">{{ formatDate(workflow.updated_at) }}</span>
+                            </td>
+                            <td class="table-action-cell">
+                                <button
+                                    class="c-button secondary icon"
+                                    v-dropdown="{ 
+                                        component: MenusComponent,
+                                        properties: {
+                                            menus: getWorkflowMenus(workflow)
+                                        }
+                                    }"
+                                >
+                                    <PhDotsThree :size="20" weight="bold" />
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
         </template>
     </MainLayout>
 </template>
 
 <style scoped>
+@import '@global/common-table/style.css';
+
 .workflows-page {
-    padding: 0;
+    padding: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
 }
 
-.header-actions {
+/* Loading State */
+.loading-state {
     display: flex;
-    gap: 12px;
-    align-items: center;
-}
-
-.search-container {
-    width: 300px;
-}
-
-.search-input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 14px;
-    background-color: var(--background-1);
-    color: var(--text-primary);
-}
-
-.search-input:focus {
-    outline: none;
-    border-color: var(--primary);
-}
-
-/* Stats */
-.workflow-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.stat-card {
-    background: var(--background-0);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    text-align: center;
-}
-
-.stat-value {
-    font-size: 32px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-}
-
-.stat-label {
-    font-size: 14px;
-    color: var(--text-secondary);
-}
-
-/* Tabs */
-.tabs-container {
-    margin-bottom: 24px;
-}
-
-/* Loading & Empty states */
-.loading-state,
-.empty-state {
-    display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 400px;
-    gap: 16px;
-    color: var(--text-secondary);
+}
+
+.loading-content {
+    text-align: center;
 }
 
 .loading-spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid var(--border);
-    border-top-color: var(--primary);
+    border: 3px solid #F3F4F6;
+    border-top-color: #3B82F6;
     border-radius: 50%;
     animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-.empty-state h3 {
-    color: var(--text-primary);
-    margin: 0;
-}
-
-/* Workflows grid */
-.workflows-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 16px;
-}
-
-.workflow-card {
-    background: var(--background-0);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.workflow-card:hover {
-    border-color: var(--primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.workflow-header {
+/* Empty State */
+.empty-state {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.empty-state-content {
+    text-align: center;
+    max-width: 400px;
+}
+
+.empty-state-content svg {
+    color: var(--text-tertiary);
     margin-bottom: 16px;
 }
 
-.workflow-icon {
-    width: 48px;
-    height: 48px;
-    background: var(--primary-light);
-    color: var(--primary);
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.menu-trigger {
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.menu-trigger:hover {
-    background: var(--background-1);
-    color: var(--text-primary);
-}
-
-.workflow-content {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.workflow-name {
-    font-size: 16px;
+.empty-state-content h3 {
+    font-size: 20px;
     font-weight: 600;
+    margin-bottom: 8px;
     color: var(--text-primary);
-    margin: 0;
+}
+
+.empty-state-content p {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}
+
+/* Table Styles */
+.workflow-name-cell {
+    cursor: pointer;
+    color: var(--brand-default);
+    font-weight: 500;
+}
+
+.workflow-name-cell:hover {
+    text-decoration: underline;
 }
 
 .workflow-description {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 400;
+    margin-top: 2px;
+}
+
+.org-name {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.trigger-type {
     font-size: 14px;
     color: var(--text-secondary);
-    margin: 0;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
 }
 
-.workflow-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 12px;
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
     font-size: 12px;
-}
-
-.workflow-trigger,
-.workflow-status {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.workflow-trigger {
-    color: var(--text-secondary);
-}
-
-.workflow-status {
     font-weight: 500;
     text-transform: capitalize;
+}
+
+.status-badge.status-active {
+    background-color: var(--green-fill);
+    color: var(--green-default);
+}
+
+.status-badge.status-inactive {
+    background-color: var(--orange-fill);
+    color: var(--orange-default);
+}
+
+.status-badge.status-draft {
+    background-color:var(--background-2);
+}
+
+.date-text {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.table-action-cell {
+    text-align: center;
 }
 </style>

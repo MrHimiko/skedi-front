@@ -4,18 +4,16 @@ import { api } from '@utils/api';
 
 export class WorkflowService {
     /**
-     * Get all workflows for an organization
+     * Get all workflows for current user (from all their organizations)
      */
-    static async getWorkflows(organizationId) {
+    static async getWorkflows() {
         try {
-            const response = await api.get('user/workflows', {
-                organization_id: organizationId
-            });
+            const response = await api.get('user/workflows');
             
-            return response.success ? response.data : [];
+            return response.success ? response.data : { data: [], total: 0 };
         } catch (error) {
             console.error('Failed to fetch workflows:', error);
-            return [];
+            return { data: [], total: 0 };
         }
     }
     
@@ -98,20 +96,7 @@ export class WorkflowService {
     }
     
     /**
-     * Add a node to a workflow
-     */
-    static async addNode(workflowId, nodeData) {
-        try {
-            const response = await api.post(`user/workflows/${workflowId}/nodes`, nodeData);
-            return response;
-        } catch (error) {
-            console.error('Failed to add node:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Update a node
+     * Update workflow node
      */
     static async updateNode(nodeId, data) {
         try {
@@ -124,50 +109,11 @@ export class WorkflowService {
     }
     
     /**
-     * Delete a node
+     * Test workflow
      */
-    static async deleteNode(nodeId) {
+    static async testWorkflow(workflowId) {
         try {
-            const response = await api.delete(`user/workflows/nodes/${nodeId}`);
-            return response;
-        } catch (error) {
-            console.error('Failed to delete node:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Create a connection between nodes
-     */
-    static async createConnection(workflowId, connectionData) {
-        try {
-            const response = await api.post(`user/workflows/${workflowId}/connections`, connectionData);
-            return response;
-        } catch (error) {
-            console.error('Failed to create connection:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Delete a connection
-     */
-    static async deleteConnection(connectionId) {
-        try {
-            const response = await api.delete(`user/workflows/connections/${connectionId}`);
-            return response;
-        } catch (error) {
-            console.error('Failed to delete connection:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Test a workflow
-     */
-    static async testWorkflow(workflowId, testData = {}) {
-        try {
-            const response = await api.post(`user/workflows/${workflowId}/test`, testData);
+            const response = await api.post(`user/workflows/${workflowId}/test`);
             return response;
         } catch (error) {
             console.error('Failed to test workflow:', error);

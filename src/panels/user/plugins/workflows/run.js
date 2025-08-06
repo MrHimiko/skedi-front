@@ -20,11 +20,10 @@ export default class
         {
             path: '/workflows',
             name: 'Workflows',
-            component: () => import('./pages/home/view.vue'),
+            component: () => import('./pages/list/view.vue'),
             beforeEnter: (to, from, next) => 
             {
-                next();
-                //this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
+                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
             }
         })
 
