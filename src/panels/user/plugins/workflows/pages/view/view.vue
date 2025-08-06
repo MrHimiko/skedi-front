@@ -2,20 +2,20 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '@utils/api';
+import { WorkflowService } from '@user_workflows/services/workflow';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
 
-// Layout & Global Components
+// Layout & Components
 import MainLayout from '@layouts/main/view.vue';
 import HeadingComponent from '@global/heading/view.vue';
 import Button from '@form/button/view.vue';
+import Input from '@form/input/view.vue';
+import Textarea from '@form/textarea/view.vue';
 
 // Workflow Components
-import WorkflowCanvas from '@user_workflows/components/canvas/view.vue';
-import TriggerSelectPopup from '@user_workflows/components/popups/trigger-select.vue';
-import ActionSelectPopup from '@user_workflows/components/popups/action-select.vue';
-import NodeConfigPopup from '@user_workflows/components/popups/node-config.vue';
+import StepList from '@user_workflows/components/step-list/view.vue';
+import WorkflowSettings from '@user_workflows/components/popups/workflow-settings.vue';
 
 // Icons
 import { 
@@ -37,46 +37,40 @@ const workflow = ref({
     name: 'Untitled Workflow',
     description: '',
     status: 'draft',
-    trigger_type: null,
+    trigger_type: '',
     trigger_config: {},
-    nodes: [],
-    connections: []
+    flow_data: { steps: [] }
 });
 
 const isLoading = ref(true);
 const isSaving = ref(false);
 const hasUnsavedChanges = ref(false);
-const selectedNode = ref(null);
-const selectedConnection = ref(null);
+const isEditingBasicInfo = ref(false);
 
-// Track initial state for change detection
+// Track initial state
 let initialWorkflowState = '';
-
-// Available triggers and actions
-const availableTriggers = ref([]);
-const availableActions = ref([]);
 
 // Computed
 const isActive = computed(() => workflow.value.status === 'active');
 const canSave = computed(() => hasUnsavedChanges.value && !isSaving.value);
+const stepCount = computed(() => workflow.value.flow_data?.steps?.length || 0);
 
 // Load workflow data
 async function loadWorkflow() {
     try {
         isLoading.value = true;
-        const response = await api.get(`user/workflows/${workflowId}`);
+        const data = await WorkflowService.getWorkflow(workflowId);
         
-        if (response && response.success) {
+        if (data) {
             workflow.value = {
-                ...response.data,
-                nodes: response.data.nodes || [],
-                connections: response.data.connections || []
+                ...data,
+                flow_data: data.flow_data || { steps: [] }
             };
             
-            // Store initial state
+            // Store initial state for change detection
             initialWorkflowState = JSON.stringify(workflow.value);
         } else {
-            common.notification('Failed to load workflow', false);
+            common.notification('Workflow not found', false);
             router.push('/workflows');
         }
     } catch (error) {
@@ -87,38 +81,20 @@ async function loadWorkflow() {
     }
 }
 
-// Load available triggers and actions
-async function loadAvailableComponents() {
-    try {
-        const [triggersRes, actionsRes] = await Promise.all([
-            api.get('user/workflows/available-triggers'),
-            api.get('user/workflows/available-actions')
-        ]);
-        
-        if (triggersRes.success) {
-            availableTriggers.value = triggersRes.data;
-        }
-        
-        if (actionsRes.success) {
-            availableActions.value = actionsRes.data;
-        }
-    } catch (error) {
-        console.error('Failed to load workflow components:', error);
-    }
-}
-
 // Save workflow
 async function saveWorkflow() {
     try {
         isSaving.value = true;
         
-        const response = await api.patch(`user/workflows/${workflowId}`, {
+        // Save basic workflow info
+        const response = await WorkflowService.updateWorkflow(workflowId, {
             name: workflow.value.name,
             description: workflow.value.description,
-            trigger_type: workflow.value.trigger_type,
-            trigger_config: workflow.value.trigger_config,
             status: workflow.value.status
         });
+        
+        // Save flow data separately
+        await WorkflowService.updateFlowData(workflowId, workflow.value.flow_data);
         
         if (response && response.success) {
             initialWorkflowState = JSON.stringify(workflow.value);
@@ -137,7 +113,7 @@ async function toggleStatus() {
     const newStatus = workflow.value.status === 'active' ? 'inactive' : 'active';
     
     try {
-        const response = await api.patch(`user/workflows/${workflowId}`, {
+        const response = await WorkflowService.updateWorkflow(workflowId, {
             status: newStatus
         });
         
@@ -151,277 +127,188 @@ async function toggleStatus() {
     }
 }
 
-// Add trigger node
-function addTrigger() {
-    popup.open(
-        'trigger-select',
-        null,
-        TriggerSelectPopup,
-        {
-            triggers: availableTriggers.value,
-            onSelect: async (trigger) => {
-                const nodeData = {
-                    node_type: 'trigger',
-                    action_type: trigger.id,
-                    name: trigger.name,
-                    config: {},
-                    position_x: 400,
-                    position_y: 100
-                };
-                
-                await addNode(nodeData);
-                popup.close();
-            }
-        }
-    );
-}
-
-// Add action after a node
-function addActionAfterNode(previousNode) {
-    const nodeActions = availableActions.value;
-    
-    popup.open(
-        'action-select',
-        null,
-        ActionSelectPopup,
-        {
-            actions: nodeActions,
-            showPaths: previousNode?.node_type === 'condition',
-            onSelect: async (action, path) => {
-                const nodeData = {
-                    node_type: action.node_type || 'action', // Use the node_type from action definition
-                    action_type: action.id,
-                    name: action.name,
-                    config: {},
-                    position_x: previousNode ? previousNode.position_x : 400,
-                    position_y: previousNode ? previousNode.position_y + 150 : 100
-                };
-                
-                const newNode = await addNode(nodeData);
-                
-                if (newNode && previousNode) {
-                    await addConnection({
-                        from_node_id: previousNode.id,
-                        to_node_id: newNode.id,
-                        condition_type: path || null
-                    });
-                }
-                
-                popup.close();
-            }
-        }
-    );
-}
-// Node management
-async function addNode(nodeData) {
-    try {
-        const response = await api.post(`user/workflows/${workflowId}/nodes`, nodeData);
-        
-        if (response && response.success) {
-            workflow.value.nodes.push(response.data);
-            trackChanges();
-            return response.data;
-        }
-    } catch (error) {
-        common.notification('Failed to add node', false);
-        return null;
-    }
-}
-
-async function updateNode(nodeId, updates) {
-    try {
-        const response = await api.patch(`user/workflows/nodes/${nodeId}`, updates);
-        
-        if (response && response.success) {
-            const index = workflow.value.nodes.findIndex(n => n.id === nodeId);
-            if (index !== -1) {
-                workflow.value.nodes[index] = { ...workflow.value.nodes[index], ...updates };
-            }
-            trackChanges();
-        }
-    } catch (error) {
-        common.notification('Failed to update node', false);
-    }
-}
-
-async function deleteNode(nodeId) {
-    if (confirm('Are you sure you want to delete this node?')) {
-        try {
-            const response = await api.delete(`user/workflows/nodes/${nodeId}`);
-            
-            if (response && response.success) {
-                // Remove node
-                workflow.value.nodes = workflow.value.nodes.filter(n => n.id !== nodeId);
-                
-                // Remove related connections
-                workflow.value.connections = workflow.value.connections.filter(
-                    c => c.from_node_id !== nodeId && c.to_node_id !== nodeId
-                );
-                
-                selectedNode.value = null;
-                trackChanges();
-                common.notification('Node deleted successfully', true);
-            }
-        } catch (error) {
-            common.notification('Failed to delete node', false);
-        }
-    }
-}
-
-// Connection management
-async function addConnection(connectionData) {
-    try {
-        const response = await api.post(`user/workflows/${workflowId}/connections`, connectionData);
-        
-        if (response && response.success) {
-            workflow.value.connections.push(response.data);
-            trackChanges();
-        }
-    } catch (error) {
-        common.notification('Failed to add connection', false);
-    }
-}
-
-async function deleteConnection(connectionId) {
-    try {
-        const response = await api.delete(`user/workflows/connections/${connectionId}`);
-        
-        if (response && response.success) {
-            workflow.value.connections = workflow.value.connections.filter(c => c.id !== connectionId);
-            trackChanges();
-        }
-    } catch (error) {
-        common.notification('Failed to delete connection', false);
-    }
-}
-
-// Configure node
-function configureNode(node) {
-    const componentConfig = node.node_type === 'trigger' 
-        ? availableTriggers.value.find(t => t.id === node.action_type)
-        : availableActions.value.find(a => a.id === node.action_type);
-    
-    popup.open(
-        'node-config',
-        null,
-        NodeConfigPopup,
-        {
-            node: node,
-            config: componentConfig,
-            onSave: async (updatedConfig) => {
-                await updateNode(node.id, { config: updatedConfig });
-                popup.close();
-            }
-        }
-    );
-}
-
-// Track changes
-function trackChanges() {
-    const currentState = JSON.stringify(workflow.value);
-    hasUnsavedChanges.value = currentState !== initialWorkflowState;
-}
-
 // Test workflow
 async function testWorkflow() {
     try {
-        const response = await api.post(`user/workflows/${workflowId}/test`);
+        const response = await WorkflowService.testWorkflow(workflowId);
         
         if (response && response.success) {
-            common.notification('Test workflow executed successfully', true);
+            common.notification('Test completed successfully', true);
         }
     } catch (error) {
         common.notification('Failed to test workflow', false);
     }
 }
 
-// Watch for changes
+// Open workflow settings
+function openWorkflowSettings() {
+    popup.open(
+        'workflow-settings',
+        null,
+        WorkflowSettings,
+        {
+            workflow: workflow.value,
+            callback: (updatedData) => {
+                Object.assign(workflow.value, updatedData);
+                trackChanges();
+                popup.close();
+            }
+        }
+    );
+}
+
+// Handle flow data changes
+function onFlowDataUpdate(newFlowData) {
+    workflow.value.flow_data = newFlowData;
+    trackChanges();
+}
+
+// Track changes for save state
+function trackChanges() {
+    const currentState = JSON.stringify(workflow.value);
+    hasUnsavedChanges.value = currentState !== initialWorkflowState;
+}
+
+// Toggle basic info editing
+function toggleBasicInfoEdit() {
+    isEditingBasicInfo.value = !isEditingBasicInfo.value;
+}
+
+// Save basic info
+function saveBasicInfo() {
+    isEditingBasicInfo.value = false;
+    trackChanges();
+}
+
+// Watch for changes in workflow data
 watch(() => workflow.value, () => {
     trackChanges();
 }, { deep: true });
 
+// Keyboard shortcuts
+function handleKeyPress(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (canSave.value) {
+            saveWorkflow();
+        }
+    }
+}
+
 // Lifecycle
 onMounted(() => {
     loadWorkflow();
-    loadAvailableComponents();
-    
-    // Keyboard shortcuts
-    const handleKeyPress = (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-            e.preventDefault();
-            if (canSave.value) {
-                saveWorkflow();
-            }
-        }
-    };
-    
     document.addEventListener('keydown', handleKeyPress);
-    
-    onUnmounted(() => {
-        document.removeEventListener('keydown', handleKeyPress);
-    });
+});
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeyPress);
 });
 </script>
 
 <template>
     <MainLayout>
-        <template #heading>
-            <HeadingComponent 
-                :icon="'account_tree'"
-                :title="workflow.name || 'Workflow'"
-                :subtitle="workflow.description || 'Automate your processes'"
-            >
-                <template #actions>
-                    <Button
-                        as="tertiary"
-                        :iconLeft="{ component: PhArrowLeft }"
-                        label="Back"
-                        @click="router.push('/workflows')"
-                    />
-                    <Button
-                        v-if="!isLoading"
-                        as="tertiary"
-                        :iconLeft="{ component: PhTestTube }"
-                        label="Test"
-                        @click="testWorkflow"
-                    />
-                    <Button
-                        v-if="!isLoading"
-                        :as="isActive ? 'warning' : 'success'"
-                        :iconLeft="{ component: isActive ? PhPause : PhPlay }"
-                        :label="isActive ? 'Deactivate' : 'Activate'"
-                        @click="toggleStatus"
-                    />
-                    <Button
-                        v-if="!isLoading"
-                        :iconLeft="{ component: PhFloppyDisk }"
-                        label="Save"
-                        :loading="isSaving"
-                        :disabled="!canSave"
-                        @click="saveWorkflow"
-                    />
-                </template>
-            </HeadingComponent>
-        </template>
-
         <template #content>
             <div class="workflow-editor">
+                <!-- Loading State -->
                 <div v-if="isLoading" class="loading-container">
                     <div class="loading-spinner"></div>
                     <p>Loading workflow...</p>
                 </div>
                 
-                <WorkflowCanvas
-                    v-else
-                    :workflow="workflow"
-                    :selectedNode="selectedNode"
-                    @node-select="(node) => selectedNode = node"
-                    @node-configure="configureNode"
-                    @node-delete="deleteNode"
-                    @add-trigger="addTrigger"
-                    @add-action="addActionAfterNode"
-                    @connection-delete="deleteConnection"
-                />
+                <!-- Workflow Editor -->
+                <div v-else class="editor-container">
+                    <!-- Header -->
+                    <div class="editor-header">
+                        <div class="header-left">
+                            <div>
+                                <Button
+                                    as="tertiary"
+                                    :iconLeft="{ component: PhArrowLeft }"
+                                    label="Back to Workflows"
+                                    @click="router.push('/workflows')"
+                                />
+                            </div>
+                            
+                            <!-- Workflow Title Section -->
+                            <div class="workflow-title-section">
+                                <div v-if="!isEditingBasicInfo" class="title-display">
+                                    <h1 @click="toggleBasicInfoEdit" class="workflow-title">
+                                        {{ workflow.name }}
+                                    </h1>
+                                    <p v-if="workflow.description" @click="toggleBasicInfoEdit" class="workflow-description">
+                                        {{ workflow.description }}
+                                    </p>
+                                    <p v-else @click="toggleBasicInfoEdit" class="no-description">
+                                        Click to add description
+                                    </p>
+                                </div>
+                                
+                                <div v-else class="title-edit">
+                                    <Input
+                                        v-model="workflow.name"
+                                        placeholder="Workflow name"
+                                        @keyup.enter="saveBasicInfo"
+                                        @keyup.escape="toggleBasicInfoEdit"
+                                    />
+                                    <Textarea
+                                        v-model="workflow.description"
+                                        placeholder="Workflow description (optional)"
+                                        rows="2"
+                                        @keyup.escape="toggleBasicInfoEdit"
+                                    />
+                                    <div class="edit-actions">
+                                        <Button as="tertiary" label="Cancel" @click="toggleBasicInfoEdit" />
+                                        <Button label="Save" @click="saveBasicInfo" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="header-right">
+                            <div class="workflow-stats">
+                                <span class="step-count">{{ stepCount }} steps</span>
+                                <span :class="['status-indicator', workflow.status]">{{ workflow.status }}</span>
+                            </div>
+                            
+                            <div class="header-actions">
+                                <Button
+                                    as="tertiary"
+                                    :iconLeft="{ component: PhGearSix }"
+                                    label="Settings"
+                                    @click="openWorkflowSettings"
+                                />
+                                <Button
+                                    as="tertiary"
+                                    :iconLeft="{ component: PhTestTube }"
+                                    label="Test"
+                                    @click="testWorkflow"
+                                />
+                                <Button
+                                    :as="isActive ? 'warning' : 'success'"
+                                    :iconLeft="{ component: isActive ? PhPause : PhPlay }"
+                                    :label="isActive ? 'Deactivate' : 'Activate'"
+                                    @click="toggleStatus"
+                                />
+                                <Button
+                                    :iconLeft="{ component: PhFloppyDisk }"
+                                    label="Save"
+                                    :loading="isSaving"
+                                    :disabled="!canSave"
+                                    @click="saveWorkflow"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Main Editor Content -->
+                    <div class="editor-content">
+                        <StepList
+                            :workflow="workflow"
+                            @update="onFlowDataUpdate"
+                        />
+                    </div>
+                </div>
             </div>
         </template>
     </MainLayout>
@@ -431,8 +318,8 @@ onMounted(() => {
 .workflow-editor {
     height: calc(100vh - 120px);
     background: var(--background-0);
-    position: relative;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .loading-container {
@@ -456,5 +343,124 @@ onMounted(() => {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+.editor-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background: var(--background-1);
+    border-bottom: 1px solid var(--border);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex: 1;
+}
+
+.workflow-title-section {
+    flex: 1;
+    max-width: 600px;
+}
+
+.title-display {
+    cursor: pointer;
+}
+
+.title-display:hover .workflow-title {
+    color: var(--primary);
+}
+
+.workflow-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+    transition: color 0.2s;
+}
+
+.workflow-description {
+    color: var(--text-secondary);
+    margin: 0;
+    font-size: 14px;
+}
+
+.no-description {
+    color: var(--text-tertiary);
+    margin: 0;
+    font-size: 14px;
+    font-style: italic;
+}
+
+.title-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.workflow-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.step-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.status-indicator {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-indicator.active {
+    background: var(--green-fill);
+    color: var(--green-default);
+}
+
+.status-indicator.inactive {
+    background: var(--orange-fill);
+    color: var(--orange-default);
+}
+
+.status-indicator.draft {
+    background: var(--background-2);
+    color: var(--text-secondary);
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.editor-content {
+    flex: 1;
+    overflow: hidden;
+    background: var(--background-0);
 }
 </style>

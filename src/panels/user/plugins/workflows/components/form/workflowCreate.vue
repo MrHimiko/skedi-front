@@ -1,6 +1,6 @@
 <!-- src/panels/user/plugins/workflows/components/form/workflowCreate.vue -->
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { UserStore } from '@stores/user';
 import { WorkflowService } from '@user_workflows/services/workflow';
 import { common } from '@utils/common';
@@ -17,6 +17,9 @@ const props = defineProps({
 
 const userStore = UserStore();
 
+// Available triggers (we'll load from API)
+const availableTriggers = ref([]);
+
 // Get user organizations
 const userOrganizations = computed(() => {
     const orgs = userStore.getOrganizations() || [];
@@ -26,20 +29,10 @@ const userOrganizations = computed(() => {
     }));
 });
 
-// Available triggers
-const availableTriggers = [
-    { label: 'Booking Created', value: 'booking.created' },
-    { label: 'Booking Updated', value: 'booking.updated' },
-    { label: 'Booking Cancelled', value: 'booking.cancelled' },
-    { label: 'Booking Reminder', value: 'booking.reminder' },
-    { label: 'Form Submitted', value: 'form.submitted' },
-    { label: 'Scheduled Time', value: 'time.scheduled' }
-];
-
 // Form configuration
-const tabs = [
+const tabs = computed(() => [
     {
-        title: 'General',
+        title: 'Create Workflow',
         components: [
             {
                 label: 'Organization',
@@ -79,21 +72,22 @@ const tabs = [
                 width: 12,
                 properties: {
                     placeholder: 'Select when this workflow should run',
-                    options: availableTriggers,
+                    options: availableTriggers.value,
                     required: true
                 }
             }
         ]
     }
-];
+]);
 
 // Default values
 const defaultValues = () => ({
     organization_id: userOrganizations.value.length > 0 ? userOrganizations.value[0].value : null,
     name: '',
     description: '',
-    trigger_type: 'booking.created',
+    trigger_type: '',
     trigger_config: {},
+    flow_data: WorkflowService.getDefaultWorkflow(),
     status: 'draft'
 });
 
@@ -116,6 +110,19 @@ async function handleSubmit(formData) {
         common.notification('An error occurred while creating the workflow', false);
     }
 }
+
+// Load available triggers
+onMounted(async () => {
+    try {
+        const triggers = await WorkflowService.getAvailableTriggers();
+        availableTriggers.value = triggers.map(trigger => ({
+            label: trigger.name,
+            value: trigger.id
+        }));
+    } catch (error) {
+        console.error('Failed to load triggers:', error);
+    }
+});
 </script>
 
 <template>

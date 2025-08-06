@@ -4,12 +4,11 @@ import { api } from '@utils/api';
 
 export class WorkflowService {
     /**
-     * Get all workflows for current user (from all their organizations)
+     * Get all workflows for current user
      */
-    static async getWorkflows() {
+    static async getWorkflows(page = 1, limit = 50) {
         try {
-            const response = await api.get('user/workflows');
-            
+            const response = await api.get('user/workflows', { page, limit });
             return response.success ? response.data : { data: [], total: 0 };
         } catch (error) {
             console.error('Failed to fetch workflows:', error);
@@ -55,6 +54,21 @@ export class WorkflowService {
             throw error;
         }
     }
+
+    /**
+     * Update workflow flow data (steps)
+     */
+    static async updateFlowData(id, flowData) {
+        try {
+            const response = await api.patch(`user/workflows/${id}/flow-data`, {
+                flow_data: flowData
+            });
+            return response;
+        } catch (error) {
+            console.error('Failed to update flow data:', error);
+            throw error;
+        }
+    }
     
     /**
      * Delete a workflow
@@ -65,6 +79,20 @@ export class WorkflowService {
             return response;
         } catch (error) {
             console.error('Failed to delete workflow:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Duplicate a workflow
+     */
+    static async duplicateWorkflow(id, organizationId = null) {
+        try {
+            const data = organizationId ? { organization_id: organizationId } : {};
+            const response = await api.post(`user/workflows/${id}/duplicate`, data);
+            return response;
+        } catch (error) {
+            console.error('Failed to duplicate workflow:', error);
             throw error;
         }
     }
@@ -96,28 +124,53 @@ export class WorkflowService {
     }
     
     /**
-     * Update workflow node
-     */
-    static async updateNode(nodeId, data) {
-        try {
-            const response = await api.patch(`user/workflows/nodes/${nodeId}`, data);
-            return response;
-        } catch (error) {
-            console.error('Failed to update node:', error);
-            throw error;
-        }
-    }
-    
-    /**
      * Test workflow
      */
-    static async testWorkflow(workflowId) {
+    static async testWorkflow(id) {
         try {
-            const response = await api.post(`user/workflows/${workflowId}/test`);
+            const response = await api.post(`user/workflows/${id}/test`);
             return response;
         } catch (error) {
             console.error('Failed to test workflow:', error);
             throw error;
         }
+    }
+
+    /**
+     * Get default workflow structure
+     */
+    static getDefaultWorkflow() {
+        return {
+            trigger: {
+                type: '',
+                config: {}
+            },
+            steps: []
+        };
+    }
+
+    /**
+     * Create a new step
+     */
+    static createStep(type, name, config = {}) {
+        return {
+            id: 'step_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            type: type,
+            name: name,
+            config: config
+        };
+    }
+
+    /**
+     * Create a condition step
+     */
+    static createCondition(name, config = {}, branches = { true: [], false: [] }) {
+        return {
+            id: 'condition_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            type: 'condition',
+            name: name,
+            config: config,
+            branches: branches
+        };
     }
 }

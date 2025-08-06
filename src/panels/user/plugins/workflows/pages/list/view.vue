@@ -1,11 +1,10 @@
 <!-- src/panels/user/plugins/workflows/pages/list/view.vue -->
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@utils/api';
+import { WorkflowService } from '@user_workflows/services/workflow';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
-import { UserStore } from '@stores/user';
 
 // Layout & Components
 import MainLayout from '@layouts/main/view.vue';
@@ -26,24 +25,23 @@ import {
     PhCopy,
     PhPlay,
     PhPause,
-    PhGitBranch
+    PhFlowArrow
 } from "@phosphor-icons/vue";
 
 const router = useRouter();
-const userStore = UserStore();
 
 // State
 const workflows = ref([]);
 const isLoading = ref(true);
 
-// Load workflows from all user organizations
+// Load workflows
 async function loadWorkflows() {
     try {
         isLoading.value = true;
-        const response = await api.get('user/workflows');
+        const response = await WorkflowService.getWorkflows();
         
-        if (response && response.success) {
-            workflows.value = response.data.data || [];
+        if (response && response.data) {
+            workflows.value = response.data;
         }
     } catch (error) {
         console.error('Error loading workflows:', error);
@@ -77,16 +75,7 @@ function editWorkflow(workflow) {
 // Duplicate workflow
 async function duplicateWorkflow(workflow) {
     try {
-        const duplicateData = {
-            organization_id: workflow.organization_id,
-            name: `${workflow.name} (Copy)`,
-            description: workflow.description,
-            trigger_type: workflow.trigger_type,
-            trigger_config: workflow.trigger_config,
-            status: 'draft'
-        };
-        
-        const response = await api.post('user/workflows', duplicateData);
+        const response = await WorkflowService.duplicateWorkflow(workflow.id);
         
         if (response && response.success) {
             common.notification('Workflow duplicated successfully', true);
@@ -102,7 +91,7 @@ async function toggleWorkflowStatus(workflow) {
     const newStatus = workflow.status === 'active' ? 'inactive' : 'active';
     
     try {
-        const response = await api.patch(`user/workflows/${workflow.id}`, {
+        const response = await WorkflowService.updateWorkflow(workflow.id, {
             status: newStatus
         });
         
@@ -127,7 +116,7 @@ function deleteWorkflow(workflow) {
             callback: async (confirmed) => {
                 if (confirmed) {
                     try {
-                        const response = await api.delete(`user/workflows/${workflow.id}`);
+                        const response = await WorkflowService.deleteWorkflow(workflow.id);
                         
                         if (response && response.success) {
                             common.notification('Workflow deleted successfully', true);
@@ -164,8 +153,7 @@ function getWorkflowMenus(workflow) {
         {
             label: 'Delete',
             iconComponent: PhTrash,
-            onClick: () => deleteWorkflow(workflow),
-            as: 'danger'
+            onClick: () => deleteWorkflow(workflow)
         }
     ];
 }
@@ -177,7 +165,7 @@ function formatDate(dateString) {
     return date.toLocaleDateString();
 }
 
-// Get status badge class
+// Get status class
 function getStatusClass(status) {
     switch (status) {
         case 'active':
@@ -191,15 +179,13 @@ function getStatusClass(status) {
     }
 }
 
-// Get trigger type display name
+// Get trigger display name
 function getTriggerDisplayName(triggerType) {
     const triggerMap = {
         'booking.created': 'Booking Created',
         'booking.updated': 'Booking Updated',
         'booking.cancelled': 'Booking Cancelled',
-        'booking.reminder': 'Booking Reminder',
-        'form.submitted': 'Form Submitted',
-        'time.scheduled': 'Scheduled Time'
+        'form.submitted': 'Form Submitted'
     };
     
     return triggerMap[triggerType] || triggerType;
@@ -213,14 +199,19 @@ onMounted(() => {
 
 <template>
     <MainLayout>
-
         <template #content>
-
             <HeadingComponent 
                 title="Workflows"
                 description="Automate your scheduling with powerful workflows"
-            />
-
+            >
+                <template #right>
+                    <Button
+                        :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                        label="Create Workflow"
+                        @click="createWorkflow"
+                    />
+                </template>
+            </HeadingComponent>
 
             <!-- Loading State -->
             <div v-if="isLoading" class="loading-state">
@@ -233,7 +224,7 @@ onMounted(() => {
             <!-- Empty State -->
             <div v-else-if="!workflows.length" class="empty-state">
                 <div class="empty-state-content">
-                    <PhGitBranch :size="48" weight="thin" />
+                    <PhFlowArrow :size="48" weight="thin" />
                     <h3>No workflows yet</h3>
                     <p>Create your first workflow to start automating your scheduling tasks</p>
                     <Button
@@ -307,19 +298,12 @@ onMounted(() => {
                     </tbody>
                 </table>
             </div>
-            
         </template>
     </MainLayout>
 </template>
 
 <style scoped>
 @import '@global/common-table/style.css';
-
-.workflows-page {
-    padding: 24px;
-    max-width: 1400px;
-    margin: 0 auto;
-}
 
 /* Loading State */
 .loading-state {
@@ -427,7 +411,7 @@ onMounted(() => {
 }
 
 .status-badge.status-draft {
-    background-color:var(--background-2);
+    background-color: var(--background-2);
 }
 
 .date-text {

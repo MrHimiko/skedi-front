@@ -1,4 +1,4 @@
-<!-- src/panels/user/plugins/workflows/components/popups/node-config.vue -->
+<!-- src/panels/user/plugins/workflows/components/popups/step-config.vue -->
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import PopupView from '@layouts/popup/view.vue';
@@ -6,15 +6,16 @@ import Button from '@form/button/view.vue';
 import Input from '@form/input/view.vue';
 import Textarea from '@form/textarea/view.vue';
 import Select from '@form/select/view.vue';
-import Toggle from '@form/toggle/view.vue';
+
+// Icons
 import { PhFloppyDisk, PhX } from "@phosphor-icons/vue";
 
 const props = defineProps({
-    node: {
+    step: {
         type: Object,
         required: true
     },
-    config: {
+    actionConfig: {
         type: Object,
         required: true
     },
@@ -24,18 +25,28 @@ const props = defineProps({
     }
 });
 
-// Local state
+// Local config state
 const localConfig = ref({});
 const isSaving = ref(false);
 
+// Available variables for reference
+const availableVariables = [
+    { code: '{{booking.customer_email}}', description: 'Customer\'s email address' },
+    { code: '{{booking.customer_name}}', description: 'Customer\'s name' },
+    { code: '{{booking.status}}', description: 'Booking status' },
+    { code: '{{event.name}}', description: 'Event name' },
+    { code: '{{event.location}}', description: 'Event location' },
+    { code: '{{organization.name}}', description: 'Organization name' }
+];
+
 // Initialize config
 onMounted(() => {
-    // Clone the node's current config
-    localConfig.value = JSON.parse(JSON.stringify(props.node.config || {}));
+    // Clone the step's current config
+    localConfig.value = JSON.parse(JSON.stringify(props.step.config || {}));
     
     // Set defaults from schema if not present
-    if (props.config.config_schema) {
-        Object.entries(props.config.config_schema).forEach(([key, schema]) => {
+    if (props.actionConfig.config_schema) {
+        Object.entries(props.actionConfig.config_schema).forEach(([key, schema]) => {
             if (localConfig.value[key] === undefined && schema.default !== undefined) {
                 localConfig.value[key] = schema.default;
             }
@@ -55,10 +66,8 @@ function getFieldComponent(type) {
             return Textarea;
         case 'select':
             return Select;
-        case 'boolean':
-            return Toggle;
-        case 'integer':
         case 'number':
+        case 'integer':
             return Input;
         default:
             return Input;
@@ -67,7 +76,7 @@ function getFieldComponent(type) {
 
 // Get field props based on schema
 function getFieldProps(key, schema) {
-    const props = {
+    const fieldProps = {
         modelValue: localConfig.value[key],
         'onUpdate:modelValue': (value) => {
             localConfig.value[key] = value;
@@ -78,42 +87,39 @@ function getFieldProps(key, schema) {
     
     // Type-specific props
     switch (schema.type) {
-        case 'integer':
         case 'number':
-            props.type = 'number';
-            if (schema.min !== undefined) props.min = schema.min;
-            if (schema.max !== undefined) props.max = schema.max;
+        case 'integer':
+            fieldProps.type = 'number';
+            if (schema.min !== undefined) fieldProps.min = schema.min;
+            if (schema.max !== undefined) fieldProps.max = schema.max;
             break;
         case 'email':
-            props.type = 'email';
+            fieldProps.type = 'email';
             break;
         case 'url':
-            props.type = 'url';
+            fieldProps.type = 'url';
             break;
         case 'textarea':
         case 'json':
-            props.rows = schema.rows || 5;
-            if (schema.type === 'json') {
-                props.placeholder = props.placeholder || '{"key": "value"}';
-            }
+            fieldProps.rows = schema.rows || 5;
             break;
         case 'select':
-            props.options = schema.options || [];
+            fieldProps.options = schema.options || [];
             break;
     }
     
-    return props;
+    return fieldProps;
 }
 
 // Validate config
 function validateConfig() {
-    if (!props.config.config_schema) return true;
+    if (!props.actionConfig.config_schema) return true;
     
-    for (const [key, schema] of Object.entries(props.config.config_schema)) {
+    for (const [key, schema] of Object.entries(props.actionConfig.config_schema)) {
         const value = localConfig.value[key];
         
         // Check required fields
-        if (schema.required && !value) {
+        if (schema.required && (!value || value === '')) {
             return false;
         }
         
@@ -140,7 +146,9 @@ function validateConfig() {
                     try {
                         new URL(value);
                     } catch {
-                        return false;
+                        if (!value.startsWith('{{') || !value.endsWith('}}')) {
+                            return false;
+                        }
                     }
                     break;
             }
@@ -153,7 +161,7 @@ function validateConfig() {
 // Save configuration
 async function save() {
     if (!validateConfig()) {
-        common.notification('Please fill in all required fields correctly', false);
+        alert('Please fill in all required fields correctly');
         return;
     }
     
@@ -180,30 +188,38 @@ function cancel() {
     if (popup) popup.click();
 }
 
-// Get title
+// Title
 const title = computed(() => {
-    return `Configure ${props.node.name || props.config.name}`;
+    return `Configure ${props.step.name || props.actionConfig.name}`;
 });
 
 // Check if has configuration options
 const hasConfig = computed(() => {
-    return props.config.config_schema && Object.keys(props.config.config_schema).length > 0;
+    return props.actionConfig.config_schema && Object.keys(props.actionConfig.config_schema).length > 0;
+});
+
+// Get config schema entries
+const configFields = computed(() => {
+    if (!props.actionConfig.config_schema) return [];
+    return Object.entries(props.actionConfig.config_schema);
 });
 </script>
 
 <template>
-    <PopupView :title="title">
+    <PopupView :title="title" class="step-config-popup">
         <template #content>
-            <div class="node-config">
-                <!-- Node info -->
-                <div class="node-info-section">
-                    <div class="node-type">{{ props.node.node_type }}</div>
+            <div class="step-config-content">
+                <!-- Step info -->
+                <div class="step-info-section">
+                    <div class="step-type-badge">{{ props.actionConfig.category || 'action' }}</div>
+                    <h3>{{ props.actionConfig.name }}</h3>
+                    <p v-if="props.actionConfig.description">{{ props.actionConfig.description }}</p>
                 </div>
                 
                 <!-- Configuration form -->
                 <div v-if="hasConfig" class="config-form">
                     <div
-                        v-for="(schema, key) in props.config.config_schema"
+                        v-for="[key, schema] in configFields"
                         :key="key"
                         class="form-field"
                     >
@@ -225,24 +241,24 @@ const hasConfig = computed(() => {
                 
                 <!-- No configuration message -->
                 <div v-else class="no-config">
-                    <p>This {{ props.node.node_type }} doesn't require any configuration.</p>
+                    <p>This action doesn't require any configuration.</p>
                 </div>
                 
-                <!-- Variables info (for triggers) -->
-                <div v-if="props.node.node_type === 'trigger' && props.config.variables" class="variables-section">
-                    <h3>Available variables</h3>
-                    <p class="variables-description">
-                        These variables will be available to use in your workflow:
-                    </p>
-                    <div class="variables-list">
-                        <div
-                            v-for="variable in props.config.variables"
-                            :key="variable"
-                            class="variable-item"
-                        >
-                            <code v-text="'{{' + variable + '}}'"></code>
+                <!-- Variable info -->
+                <div class="variables-info">
+                    <details>
+                        <summary>Available Variables</summary>
+                        <div class="variables-list">
+                            <div 
+                                v-for="variable in availableVariables" 
+                                :key="variable.code"
+                                class="variable-item"
+                            >
+                                <code>{{ variable.code }}</code>
+                                <span>{{ variable.description }}</span>
+                            </div>
                         </div>
-                    </div>
+                    </details>
                 </div>
             </div>
         </template>
@@ -267,38 +283,50 @@ const hasConfig = computed(() => {
 </template>
 
 <style scoped>
-.node-config {
+.step-config-popup {
+    min-width: 500px;
+}
+
+.step-config-content {
     padding: 20px;
 }
 
-.node-info-section {
+.step-info-section {
     margin-bottom: 24px;
-    padding-bottom: 24px;
+    padding-bottom: 20px;
     border-bottom: 1px solid var(--border);
 }
 
-.node-type {
+.step-type-badge {
     display: inline-block;
     padding: 4px 12px;
     background: var(--background-2);
     border-radius: var(--radius-sm);
     font-size: 11px;
     text-transform: uppercase;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-secondary);
     margin-bottom: 12px;
 }
 
-.node-description {
-    font-size: 14px;
-    color: var(--text-secondary);
+.step-info-section h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.step-info-section p {
     margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
 }
 
 .config-form {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    margin-bottom: 24px;
 }
 
 .form-field {
@@ -321,11 +349,13 @@ const hasConfig = computed(() => {
     font-size: 12px;
     color: var(--text-secondary);
     margin: 0;
+    font-style: italic;
 }
 
 .no-config {
     text-align: center;
     padding: 40px 0;
+    margin-bottom: 24px;
 }
 
 .no-config p {
@@ -333,42 +363,45 @@ const hasConfig = computed(() => {
     margin: 0;
 }
 
-.variables-section {
-    margin-top: 32px;
-    padding-top: 24px;
+.variables-info {
     border-top: 1px solid var(--border);
+    padding-top: 20px;
 }
 
-.variables-section h3 {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 8px 0;
+.variables-info details {
+    cursor: pointer;
+}
+
+.variables-info summary {
+    font-weight: 500;
     color: var(--text-primary);
-}
-
-.variables-description {
-    font-size: 14px;
-    color: var(--text-secondary);
-    margin: 0 0 16px 0;
+    margin-bottom: 12px;
 }
 
 .variables-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
 }
 
 .variable-item {
-    display: inline-block;
-    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
     background: var(--background-2);
     border-radius: var(--radius-sm);
+    font-size: 13px;
 }
 
 .variable-item code {
     font-family: monospace;
-    font-size: 12px;
     color: var(--primary);
+    font-weight: 500;
+}
+
+.variable-item span {
+    color: var(--text-secondary);
 }
 
 .config-actions {

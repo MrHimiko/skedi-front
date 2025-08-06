@@ -10,31 +10,30 @@ export default class
         this.router = router;
         this.stores = stores;
     
-        this.routes()
-        this.sidebar()
+        this.routes();
+        this.sidebar();
     }
 
     routes()
     {
-        this.router.addRoute(
-        {
+        this.router.addRoute({
             path: '/workflows',
             name: 'Workflows',
             component: () => import('./pages/list/view.vue'),
             beforeEnter: (to, from, next) => 
             {
-                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
+                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath);
             }
-        })
+        });
 
         this.router.addRoute({
             path: '/workflows/:id',
-            name: 'WorkflowBuilder',
+            name: 'WorkflowEditor',
             component: () => import('./pages/view/view.vue'),
             beforeEnter: (to, from, next) => {
-                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
+                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath);
             }
-        })
+        });
     }
 
     sidebar() 
