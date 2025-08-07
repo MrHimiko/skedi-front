@@ -9,7 +9,7 @@ export default defineConfig({
             '@form': path.resolve(__dirname, './src/components/form'),
             '@global': path.resolve(__dirname, './src/components/global'),
             '@floated': path.resolve(__dirname, './src/components/floated'),
-
+            
             '@panels': path.resolve(__dirname, './src/panels'),
             '@plugins': path.resolve(__dirname, './src/applications'),
 

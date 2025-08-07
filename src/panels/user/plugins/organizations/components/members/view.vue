@@ -224,7 +224,7 @@ import { ref, computed, onMounted } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
-import ConfirmComponent from '@components/popup/confirm/view.vue';
+import ConfirmComponent from '@floated/confirm/view.vue';
 
 export default {
     props: {
