@@ -124,6 +124,11 @@ const stepMenus = computed(() => [
 
 // Methods
 function editStep() {
+    console.log('Edit step clicked');
+    console.log('Step:', props.step);
+    console.log('Available actions:', props.availableActions);
+    console.log('Step action config:', stepActionConfig.value);
+    
     if (isCondition.value) {
         // Use inline condition editor
         isExpanded.value = !isExpanded.value;
@@ -136,13 +141,18 @@ function editStep() {
             {
                 step: props.step,
                 actionConfig: stepActionConfig.value,
-                onSave: (updatedConfig) => {
+                onSave: async (updatedConfig) => {
+                    console.log('onSave called with config:', updatedConfig);
+                    
                     const updatedStep = {
                         ...props.step,
                         config: updatedConfig
                     };
+                    
+                    console.log('Emitting updated step:', updatedStep);
                     emit('update', updatedStep);
-                    popup.close();
+                    
+                    // The popup closing is handled in the step-config component
                 }
             }
         );

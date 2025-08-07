@@ -52,63 +52,16 @@ onMounted(() => {
             }
         });
     }
+    
+    console.log('Initialized config:', localConfig.value);
+    console.log('Step:', props.step);
+    console.log('Action config:', props.actionConfig);
 });
 
-// Get field component based on type
-function getFieldComponent(type) {
-    switch (type) {
-        case 'string':
-        case 'email':
-        case 'url':
-            return Input;
-        case 'textarea':
-        case 'json':
-            return Textarea;
-        case 'select':
-            return Select;
-        case 'number':
-        case 'integer':
-            return Input;
-        default:
-            return Input;
-    }
-}
-
-// Get field props based on schema
-function getFieldProps(key, schema) {
-    const fieldProps = {
-        modelValue: localConfig.value[key],
-        'onUpdate:modelValue': (value) => {
-            localConfig.value[key] = value;
-        },
-        placeholder: schema.placeholder || '',
-        required: schema.required || false
-    };
-    
-    // Type-specific props
-    switch (schema.type) {
-        case 'number':
-        case 'integer':
-            fieldProps.type = 'number';
-            if (schema.min !== undefined) fieldProps.min = schema.min;
-            if (schema.max !== undefined) fieldProps.max = schema.max;
-            break;
-        case 'email':
-            fieldProps.type = 'email';
-            break;
-        case 'url':
-            fieldProps.type = 'url';
-            break;
-        case 'textarea':
-        case 'json':
-            fieldProps.rows = schema.rows || 5;
-            break;
-        case 'select':
-            fieldProps.options = schema.options || [];
-            break;
-    }
-    
-    return fieldProps;
+// Update field value
+function updateField(key, value) {
+    console.log(`Updating field ${key}:`, value);
+    localConfig.value[key] = value;
 }
 
 // Validate config
@@ -160,12 +113,17 @@ function validateConfig() {
 
 // Save configuration
 async function save() {
+    console.log('=== SAVE BUTTON CLICKED ===');
+    console.log('Current config:', localConfig.value);
+    
     if (!validateConfig()) {
+        console.log('Validation failed');
         alert('Please fill in all required fields correctly');
         return;
     }
     
     isSaving.value = true;
+    console.log('Setting isSaving to true');
     
     try {
         // Clean up config - remove empty values
@@ -176,14 +134,36 @@ async function save() {
             }
         });
         
+        console.log('Saving clean config:', cleanConfig);
+        console.log('Calling onSave with config...');
+        console.log('onSave function:', props.onSave);
+        
+        // Call the save callback
         await props.onSave(cleanConfig);
+        
+        console.log('onSave completed, closing popup...');
+        
+        // Close the popup
+        const popup = document.querySelector('.i-popup-close');
+        if (popup) {
+            console.log('Found popup close button, clicking...');
+            popup.click();
+        } else {
+            console.log('Popup close button not found');
+        }
+        
+    } catch (error) {
+        console.error('Error saving configuration:', error);
+        alert('Failed to save configuration. Please try again.');
     } finally {
+        console.log('Setting isSaving to false');
         isSaving.value = false;
     }
 }
 
 // Cancel
 function cancel() {
+    console.log('Cancel button clicked');
     const popup = document.querySelector('.i-popup-close');
     if (popup) popup.click();
 }
@@ -203,12 +183,35 @@ const configFields = computed(() => {
     if (!props.actionConfig.config_schema) return [];
     return Object.entries(props.actionConfig.config_schema);
 });
+
+// Test save function (for debugging)
+function testSave() {
+    console.log('TEST SAVE FUNCTION CALLED');
+    save();
+}
 </script>
 
 <template>
     <PopupView :title="title" class="step-config-popup">
         <template #content>
             <div class="step-config-content">
+                <!-- Debug info -->
+                <div class="debug-section" style="background: var(--background-2); padding: 12px; margin-bottom: 16px; border-radius: var(--radius-sm);">
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: 600;">Debug Info</summary>
+                        <div style="margin-top: 8px; font-size: 12px;">
+                            <p><strong>Step ID:</strong> {{ step.id }}</p>
+                            <p><strong>Step Type:</strong> {{ step.type }}</p>
+                            <p><strong>Current Config:</strong> {{ JSON.stringify(localConfig) }}</p>
+                            <p><strong>Has Config Schema:</strong> {{ hasConfig }}</p>
+                            <p><strong>Config Fields:</strong> {{ configFields.length }}</p>
+                            <p><strong>Is Valid:</strong> {{ validateConfig() }}</p>
+                            <p><strong>Is Saving:</strong> {{ isSaving }}</p>
+                            <button @click="testSave" style="margin-top: 8px; padding: 4px 8px; background: red; color: white; border: none; border-radius: 4px;">TEST SAVE</button>
+                        </div>
+                    </details>
+                </div>
+
                 <!-- Step info -->
                 <div class="step-info-section">
                     <div class="step-type-badge">{{ props.actionConfig.category || 'action' }}</div>
@@ -228,9 +231,55 @@ const configFields = computed(() => {
                             <span v-if="schema.required" class="required">*</span>
                         </label>
                         
-                        <component
-                            :is="getFieldComponent(schema.type)"
-                            v-bind="getFieldProps(key, schema)"
+                        <!-- Input Field -->
+                        <Input
+                            v-if="schema.type === 'string' || schema.type === 'email' || schema.type === 'url'"
+                            :value="localConfig[key] || ''"
+                            :placeholder="schema.placeholder || ''"
+                            :required="schema.required || false"
+                            :type="schema.type === 'email' ? 'email' : (schema.type === 'url' ? 'url' : 'text')"
+                            @onInput="(event, value) => updateField(key, value)"
+                        />
+                        
+                        <!-- Textarea Field -->
+                        <Textarea
+                            v-else-if="schema.type === 'textarea' || schema.type === 'json'"
+                            :value="localConfig[key] || ''"
+                            :placeholder="schema.placeholder || ''"
+                            :required="schema.required || false"
+                            :rows="schema.rows || 5"
+                            @onInput="(value) => updateField(key, value)"
+                        />
+                        
+                        <!-- Select Field -->
+                        <Select
+                            v-else-if="schema.type === 'select'"
+                            :value="localConfig[key] || schema.default || ''"
+                            :options="schema.options || []"
+                            :placeholder="schema.placeholder || 'Select...'"
+                            :required="schema.required || false"
+                            @update:value="(value) => updateField(key, value)"
+                        />
+                        
+                        <!-- Number Field -->
+                        <Input
+                            v-else-if="schema.type === 'number' || schema.type === 'integer'"
+                            :value="localConfig[key] || ''"
+                            :placeholder="schema.placeholder || ''"
+                            :required="schema.required || false"
+                            type="number"
+                            :min="schema.min"
+                            :max="schema.max"
+                            @onInput="(event, value) => updateField(key, value)"
+                        />
+                        
+                        <!-- Default Input -->
+                        <Input
+                            v-else
+                            :value="localConfig[key] || ''"
+                            :placeholder="schema.placeholder || ''"
+                            :required="schema.required || false"
+                            @onInput="(event, value) => updateField(key, value)"
                         />
                         
                         <p v-if="schema.help" class="field-help">
@@ -261,22 +310,16 @@ const configFields = computed(() => {
                     </details>
                 </div>
             </div>
-        </template>
-        
-        <template #footer>
+            
+            <!-- Actions at bottom of content -->
             <div class="config-actions">
-                <Button
-                    as="tertiary"
-                    :iconLeft="{ component: PhX }"
-                    label="Cancel"
-                    @click="cancel"
-                />
-                <Button
-                    :iconLeft="{ component: PhFloppyDisk }"
-                    label="Save"
-                    :loading="isSaving"
-                    @click="save"
-                />
+                <div class="c-button tertiary" @click="cancel">
+                    Cancel
+                </div>
+                <div class="c-button brand" @click="save" :class="{ loading: isSaving }">
+                    <span v-if="!isSaving">Save Configuration</span>
+                    <span v-else>Saving...</span>
+                </div>
             </div>
         </template>
     </PopupView>
@@ -366,6 +409,7 @@ const configFields = computed(() => {
 .variables-info {
     border-top: 1px solid var(--border);
     padding-top: 20px;
+    margin-bottom: 24px;
 }
 
 .variables-info details {
@@ -408,7 +452,9 @@ const configFields = computed(() => {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    padding: 16px 20px;
+    padding: 20px;
     border-top: 1px solid var(--border);
+    background: var(--background-1);
+    margin: 0 -20px -20px -20px;
 }
 </style>

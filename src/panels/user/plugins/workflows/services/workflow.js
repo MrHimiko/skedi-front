@@ -103,7 +103,13 @@ export class WorkflowService {
     static async getAvailableTriggers() {
         try {
             const response = await api.get('user/workflows/available-triggers');
-            return response.success ? response.data : [];
+            console.log('Triggers API response:', response);
+            
+            if (response.success) {
+                // The API returns data in response.data, but the actual triggers are in response.data
+                return response.data || [];
+            }
+            return [];
         } catch (error) {
             console.error('Failed to fetch triggers:', error);
             return [];
@@ -116,7 +122,13 @@ export class WorkflowService {
     static async getAvailableActions() {
         try {
             const response = await api.get('user/workflows/available-actions');
-            return response.success ? response.data : [];
+            console.log('Actions API response:', response);
+            
+            if (response.success) {
+                // The API returns data in response.data, but the actual actions are in response.data
+                return response.data || [];
+            }
+            return [];
         } catch (error) {
             console.error('Failed to fetch actions:', error);
             return [];

@@ -1,7 +1,8 @@
 <!-- src/panels/user/plugins/workflows/components/step-list/view.vue -->
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { WorkflowService } from '@user_workflows/services/workflow';
+import { popup } from '@utils/popup';
 
 // Components
 import StepItem from '@user_workflows/components/step-item/view.vue';
@@ -22,6 +23,8 @@ const emit = defineEmits(['update']);
 // State
 const availableTriggers = ref([]);
 const availableActions = ref([]);
+const isLoading = ref(true);
+const debugInfo = ref('');
 
 // Computed
 const flowData = computed(() => props.workflow.flow_data || { steps: [] });
@@ -31,27 +34,80 @@ const steps = computed(() => flowData.value.steps || []);
 // Load available components
 onMounted(async () => {
     try {
-        const [triggers, actions] = await Promise.all([
-            WorkflowService.getAvailableTriggers(),
-            WorkflowService.getAvailableActions()
-        ]);
+        isLoading.value = true;
+        debugInfo.value = 'Starting to load components...';
         
-        availableTriggers.value = triggers;
-        availableActions.value = actions;
+        console.log('Loading workflow components...');
+        
+        // Load triggers
+        debugInfo.value = 'Loading triggers...';
+        const triggers = await WorkflowService.getAvailableTriggers();
+        console.log('Raw triggers response:', triggers);
+        availableTriggers.value = Array.isArray(triggers) ? triggers : [];
+        
+        // Load actions  
+        debugInfo.value = 'Loading actions...';
+        const actions = await WorkflowService.getAvailableActions();
+        console.log('Raw actions response:', actions);
+        console.log('Actions type:', typeof actions);
+        console.log('Is actions array:', Array.isArray(actions));
+        
+        if (Array.isArray(actions)) {
+            availableActions.value = actions;
+            debugInfo.value = `Loaded ${actions.length} actions successfully`;
+        } else {
+            availableActions.value = [];
+            debugInfo.value = `Actions response is not an array: ${typeof actions}`;
+        }
+        
+        console.log('Final availableActions:', availableActions.value);
+        console.log('Final availableTriggers:', availableTriggers.value);
+        
+        if (!actions || (Array.isArray(actions) && actions.length === 0)) {
+            console.warn('No actions loaded from API');
+            debugInfo.value = 'Warning: No actions loaded from API';
+        }
+        
     } catch (error) {
         console.error('Failed to load workflow components:', error);
+        debugInfo.value = `Error loading components: ${error.message}`;
+        availableTriggers.value = [];
+        availableActions.value = [];
+    } finally {
+        isLoading.value = false;
     }
 });
 
+// Watch for changes in availableActions
+watch(availableActions, (newActions, oldActions) => {
+    console.log('Available actions changed from', oldActions, 'to', newActions);
+}, { deep: true });
+
+// Show add step popup
+function showAddStepPopup() {
+    popup.open(
+        'add-step',
+        null,
+        AddStepMenu,
+        {
+            availableActions: availableActions.value,
+            onSelect: addStep
+        }
+    );
+}
+
 // Add step
 function addStep(stepType, stepConfig) {
-    const newStep = WorkflowService.createStep(stepType, stepConfig.name, stepConfig);
+    console.log('Adding step:', stepType, stepConfig);
+    
+    const newStep = WorkflowService.createStep(stepType, stepConfig.name, stepConfig.config || {});
     const newFlowData = {
         ...flowData.value,
         steps: [...steps.value, newStep]
     };
     
     emit('update', newFlowData);
+    popup.close();
 }
 
 // Update step
@@ -109,64 +165,92 @@ const triggerInfo = computed(() => {
 <template>
     <div class="step-list">
         <div class="step-list-container">
-            <!-- Trigger Step -->
-            <div v-if="hasTrigger" class="trigger-step">
-                <div class="step-card trigger">
-                    <div class="step-header">
-                        <div class="step-number">1</div>
-                        <div class="step-icon trigger">
-                            <PhLightning :size="20" weight="bold" />
+            <!-- Debug Info -->
+            <div v-if="debugInfo" class="debug-panel">
+                <details>
+                    <summary>Debug Info</summary>
+                    <div class="debug-content">
+                        <p><strong>Status:</strong> {{ debugInfo }}</p>
+                        <p><strong>Available Actions:</strong> {{ availableActions.length }}</p>
+                        <p><strong>Available Triggers:</strong> {{ availableTriggers.length }}</p>
+                        <p><strong>Is Loading:</strong> {{ isLoading }}</p>
+                        <div v-if="availableActions.length > 0">
+                            <p><strong>Actions:</strong></p>
+                            <ul>
+                                <li v-for="action in availableActions" :key="action.id">
+                                    {{ action.name }} ({{ action.id }})
+                                </li>
+                            </ul>
                         </div>
-                        <div class="step-info">
-                            <div class="step-type">Trigger</div>
-                            <div class="step-name">{{ triggerInfo?.name || 'Unknown Trigger' }}</div>
-                            <div v-if="triggerInfo?.description" class="step-description">
-                                {{ triggerInfo.description }}
+                    </div>
+                </details>
+            </div>
+
+            <!-- Loading state -->
+            <div v-if="isLoading" class="loading-state">
+                <div class="loading-spinner"></div>
+                <p>Loading workflow components...</p>
+            </div>
+            
+            <template v-else>
+                <!-- Trigger Step -->
+                <div v-if="hasTrigger" class="trigger-step">
+                    <div class="step-card trigger">
+                        <div class="step-header">
+                            <div class="step-number">1</div>
+                            <div class="step-icon trigger">
+                                <PhLightning :size="20" weight="bold" />
+                            </div>
+                            <div class="step-info">
+                                <div class="step-type">Trigger</div>
+                                <div class="step-name">{{ triggerInfo?.name || 'Unknown Trigger' }}</div>
+                                <div v-if="triggerInfo?.description" class="step-description">
+                                    {{ triggerInfo.description }}
+                                </div>
                             </div>
                         </div>
                     </div>
+                    <div class="step-connector"></div>
                 </div>
-                <div class="step-connector"></div>
-            </div>
-            
-            <!-- No Trigger State -->
-            <div v-else class="no-trigger-state">
-                <div class="no-trigger-card">
-                    <PhLightning :size="24" weight="thin" />
-                    <h3>No trigger selected</h3>
-                    <p>Configure your workflow trigger in settings to get started</p>
-                </div>
-            </div>
-            
-            <!-- Workflow Steps -->
-            <div v-for="(step, index) in steps" :key="step.id" class="workflow-step">
-                <StepItem
-                    :step="step"
-                    :stepNumber="index + 2"
-                    :availableActions="availableActions"
-                    @update="(updatedStep) => updateStep(index, updatedStep)"
-                    @delete="() => deleteStep(index)"
-                    @move-up="index > 0 ? moveStep(index, index - 1) : null"
-                    @move-down="index < steps.length - 1 ? moveStep(index, index + 1) : null"
-                />
                 
-                <!-- Connector between steps -->
-                <div v-if="index < steps.length - 1" class="step-connector"></div>
-            </div>
-            
-            <!-- Add Step Button -->
-            <div class="add-step-section">
-                <div class="add-step-button" v-dropdown="{
-                    component: AddStepMenu,
-                    properties: {
-                        availableActions: availableActions,
-                        onSelect: addStep
-                    }
-                }">
-                    <PhPlus :size="20" />
-                    <span>Add Step</span>
+                <!-- No Trigger State -->
+                <div v-else class="no-trigger-state">
+                    <div class="no-trigger-card">
+                        <PhLightning :size="24" weight="thin" />
+                        <h3>No trigger selected</h3>
+                        <p>Configure your workflow trigger in settings to get started</p>
+                    </div>
                 </div>
-            </div>
+                
+                <!-- Workflow Steps -->
+                <div v-for="(step, index) in steps" :key="step.id" class="workflow-step">
+                    <StepItem
+                        :step="step"
+                        :stepNumber="index + 2"
+                        :availableActions="availableActions"
+                        @update="(updatedStep) => updateStep(index, updatedStep)"
+                        @delete="() => deleteStep(index)"
+                        @move-up="index > 0 ? moveStep(index, index - 1) : null"
+                        @move-down="index < steps.length - 1 ? moveStep(index, index + 1) : null"
+                    />
+                    
+                    <!-- Connector between steps -->
+                    <div v-if="index < steps.length - 1" class="step-connector"></div>
+                </div>
+                
+                <!-- Add Step Button -->
+                <div class="add-step-section">
+                    <!-- Debug info -->
+                    <div v-if="availableActions.length === 0" class="debug-warning">
+                        ⚠️ No actions available ({{ availableActions.length }})
+                    </div>
+                    
+                    <div class="add-step-button" @click="showAddStepPopup">
+                        <PhPlus :size="20" />
+                        <span>Add Step ({{ availableActions.length }} actions)</span>
+                    </div>
+                </div>
+            </template>
         </div>
     </div>
 </template>
@@ -181,6 +265,63 @@ const triggerInfo = computed(() => {
 .step-list-container {
     max-width: 800px;
     margin: 0 auto;
+}
+
+.debug-panel {
+    background: var(--background-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    padding: 12px;
+}
+
+.debug-panel summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.debug-content {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.debug-content ul {
+    margin: 4px 0 0 16px;
+}
+
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.debug-warning {
+    background: var(--orange-fill);
+    color: var(--orange-default);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    margin-bottom: 12px;
+    text-align: center;
 }
 
 /* Trigger Step */
