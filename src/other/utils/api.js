@@ -32,7 +32,7 @@ export const api =
             {
                 throw {
                     success: false,
-                    message: 'Unexpected response structure.',
+                    message: response?.message ? response.message : "Unexpected response structure",
                     data: response.data
                 }
             }

@@ -419,4 +419,4 @@ if (!props.step.config?.field && !props.step.config?.conditions?.length) {
     color: var(--text-secondary);
     font-size: 12px;
 }
-</style>
+</style>    

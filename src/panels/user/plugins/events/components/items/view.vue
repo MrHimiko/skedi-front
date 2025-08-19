@@ -29,7 +29,8 @@
     import { 
         PhGearSix, PhPlus, PhCode, PhLink, PhUsers, PhDotsThree,
         PhArrowSquareOut, PhClock, PhCalendar, PhMapPin, PhCopy, 
-        PhFlowArrow, PhTable, PhTrash, PhCaretDown, PhCaretUp
+        PhFlowArrow, PhTable, PhTrash, PhCaretDown, PhCaretUp,
+        PhVideoCameraSlash, PhGlobe, PhBuildings
     } from "@phosphor-icons/vue";
 
     
@@ -185,6 +186,131 @@
         { label: 'Duplicate', icon: null, iconComponent: PhCopy, weight: 'regular' },
         { label: 'Remove', icon: null, iconComponent: PhTrash, weight: 'regular' }
     ]);
+
+
+    function getHostsTooltip(event) {
+        const hostCount = event.assignees?.length || 0;
+        if (hostCount === 0) {
+            return 'No hosts assigned - This event will not work without hosts!';
+        }
+        return `${hostCount} host${hostCount !== 1 ? 's' : ''} assigned`;
+    }
+
+    function getLocationTooltip(event) {
+        if (!event.location) {
+            return 'No location set';
+        }
+        
+        const locationType = event.location.type || event.location;
+        const locationMap = {
+            'google_meet': 'Location: Google Meet',
+            'web_conferencing': 'Location: Web conferencing link',
+            'in_person': event.location.address ? 
+                `Location: In person\nAddress: ${event.location.address}` : 
+                'Location: In person meeting',
+            'custom': event.location.custom ? 
+                `Location: ${event.location.custom}` : 
+                'Location: Custom location'
+        };
+        
+        return locationMap[locationType] || 'Location set';
+    }
+
+    function getDurationTooltip(event) {
+        const durationCount = event.duration?.length || 1;
+        if (durationCount === 1) {
+            const duration = event.duration?.[0]?.duration || 30;
+            return `Duration: ${duration} minutes`;
+        }
+        return `${durationCount} duration options available`;
+    }
+
+    function getLocationIcon(location) {
+        if (!location) return PhMapPin;
+        
+        const locationType = location.type || location;
+        const iconMap = {
+            'google_meet': PhVideoCameraSlash, // You can replace with custom Google Meet SVG
+            'web_conferencing': PhGlobe,
+            'in_person': PhBuildings,
+            'custom': PhMapPin
+        };
+        
+        return iconMap[locationType] || PhMapPin;
+    }
+
+    function openEditHosts(event) {
+        popup.open(
+            'edit-event-assignees',
+            null,
+            EventEditAssignees,
+            {
+                endpoint: `events/${event.id}/assignees?organization_id=${event.organization_id}`,
+                type: 'PUT',
+                eventId: event.id,
+                organizationId: event.organization_id,
+                callback: (event, data, response, success) => {
+                    if (success) {
+                        reloadData();
+                    }
+                },
+                class: 'h-auto event-assignees',
+                title: `Edit Hosts for ${event.name}`,
+            },
+            {
+                position: 'center'
+            }
+        );
+    }
+
+    function openEditLocation(event) {
+        popup.open(
+            'edit-event-location',
+            null,
+            EventEditLocation,
+            {
+                eventId: event.id,
+                organizationId: event.organization_id,
+                callback: (event, data, response, success) => {
+                    if (success) {
+                        reloadData();
+                    }
+                }
+            },
+            {
+                position: 'center'
+            }
+        );
+    }
+
+    function openEditDuration(event) {
+        popup.open(
+            'edit-event-duration',
+            null,
+            EventEditDuration,
+            {
+                endpoint: `events/${event.id}?organization_id=${event.organization_id}`,
+                type: 'PUT',
+                callback: (event, data, response, success) => {
+                    if (success) {
+                        reloadData();
+                        popup.close();
+                    }
+                },
+                values: () => {
+                    return {
+                        duration: event.duration
+                    }
+                },
+                class: 'h-auto',
+                title: `Edit Duration for ${event.name}`,
+            },
+            {
+                position: 'center'
+            }
+        );
+    }
+
 
     // Handle menu action clicks
     const handleMenuAction = (clickEvent, menu, eventData) => {
@@ -485,8 +611,8 @@
 
                 <div class="right">
                     <a target="_BLANK" :href="'https://skedi.com/' + org.slug" class="blue-link">
-                        {{ 'https://skedi.com/' + org.slug }}
-                    </a>
+                        {{ 'https://skedi.com/' + org.slug }} test
+                    </a> 
                     <div class="separator"></div>
                     <div class="actions">
                         <button-component  v-tooltip="{ content: 'Copy URL' }" as="tertiary icon" 
@@ -557,13 +683,55 @@
                             </a>
 
                             <div class="info">
-                                <div class="item">
-                                    <div class="icon">
-                                        <PhUsers weight="bold" />
+                                <!-- Hosts Info -->
+                                <div 
+                                    class="info-item clickable" 
+                                    :class="{ 'no-hosts': !event.assignees || event.assignees.length === 0 }"
+                                    @click="openEditHosts(event)"
+                                    v-tooltip="{
+                                        content: getHostsTooltip(event),
+                                        placement: 'top'
+                                    }"
+                                >
+                                    <div class="icon" :class="{ 'icon-danger': !event.assignees || event.assignees.length === 0 }">
+                                        <PhUsers :weight="'bold'" />
                                     </div>
-                                    <span> 3 </span>
+                                    <span class="value" :class="{ 'text-danger': !event.assignees || event.assignees.length === 0 }">
+                                        {{ event.assignees?.length || 0 }}
+                                    </span>
+                                </div>
+                                
+                                <!-- Location Info -->
+                                <div 
+                                    class="info-item clickable"
+                                    @click="openEditLocation(event)"
+                                    v-tooltip="{
+                                        content: getLocationTooltip(event),
+                                        placement: 'top'
+                                    }"
+                                >
+                                    <div class="icon">
+                                        <component :is="getLocationIcon(event.location)" :weight="'bold'" />
+                                    </div>
+                                </div>
+                                
+                                <!-- Duration Info -->
+                                <div 
+                                    class="info-item clickable"
+                                    @click="openEditDuration(event)"
+                                    v-tooltip="{
+                                        content: getDurationTooltip(event),
+                                        placement: 'top'
+                                    }"
+                                >
+                                    <div class="icon">
+                                        <PhClock :weight="'bold'" />
+                                    </div>
+                                    <span class="value">{{ event.duration?.length || 1 }}</span>
                                 </div>
                             </div>
+
+
                         </div>
 
                         <div class="bottom">
