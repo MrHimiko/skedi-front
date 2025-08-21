@@ -678,7 +678,7 @@
                                 v-tooltip="{ content: event.teamName }"
                             ></div>
                             <p class="event-name">{{ event.name || 'Unnamed Event' }}</p>
-                            <a target="_BLANK" :href="'https://dev.skedi.com/front/' + org.slug + '/' + event.slug" class="blue-link">
+                            <a target="_BLANK" :href="'https://app.skedi.com/front/' + org.slug + '/' + event.slug" class="blue-link">
                                 {{ 'https://skedi.com/' + org.slug + "/" + event.slug }}
                             </a>
 

@@ -1,0 +1,28 @@
+export default class
+{
+    constructor(app, router, stores) 
+    {
+        this.app = app;
+        this.router = router;
+        this.stores = stores;
+    
+        this.routes()
+    }
+
+    routes()
+    {
+        this.router.addRoute(
+        {
+            path: '/survey',
+            name: 'Welcome Tutorial',
+            component: () => import('./pages/home/view.vue'),
+            beforeEnter: (to, from, next) => 
+            {
+                // Check if user is logged in
+                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
+            }
+        })
+    }
+
+
+}
