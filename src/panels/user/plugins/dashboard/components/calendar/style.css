@@ -3,10 +3,10 @@
     position: relative;
     overflow: hidden;
     border-radius: 10px;
-    -webkit-user-select: none; /* Safari */        
-    -moz-user-select: none; /* Firefox */
-    -ms-user-select: none; /* IE10+/Edge */
-    user-select: none; /* Standard */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
     height: calc(100vh - 96px);
     display: flex;
     flex-direction: column;
@@ -95,98 +95,6 @@
     color: white;
 }
 
-.dashboard-c-calendar .calendar {
-    flex: 1;
-    overflow: auto;
-}
-
-.dashboard-c-calendar .calendar::-webkit-scrollbar {
-    width: 6px;
-}
-
-.dashboard-c-calendar .calendar::-webkit-scrollbar-track {
-    background: var(--background-1);
-}
-
-.dashboard-c-calendar .calendar::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 5px;
-}
-
-.dashboard-c-calendar .heading {
-    border-bottom: 1px solid var(--border);
-}
-
-.dashboard-c-calendar .cal-grid {
-    display: grid;
-    grid-template-columns: 80px 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
-    gap: 1px;
-    background: var(--border);
-}
-
-.dashboard-c-calendar .cal-grid > div {
-    background: var(--background-0);
-}
-
-.dashboard-c-calendar .cal-grid > div.calendar-cell {
-    height: calc(80px * 24);
-    border-top: 1px solid var(--border);
-    padding: 0 3px;
-    background: repeating-linear-gradient(
-        to bottom,
-        white,
-        white 79px,
-        var(--border) 80px
-    );
-}
-
-/* Today highlighting */
-.dashboard-c-calendar .cal-grid > div.calendar-cell.is-today {
-    background: repeating-linear-gradient(
-        to bottom,
-        #fffbeb,
-        #fffbeb 79px,
-        var(--border) 80px
-    );
-}
-
-.dashboard-c-calendar .calendar-row:first-of-type .calendar-cell {
-    border-top: none!important;
-}
-
-.dashboard-c-calendar .calendar-time, 
-.dashboard-c-calendar .heading-cell {
-    text-align: center;
-    display: flex;
-    justify-content: center;
-    color: var(--text-secondary);
-    font-weight: 500;
-    height: 46px;
-}
-
-/* Today heading highlight */
-.dashboard-c-calendar .heading-cell.is-today {
-    background: var(--brand-yellow-light);
-    color: var(--brand-yellow-dark);
-    font-weight: 600;
-}
-
-.dashboard-c-calendar .calendar-time {
-    height: 100%;
-    position: relative;
-    top: -8px;
-    font-size: 12px;
-}
-
-.dashboard-c-calendar .heading-cell {
-    align-items: center;
-}
-
-.dashboard-c-calendar .calendar-cell-inside {
-    height: 100%;
-    position: relative;
-}
-
 /* Calendar Filters */
 .calendar-filters {
     padding: 12px 16px;
@@ -235,6 +143,91 @@
     100% { transform: rotate(360deg); }
 }
 
+/* Week View Calendar */
+.dashboard-c-calendar .calendar {
+    flex: 1;
+    overflow: auto;
+}
+
+.dashboard-c-calendar .calendar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.dashboard-c-calendar .calendar::-webkit-scrollbar-track {
+    background: var(--background-1);
+}
+
+.dashboard-c-calendar .calendar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 5px;
+}
+
+.dashboard-c-calendar .heading {
+    border-bottom: 1px solid var(--border);
+}
+
+.dashboard-c-calendar .cal-grid {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+}
+
+.dashboard-c-calendar .cal-grid > div {
+    background: var(--background-0);
+}
+
+.dashboard-c-calendar .cal-grid > div.calendar-cell {
+    height: 80px;
+    border-top: 1px solid var(--border);
+    padding: 0 3px;
+    position: relative;
+}
+
+/* Today highlighting */
+.dashboard-c-calendar .cal-grid > div.calendar-cell.is-today {
+    background: #fffbeb;
+}
+
+.dashboard-c-calendar .calendar-row:first-of-type .calendar-cell {
+    border-top: none!important;
+}
+
+.dashboard-c-calendar .calendar-time, 
+.dashboard-c-calendar .heading-cell {
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-weight: 500;
+    height: 46px;
+}
+
+/* Today heading highlight */
+.dashboard-c-calendar .heading-cell.is-today {
+    background: var(--brand-yellow-light);
+    color: var(--brand-yellow-dark);
+    font-weight: 600;
+}
+
+.dashboard-c-calendar .calendar-time {
+    height: 80px;
+    position: relative;
+    top: -8px;
+    font-size: 12px;
+    align-items: flex-start;
+    padding-top: 0;
+}
+
+.dashboard-c-calendar .heading-cell {
+    align-items: center;
+}
+
+.dashboard-c-calendar .calendar-cell-inside {
+    height: calc(80px * 24);
+    position: relative;
+}
+
 /* Calendar Events */
 .dashboard-c-calendar .calendar-item {
     background: var(--brand-yellow-light);
@@ -243,7 +236,7 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: calc(100% - 4px);
     overflow: hidden;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -251,6 +244,7 @@
     display: flex;
     align-items: flex-start;
     gap: 6px;
+    margin: 0 2px;
 }
 
 .dashboard-c-calendar .calendar-item:hover {
@@ -349,6 +343,8 @@
 /* Day View Styles */
 .day-view {
     padding: 20px;
+    flex: 1;
+    overflow: auto;
 }
 
 .day-view-header {
@@ -410,14 +406,21 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.day-event.is-canceled {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
 /* Month View Styles */
 .month-view {
     display: flex;
     flex-direction: column;
     height: 100%;
+    flex: 1;
+    overflow: hidden;
 }
 
-.month-header {
+.month-weekdays {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 1px;
@@ -434,18 +437,14 @@
     color: var(--text-secondary);
 }
 
-.month-body {
+.month-grid {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.month-week {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: 1fr;
     gap: 1px;
     background: var(--border);
-    flex: 1;
+    overflow: auto;
 }
 
 .month-day {
@@ -456,6 +455,7 @@
     min-height: 100px;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 .month-day:hover {
@@ -463,17 +463,18 @@
 }
 
 .month-day.is-today {
-    background: var(--brand-yellow-light);
+    background: var(--brand-yellow-light, #fef3c7);
 }
 
 .month-day.other-month {
     background: var(--background-1);
-    color: var(--text-tertiary);
+    opacity: 0.6;
 }
 
 .day-number {
     font-weight: 600;
     margin-bottom: 4px;
+    font-size: 14px;
 }
 
 .day-events {
@@ -481,6 +482,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    overflow: hidden;
 }
 
 .month-event {
@@ -492,6 +494,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.4;
 }
 
 .month-event.external {
@@ -507,6 +510,7 @@
     font-size: 10px;
     color: var(--text-secondary);
     padding: 2px 6px;
+    font-style: italic;
 }
 
 /* Responsive design */
@@ -553,7 +557,7 @@
     }
     
     .day-number {
-        font-size: 14px;
+        font-size: 12px;
     }
     
     .month-event {
@@ -580,66 +584,8 @@
         flex: 1;
         text-align: center;
     }
-};
-    line-height: 1.2;
-}
-
-/* Days control */
-.dashboard-c-calendar .days-control {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--border)!important;
-}
-
-.dashboard-c-calendar .days-control > div {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    background-color: var(--background-0);
-    padding: 12px;
-}
-
-.dashboard-c-calendar .days-control > div:hover {
-    background-color: var(--background-1);
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .dashboard-c-calendar .cal-grid {
-        grid-template-columns: 60px 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
-    }
     
-    .dashboard-c-calendar .calendar-item {
-        padding: 4px 6px;
-    }
-    
-    .dashboard-c-calendar .calendar-item .event-title {
-        font-size: 11px;
-    }
-    
-    .dashboard-c-calendar .calendar-item .event-time {
-        font-size: 10px;
-    }
-    
-    .event-source-icon {
-        width: 14px;
-        height: 14px;
-    }
-}
-
-@media (max-width: 480px) {
-    .dashboard-c-calendar {
-        height: calc(100vh - 80px);
-    }
-    
-    .dashboard-c-calendar .calendar {
-        height: calc(100vh - 176px);
-    }
-    
-    .calendar-filters {
-        padding: 8px 12px;
-        font-size: 13px;
+    .month-grid {
+        grid-auto-rows: 80px;
     }
 }

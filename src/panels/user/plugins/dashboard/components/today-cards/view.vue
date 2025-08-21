@@ -1,4 +1,5 @@
 <template>
+    <h4> Todays schedule </h4>
     <div class="today-cards" v-if="!isLoading && todayEvents.length > 0">
         <div class="cards-container">
             <div 
@@ -31,13 +32,9 @@
                 
                 <!-- Action Button -->
                 <div class="card-actions">
-                    <button 
-                        v-if="event.isNow && event.joinUrl" 
-                        class="join-btn"
-                        @click.stop="openMeeting(event.joinUrl)"
-                    >
-                        Join
-                    </button>
+
+                     <span v-if="event.isNow" class="live"> Live now </span> 
+
                     <button 
                         v-else-if="event.isUpcoming && event.startsIn"
                         class="upcoming-btn"
@@ -170,6 +167,7 @@ onMounted(() => {
 
 <style scoped>
 .today-cards {
+    margin-top: 14px!important;
     margin-bottom: 24px;
 }
 
@@ -187,21 +185,21 @@ onMounted(() => {
     position: relative;
     cursor: pointer;
     transition: all 0.2s ease;
-    min-height: 120px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
 }
 
 .event-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     border-color: var(--brand-blue);
 }
 
-.event-card.is-now {
-    border-left: 4px solid var(--brand-green);
-    background: rgba(34, 197, 94, 0.05);
+.event-card .live {
+        background: #ffde0e;
+    color: black;
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-weight: 600;
 }
 
 .event-card.is-canceled {
@@ -213,13 +211,7 @@ onMounted(() => {
     text-decoration: line-through;
 }
 
-.event-card.external {
-    border-left: 4px solid var(--brand-orange);
-}
 
-.event-card.internal {
-    border-left: 4px solid var(--brand-blue);
-}
 
 .source-icon {
     position: absolute;
@@ -274,6 +266,9 @@ onMounted(() => {
     display: flex;
     justify-content: flex-end;
     margin-top: auto;
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
 }
 
 .join-btn {
