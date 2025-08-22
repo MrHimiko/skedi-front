@@ -1,3 +1,5 @@
+/* src/panels/user/plugins/dashboard/components/calendar/style.css */
+
 .dashboard-c-calendar {
     border: 1px solid var(--border);
     position: relative;
@@ -162,9 +164,7 @@
     border-radius: 5px;
 }
 
-.dashboard-c-calendar .heading {
-    border-bottom: 1px solid var(--border);
-}
+
 
 .dashboard-c-calendar .cal-grid {
     display: grid;
@@ -179,7 +179,6 @@
 
 .dashboard-c-calendar .cal-grid > div.calendar-cell {
     height: 80px;
-    border-top: 1px solid var(--border);
     padding: 0 3px;
     position: relative;
 }
@@ -193,7 +192,28 @@
     border-top: none!important;
 }
 
-.dashboard-c-calendar .calendar-time, 
+/* FIX: Align time labels with hour grid lines */
+.dashboard-c-calendar .calendar-time {
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-weight: 500;
+    height: 80px;
+    position: relative;
+    font-size: 12px;
+    align-items: center;
+    padding-top: 0;
+}
+
+/* Position time label at the top of each hour cell to align with grid line */
+.dashboard-c-calendar .calendar-time > div {
+    position: relative;
+    top: -40px; /* Half of the cell height to align with grid line */
+    background-color: white;
+    padding: 5px 10px;
+}
+
 .dashboard-c-calendar .heading-cell {
     text-align: center;
     display: flex;
@@ -201,6 +221,7 @@
     color: var(--text-secondary);
     font-weight: 500;
     height: 46px;
+    align-items: center;
 }
 
 /* Today heading highlight */
@@ -210,31 +231,17 @@
     font-weight: 600;
 }
 
-.dashboard-c-calendar .calendar-time {
-    height: 80px;
-    position: relative;
-    top: -8px;
-    font-size: 12px;
-    align-items: flex-start;
-    padding-top: 0;
-}
-
-.dashboard-c-calendar .heading-cell {
-    align-items: center;
-}
-
 .dashboard-c-calendar .calendar-cell-inside {
     height: calc(80px * 24);
     position: relative;
 }
 
-/* Calendar Events */
+/* Calendar Events - Updated for better short event support and 10px offset */
 .dashboard-c-calendar .calendar-item {
     background: var(--brand-yellow-light);
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 4px 6px;
     position: absolute;
-    top: 0;
     left: 0;
     width: calc(100% - 4px);
     overflow: hidden;
@@ -243,8 +250,21 @@
     border: 1px solid transparent;
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: 4px;
     margin: 0 2px;
+    min-height: 20px; /* Minimum height for very short events */
+}
+
+/* Adjust font size for short events */
+.dashboard-c-calendar .calendar-item[style*="height: 2"] .event-title,
+.dashboard-c-calendar .calendar-item[style*="height: 3"] .event-title {
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.dashboard-c-calendar .calendar-item[style*="height: 2"] .event-time,
+.dashboard-c-calendar .calendar-item[style*="height: 3"] .event-time {
+    display: none; /* Hide time for very short events */
 }
 
 .dashboard-c-calendar .calendar-item:hover {
@@ -276,16 +296,27 @@
     text-decoration: line-through;
 }
 
-/* Overlapping events */
+/* Overlapping events - Updated styling */
 .dashboard-c-calendar .calendar-item.overlapping {
-    border: 2px solid var(--brand-red);
-    background: var(--brand-red-light, #fecaca);
+    border-width: 1px;
+    border-style: solid;
+}
+
+/* Different colors for overlapping internal events */
+.dashboard-c-calendar .calendar-item.overlapping.internal:nth-child(odd) {
+    background: var(--brand-blue-light, #dbeafe);
+    border-color: var(--brand-blue, #3b82f6);
+}
+
+.dashboard-c-calendar .calendar-item.overlapping.internal:nth-child(even) {
+    background: var(--brand-purple-light, #e9d5ff);
+    border-color: var(--brand-purple, #9333ea);
 }
 
 /* Event source icon */
 .event-source-icon {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
     margin-top: 1px;
 }

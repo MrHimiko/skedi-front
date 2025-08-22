@@ -31,6 +31,9 @@ const props = defineProps({
     }
 });
 
+
+
+
 const emit = defineEmits(['refresh']);
 
 // Get menu actions with icons
@@ -266,6 +269,8 @@ function getCalendarName(event) {
     
     return 'Calendar';
 }
+
+
 </script>
 
 <template>

@@ -1,10 +1,34 @@
 import { api } from '@utils/api';
 import { UserStore } from '@stores/user';
+import { storage } from '@utils/storage';
 
 /**
- * CalendarService - Simple service for dashboard calendar functionality
+ * CalendarService - Enhanced service with timezone support for dashboard calendar
  */
 export class CalendarService {
+    /**
+     * Get user's timezone preference or browser default
+     */
+    static getUserTimezone() {
+        const savedTimezone = storage.get('user.timezone');
+        return savedTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
+    
+    /**
+     * Convert server time (UTC) to user's timezone
+     */
+    static convertToUserTimezone(dateString) {
+        if (!dateString) return null;
+        
+        // Server format: "2025-04-21 05:30:00" (treated as UTC)
+        const [datePart, timePart] = dateString.split(' ');
+        
+        // Parse as UTC
+        const utcDate = new Date(`${datePart}T${timePart}Z`);
+        
+        return utcDate; // JavaScript Date automatically handles timezone conversion when displayed
+    }
+    
     /**
      * Get events for a specific week - directly using your API
      */
@@ -51,124 +75,142 @@ export class CalendarService {
                 return [];
             }
 
+            // Extract bookings from response
             const bookings = response.data?.bookings || [];
-            console.log('📋 Raw bookings:', bookings);
-            console.log('📊 Bookings count:', bookings.length);
+            console.log('📚 Found bookings:', bookings.length);
 
-            // Process bookings into calendar events
-            const calendarEvents = [];
-            
-            for (const booking of bookings) {
-                console.log('🔄 Processing booking:', {
-                    id: booking.id,
-                    title: booking.title,
-                    start_time: booking.start_time,
-                    end_time: booking.end_time,
-                    status: booking.status
-                });
+            // Transform bookings to calendar events with timezone handling
+            const events = bookings.map(booking => this.transformBookingToEvent(booking));
+            console.log('🎯 Transformed events:', events);
 
-                if (!booking.start_time) {
-                    console.log('⚠️ Skipping booking without start_time:', booking.id);
-                    continue;
-                }
-
-                // Create calendar event
-                const calendarEvent = {
-                    id: booking.id,
-                    title: booking.title || booking.event_name || 'Untitled Event',
-                    start_time: new Date(booking.start_time),
-                    end_time: new Date(booking.end_time || booking.start_time),
-                    type: 'internal',
-                    source: null,
-                    status: booking.status || 'confirmed',
-                    attendees: this.getAttendees(booking),
-                    location: this.getLocation(booking),
-                    joinUrl: booking.meeting_link,
-                    raw: booking
-                };
-
-                console.log('✅ Created calendar event:', calendarEvent);
-                calendarEvents.push(calendarEvent);
-            }
-
-            console.log('🎉 Final calendar events:', calendarEvents);
-            console.log('📊 Total events:', calendarEvents.length);
-
-            return calendarEvents;
+            return events;
 
         } catch (error) {
             console.error('💥 Error in getWeekEvents:', error);
-            console.error('💥 Error details:', {
-                message: error.message,
-                stack: error.stack
-            });
             return [];
         }
     }
 
     /**
-     * Get attendees string from booking
+     * Transform booking object to calendar event format with timezone handling
      */
-    static getAttendees(booking) {
-        let attendees = 'You';
+    static transformBookingToEvent(booking) {
+        const userTimezone = this.getUserTimezone();
         
-        if (booking.guests && Array.isArray(booking.guests) && booking.guests.length > 0) {
-            const guestNames = booking.guests
-                .filter(guest => guest && guest.name)
-                .map(guest => guest.name)
-                .slice(0, 2);
-            
-            if (guestNames.length > 0) {
-                attendees = `You, ${guestNames.join(', ')}`;
-                if (booking.guests.length > 2) {
-                    attendees += ` +${booking.guests.length - 2} more`;
-                }
+        // Parse server times as UTC
+        const startUTC = this.convertToUserTimezone(booking.start_time);
+        const endUTC = this.convertToUserTimezone(booking.end_time);
+        
+        // Format location
+        let locationString = '';
+        if (booking.location) {
+            if (typeof booking.location === 'object') {
+                locationString = booking.location.name || 
+                                booking.location.address || 
+                                booking.location.value ||
+                                JSON.stringify(booking.location);
+            } else {
+                locationString = booking.location;
             }
         }
         
-        return attendees;
+        // Format attendees
+        let attendeesString = '';
+        if (booking.guests && Array.isArray(booking.guests)) {
+            attendeesString = booking.guests.map(g => g.name || g.email || g).join(', ');
+        } else if (booking.attendees && Array.isArray(booking.attendees)) {
+            attendeesString = booking.attendees.map(a => a.name || a.email || a).join(', ');
+        } else if (booking.guests) {
+            attendeesString = booking.guests;
+        } else if (booking.attendees) {
+            attendeesString = booking.attendees;
+        }
+        
+        // Format time in user's timezone
+        const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: userTimezone
+        });
+        
+        const userDateFormatter = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long',
+            timeZone: userTimezone
+        });
+        
+        const event = {
+            id: booking.id,
+            title: booking.title || 'Untitled Event',
+            start_time: booking.start_time, // Keep original for calculations
+            end_time: booking.end_time,     // Keep original for calculations
+            start_date_local: startUTC,     // Converted to user timezone
+            end_date_local: endUTC,         // Converted to user timezone
+            formattedStart: userTimeFormatter.format(startUTC),
+            formattedEnd: userTimeFormatter.format(endUTC),
+            dateKey: userDateFormatter.format(startUTC),
+            status: booking.status,
+            location: locationString,
+            description: booking.description,
+            attendees: attendeesString,
+            guests: booking.guests,
+            meeting_link: booking.meeting_link,
+            type: booking.is_external ? 'external' : 'internal',
+            source: booking.calendar_source || null,
+            source_icon: this.getSourceIcon(booking.calendar_source),
+            raw: booking // Keep original booking data
+        };
+
+        console.log('🔄 Transformed booking to event with timezone:', {
+            original: booking,
+            transformed: event,
+            timezone: userTimezone
+        });
+
+        return event;
     }
 
     /**
-     * Get location from booking
+     * Get icon for calendar source
      */
-    static getLocation(booking) {
-        if (booking.meeting_link) {
-            return 'Online Meeting';
-        }
-        
-        if (booking.location && Array.isArray(booking.location) && booking.location.length > 0) {
-            const firstLocation = booking.location[0];
-            if (firstLocation.type === 'google_meet') {
-                return 'Google Meet';
-            }
-            return firstLocation.type || 'Online Meeting';
-        }
-        
-        return 'Location TBD';
+    static getSourceIcon(source) {
+        const icons = {
+            'google_calendar': 'https://global.divhunt.com/3858bb278694ec6c098fef9b26e059ab_2357.svg',
+            'outlook': 'https://global.divhunt.com/41d16cde92f23c0849a7ddfd2065aa2e_3202.svg',
+            'apple_calendar': '/icons/apple-calendar.svg'
+        };
+        return icons[source] || null;
     }
 
     /**
-     * Format time range for display
+     * Format time range for display in user's timezone
      */
     static formatTimeRange(startTime, endTime) {
-        const formatTime = (date) => {
-            const hours = date.getHours();
-            const minutes = date.getMinutes();
-            const amPm = hours >= 12 ? "PM" : "AM";
-            const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-            const formattedMinutes = minutes.toString().padStart(2, '0');
-            return `${formattedHours}:${formattedMinutes} ${amPm}`;
-        };
+        const userTimezone = this.getUserTimezone();
+        const start = this.convertToUserTimezone(startTime);
+        const end = this.convertToUserTimezone(endTime);
         
-        return `${formatTime(startTime)} - ${formatTime(endTime)}`;
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: userTimezone
+        });
+        
+        return `${formatter.format(start)} - ${formatter.format(end)}`;
     }
 
     /**
-     * Get today's events (for today cards)
+     * Get today's events (for today cards and popup) with timezone handling
      */
     static async getTodayEvents() {
         try {
+            const userTimezone = this.getUserTimezone();
+            
+            // Get today's start and end in user's timezone
             const today = new Date();
             const startOfDay = new Date(today);
             startOfDay.setHours(0, 0, 0, 0);
@@ -176,16 +218,52 @@ export class CalendarService {
             const endOfDay = new Date(today);
             endOfDay.setHours(23, 59, 59, 999);
             
-            const events = await this.getWeekEvents(startOfDay);
+            console.log('📅 Getting today events in timezone:', userTimezone, {
+                start: startOfDay.toISOString(),
+                end: endOfDay.toISOString()
+            });
+
+            // Get current user ID
+            const userStore = UserStore();
+            const userId = userStore.getId();
+
+            // Build query params for today's events
+            const params = new URLSearchParams({
+                start_time: startOfDay.toISOString(),
+                end_time: endOfDay.toISOString(),
+                status: 'all',
+                page: '1',
+                page_size: '50'
+            });
+
+            const apiUrl = `user/${userId}/bookings?${params.toString()}`;
+            console.log('🔗 Today events API URL:', apiUrl);
+
+            // Call API
+            const response = await api.get(apiUrl);
             
-            // Filter for today only
+            if (!response || !response.success) {
+                console.log('❌ Failed to fetch today events');
+                return [];
+            }
+
+            // Extract and transform bookings
+            const bookings = response.data?.bookings || [];
+            const events = bookings.map(booking => this.transformBookingToEvent(booking));
+            
+            // Filter to only include events that fall on today in user's timezone
             const todayEvents = events.filter(event => {
-                const eventDate = new Date(event.start_time);
-                return eventDate.toDateString() === today.toDateString();
+                const eventDate = this.convertToUserTimezone(event.start_time);
+                const eventDateStr = eventDate.toDateString();
+                const todayStr = today.toDateString();
+                return eventDateStr === todayStr;
             });
             
-            // Add timing information
-            return todayEvents.map(event => this.enrichEventWithTiming(event));
+            // Add timing information for today's events
+            const enrichedEvents = todayEvents.map(event => this.enrichEventWithTiming(event));
+            
+            console.log('📅 Today events enriched:', enrichedEvents);
+            return enrichedEvents;
             
         } catch (error) {
             console.error('Error fetching today events:', error);
@@ -194,18 +272,21 @@ export class CalendarService {
     }
 
     /**
-     * Enrich event with timing information
+     * Enrich event with timing information (for today's events)
      */
     static enrichEventWithTiming(event) {
         const now = new Date();
-        const startTime = new Date(event.start_time);
-        const endTime = new Date(event.end_time);
+        const startTime = this.convertToUserTimezone(event.start_time);
+        const endTime = this.convertToUserTimezone(event.end_time);
         
         // Check if happening now
         const isNow = startTime <= now && endTime >= now;
         
         // Check if upcoming today
         const isUpcoming = startTime > now && startTime.toDateString() === now.toDateString();
+        
+        // Check if past
+        const isPast = endTime < now;
         
         // Calculate time until start
         let startsIn = null;
@@ -221,12 +302,79 @@ export class CalendarService {
             }
         }
         
+        // Format attendees list
+        let attendeesString = '';
+        if (event.guests && Array.isArray(event.guests)) {
+            const guestNames = event.guests.map(g => g.name || g.email || g).filter(Boolean);
+            attendeesString = guestNames.length > 0 ? guestNames.join(', ') : '';
+        } else if (event.attendees) {
+            attendeesString = event.attendees;
+        }
+        
         return {
             ...event,
             isNow,
             isUpcoming,
+            isPast,
             startsIn,
-            timeRange: this.formatTimeRange(startTime, endTime)
+            timeRange: this.formatTimeRange(event.start_time, event.end_time),
+            attendees: attendeesString || 'No attendees'
         };
+    }
+
+    /**
+     * Get events for a specific date range with timezone handling
+     */
+    static async getEventsForDateRange(startDate, endDate) {
+        try {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            
+            // Get current user ID
+            const userStore = UserStore();
+            const userId = userStore.getId();
+
+            // Build query params
+            const params = new URLSearchParams({
+                start_time: start.toISOString(),
+                end_time: end.toISOString(),
+                status: 'all',
+                page: '1',
+                page_size: '200'
+            });
+
+            const apiUrl = `user/${userId}/bookings?${params.toString()}`;
+            
+            // Call API
+            const response = await api.get(apiUrl);
+            
+            if (!response || !response.success) {
+                return [];
+            }
+
+            // Extract and transform bookings
+            const bookings = response.data?.bookings || [];
+            return bookings.map(booking => this.transformBookingToEvent(booking));
+            
+        } catch (error) {
+            console.error('Error fetching events for date range:', error);
+            return [];
+        }
+    }
+    
+    /**
+     * Get current timezone display string
+     */
+    static getCurrentTimezoneDisplay() {
+        const userTimezone = this.getUserTimezone();
+        const offset = new Date().getTimezoneOffset();
+        const hours = Math.abs(Math.floor(offset / 60));
+        const minutes = Math.abs(offset % 60);
+        const sign = offset <= 0 ? '+' : '-';
+        
+        return `${userTimezone} (UTC${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')})`;
     }
 }

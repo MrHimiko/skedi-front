@@ -1,4 +1,3 @@
-// src/panels/user/plugins/billing/pages/success.vue
 
 <template>
     <div class="billing-success">

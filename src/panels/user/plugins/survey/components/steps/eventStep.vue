@@ -201,7 +201,7 @@ function skipEventCreation() {
 .step-content {
     display: flex;
     flex-direction: column;
-    gap: 40px;
+    gap: 32px;
 }
 
 /* Step Header */
@@ -212,6 +212,11 @@ function skipEventCreation() {
 .step-icon {
     margin-bottom: 16px;
     color: var(--brand-default);
+
+    display: flex;
+    justify-content: center;
+
+
 }
 
 .step-header h2 {
@@ -321,6 +326,9 @@ function skipEventCreation() {
 .success-icon {
     margin-bottom: 16px;
     color: var(--brand-default);
+        display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .success-card h3 {

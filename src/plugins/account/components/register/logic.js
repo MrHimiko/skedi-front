@@ -29,7 +29,7 @@ function handleSubmit(event, fields, response, success)
     storage.set('token', response.data.token, true);
     
     // Get return URL or default to homepage
-    const url = (common.query('return') ?? '/events');
+    const url = (common.query('return') ?? '/');
     
     // Navigate to the return URL or homepage
     window.location.href = url.startsWith('/') ? url : '/';

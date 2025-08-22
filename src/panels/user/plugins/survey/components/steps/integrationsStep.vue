@@ -279,7 +279,7 @@ onMounted(() => {
 .step-content {
     display: flex;
     flex-direction: column;
-    gap: 40px;
+    gap: 32px;
 }
 
 /* Step Header */
@@ -290,6 +290,8 @@ onMounted(() => {
 .step-icon {
     margin-bottom: 16px;
     color: var(--brand-default);
+    display: flex;
+    justify-content: center;
 }
 
 .step-header h2 {
@@ -323,7 +325,7 @@ onMounted(() => {
 
 .benefits-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 20px;
 }
 

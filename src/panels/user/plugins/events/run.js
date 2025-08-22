@@ -1,4 +1,5 @@
 import { PhLink} from "@phosphor-icons/vue";
+
 export default class
 {
     constructor(app, router, stores) 
@@ -13,6 +14,7 @@ export default class
 
     routes()
     {
+        // Events list page
         this.router.addRoute(
         {
             path: '/events',
@@ -23,8 +25,25 @@ export default class
                 next();
                 //this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
             }
-        })
+        });
 
+        // Single event page
+        this.router.addRoute(
+        {
+            path: '/events/:eventId',
+            name: 'Event Details',
+            component: () => import('@user_events/pages/single/view.vue'),
+            beforeEnter: (to, from, next) => 
+            {
+                // Check if user is logged in
+                if (!this.stores.user.isLogged()) {
+                    this.router.replace('/account/login?return=' + to.fullPath);
+                    return;
+                }
+                
+                next();
+            }
+        });
     }
 
     sidebar() 

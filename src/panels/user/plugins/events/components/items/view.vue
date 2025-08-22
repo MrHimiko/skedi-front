@@ -9,6 +9,10 @@
     import { popup } from '@utils/popup';
     import { api } from '@utils/api';
     import { markRaw, ref, onMounted, toRaw } from 'vue';
+    import { useRouter } from 'vue-router';
+
+
+    const router = useRouter();
 
     // Component imports
     import MenusComponent from '@global/menus/view.vue';
@@ -175,11 +179,12 @@
     // Menu items for event actions
     const eventActionMenus = markRaw([
         { label: 'Preview', icon: null, iconComponent: PhArrowSquareOut, weight: 'regular' },
+        { label: 'View all settings', icon: null, iconComponent: PhGearSix, weight: 'regular' },
         { label: 'Edit duration', icon: null, iconComponent: PhClock, weight: 'regular' },
         { label: 'Edit availability', icon: null, iconComponent: PhCalendar, weight: 'regular' },
         { label: 'Edit location', icon: null, iconComponent: PhMapPin, weight: 'regular' },
         { label: 'Edit hosts', icon: null, iconComponent: PhUsers, weight: 'regular' },
-        { label: 'Manage team', icon: null, iconComponent: PhUsers, weight: 'regular' },  // NEW
+        { label: 'Manage team', icon: null, iconComponent: PhUsers, weight: 'regular' },
         { label: 'Form Settings', icon: null, iconComponent: PhTable, weight: 'regular' },
         { label: 'Add workflow', icon: null, iconComponent: PhFlowArrow, weight: 'regular' },
         { label: 'Add routing form', icon: null, iconComponent: PhTable, weight: 'regular' },
@@ -355,6 +360,10 @@
                     }
                 );
                 break;
+            
+        case 'View all settings':
+            router.push(`/events/${selectedEventId}`);
+            break;
 
             case 'Manage team':
                 popup.open(

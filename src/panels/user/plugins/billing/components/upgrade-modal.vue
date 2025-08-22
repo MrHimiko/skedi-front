@@ -140,6 +140,7 @@
                 <p>Your organization is now on the {{ upgradedPlanName }} plan.</p>
                 <p class="text-secondary">This window will close in {{ countdown }} seconds...</p>
             </div>
+            
         </template>
     </PopupLayout>
 </template>

@@ -297,6 +297,9 @@ function connectGoogleMeet() {
     font-size: 40px;
     color: var(--green-default);
     margin-bottom: 15px;
+        display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .success-state h3 {

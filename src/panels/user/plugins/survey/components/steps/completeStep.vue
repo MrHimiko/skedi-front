@@ -101,9 +101,6 @@ function toggleFaq(index) {
         <div class="step-content">
             <!-- Success Header -->
             <div class="success-header">
-                <div class="success-icon">
-                    <PhCheckCircle :size="48" weight="fill" />
-                </div>
                 <h2>🎉 You're All Set!</h2>
                 <p class="success-description">
                     Your scheduling platform is ready to use. Here's everything you need to know to get started.
@@ -152,8 +149,7 @@ function toggleFaq(index) {
                     </p>
                     <div class="screenshot-placeholder">
                         <div class="screenshot-box">
-                            <PhCalendar :size="32" weight="duotone" />
-                            <span>Screenshot will be added</span>
+                            <img src="https://global.divhunt.com/09ba1f59765ab329591dc78b69b43d38_30751.png" alt="Bookings screesnhot">
                         </div>
                     </div>
                 </div>
@@ -197,12 +193,13 @@ function toggleFaq(index) {
                         <h4>View all settings of your event</h4>
                         <p>Adjust availability, durations, questions, and more for your event types.</p>
                     </div>
+                    <div>
                     <ButtonComponent
                         as="primary"
                         :iconLeft="{ component: PhGearSix, weight: 'bold' }"
                         label="View Event Settings"
                         @click="viewEventSettings"
-                    />
+                    /></div>
                 </div>
             </div>
 
@@ -234,20 +231,7 @@ function toggleFaq(index) {
                 </div>
             </div>
 
-            <!-- Final Actions -->
-            <div class="final-actions">
-                <div class="actions-content">
-                    <div class="action-info">
-                        <h4>Ready to start scheduling?</h4>
-                        <p>You can always access this information from the help section.</p>
-                    </div>
-                    <ButtonComponent
-                        as="primary"
-                        label="Go to Dashboard"
-                        @click="finishSurvey"
-                    />
-                </div>
-            </div>
+           
         </div>
     </div>
 </template>
@@ -271,6 +255,9 @@ function toggleFaq(index) {
 
 .success-icon {
     margin-bottom: 16px;
+        display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--brand-default);
 }
 
@@ -302,8 +289,7 @@ function toggleFaq(index) {
 }
 
 .info-card.highlight {
-    border-color: var(--brand-default);
-    background: linear-gradient(135deg, var(--brand-default)05, var(--background-0));
+    border:2px solid var(--black)
 }
 
 .card-header {
@@ -364,7 +350,6 @@ function toggleFaq(index) {
     background: var(--background-1);
     border: 2px dashed var(--border);
     border-radius: var(--radius-md);
-    padding: 40px 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -373,9 +358,6 @@ function toggleFaq(index) {
     font-style: italic;
 }
 
-.screenshot-box > *:first-child {
-    opacity: 0.5;
-}
 
 /* Notification Timeline */
 .notification-timeline {
@@ -394,7 +376,7 @@ function toggleFaq(index) {
 .timeline-dot {
     width: 8px;
     height: 8px;
-    background: var(--brand-default);
+    background: var(--black);
     border-radius: 50%;
     flex-shrink: 0;
 }
@@ -497,13 +479,13 @@ function toggleFaq(index) {
 }
 
 .faq-answer {
-    padding: 0 16px 16px 16px;
+    padding: 16px 16px 16px;
     font-size: 14px;
     color: var(--text-secondary);
     line-height: 1.4;
     border-top: 1px solid var(--border);
     margin-top: -1px;
-    background: var(--background-1);
+
 }
 
 /* Final Actions */

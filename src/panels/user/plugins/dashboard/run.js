@@ -21,7 +21,7 @@ export default class
             beforeEnter: (to, from, next) => 
             {
                 next();
-                //this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
+                this.stores.user.isLogged() ? next() : this.router.replace('/account/login?return=' + to.fullPath)
             }
         })
 

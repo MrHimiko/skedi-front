@@ -232,7 +232,6 @@ onMounted(() => {
 
 <style scoped>
 .survey-container {
-    height: 100vh;
     display: flex;
     flex-direction: column;
     background-color: var(--background-1);
@@ -242,23 +241,23 @@ onMounted(() => {
 .survey-header {
     background-color: var(--background-0);
     border-bottom: 1px solid var(--border);
-    padding: 40px 0;
+    padding-bottom: 30px;
 }
 
 .survey-title {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 30px;
 }
 
 .survey-title h1 {
-    font-size: 32px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
     margin: 0 0 8px 0;
 }
 
 .survey-subtitle {
-    font-size: 18px;
+    font-size: 16px;
     color: var(--text-secondary);
     margin: 0;
 }
@@ -335,14 +334,16 @@ onMounted(() => {
     font-size: 12px;
     color: var(--text-secondary);
     line-height: 1.3;
+    display: none;
 }
 
 /* Content */
 .survey-content {
     flex: 1;
-    padding: 60px 0;
+    padding: 40px;
     overflow-y: auto;
 }
+
 
 /* Footer */
 .survey-footer {

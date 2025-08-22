@@ -90,9 +90,7 @@ onMounted(() => {
             <div v-if="defaultOrganization" class="organization-card">
                 <div class="org-header">
                     <div class="org-info">
-                        <div class="org-logo">
-                            <span>{{ defaultOrganization.name ? defaultOrganization.name.charAt(0).toUpperCase() : 'O' }}</span>
-                        </div>
+
                         <div class="org-details">
                             <h3>{{ defaultOrganization.name || 'Your Organization' }}</h3>
                             <div class="org-url">
@@ -101,12 +99,14 @@ onMounted(() => {
                             </div>
                         </div>
                     </div>
+                    <div>
+                   
                     <ButtonComponent
                         as="secondary"
                         :iconLeft="{ component: PhPencil, weight: 'bold' }"
                         label="Edit"
                         @click="editOrganization(defaultOrganization)"
-                    />
+                    /></div>
                 </div>
 
                 <div class="org-features">
@@ -135,12 +135,13 @@ onMounted(() => {
                     <h4>Ready to continue?</h4>
                     <p>You can always edit your organization details later from the teams page.</p>
                 </div>
+                <div>
                 <ButtonComponent
                     as="primary"
                     label="Continue Setup"
                     :disabled="!defaultOrganization"
                     @click="continueWithOrganization"
-                />
+                /></div>
             </div>
         </div>
     </div>
@@ -155,7 +156,7 @@ onMounted(() => {
 .step-content {
     display: flex;
     flex-direction: column;
-    gap: 40px;
+    gap: 32px;
 }
 
 /* Step Header */
@@ -166,6 +167,8 @@ onMounted(() => {
 .step-icon {
     margin-bottom: 16px;
     color: var(--brand-default);
+    display: flex;
+    justify-content: center;
 }
 
 .step-header h2 {
