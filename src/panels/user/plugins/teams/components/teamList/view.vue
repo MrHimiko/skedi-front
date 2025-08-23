@@ -89,7 +89,7 @@ function triggerReload() {
 
 function getTeamUrl(team) {
    if (!team || !team.slug) return '#';
-   return `https://skedi.com/${props.orgSlug}/${team.slug}`;
+   return `https://skedi.com/${props.orgSlug}/team/${team.slug}`;
 }
 
 // Get subteam count text
@@ -278,7 +278,7 @@ function getTeamMenuOptions(team) {
                            </div>
                        </div>
                        
-                       <a :href="getTeamUrl(team)" class="team-url">
+                       <a :href="getTeamUrl(team)" class="team-url" target="_blank">
                            {{ getTeamUrl(team) }}
                        </a>
                        

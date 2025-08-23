@@ -160,7 +160,7 @@ function createSubteam() {
 
 function getTeamUrl(team) {
     if (!team || !team.slug) return '#';
-    return `https://skedi.com/${props.orgSlug}/${team.slug}`;
+    return `https://skedi.com/${props.orgSlug}/team/${team.slug}`;
 }
 
 function getSubteamCountText(team) {

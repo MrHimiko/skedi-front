@@ -203,7 +203,7 @@ function goBack() {
 // Get event URL
 const eventUrl = computed(() => {
     if (!event.value || !organization.value) return '';
-    return `https://skedi.com/${organization.value.slug}/${event.value.slug}`;
+    return `https://skedi.com/${organization.value.slug}/schedule/${event.value.slug}`;
 });
 
 // Page title
@@ -250,18 +250,7 @@ onMounted(() => {
                     
                     <!-- Main content -->
                     <template v-else-if="event">
-                        <!-- Header with back button -->
-                        <div class="header-section">
-                            <ButtonComponent
-                                @click="goBack"
-                                as="transparent"
-                                class="back-button"
-                            >
-                                <PhArrowLeft :size="16" weight="bold" />
-                                Back to Events
-                            </ButtonComponent>
-                        </div>
-
+  
                         <!-- Page Header -->
                         <HeadingComponent 
                             :title="pageTitle"

@@ -47,7 +47,7 @@ const urlCopied = ref(false);
 // Computed
 const eventUrl = computed(() => {
     if (!props.event || !props.organization) return '';
-    return `https://skedi.com/${props.organization.slug}/${props.event.slug}`;
+    return `https://skedi.com/${props.organization.slug}/schedule/${props.event.slug}`;
 });
 
 // Check if user has multiple organizations
