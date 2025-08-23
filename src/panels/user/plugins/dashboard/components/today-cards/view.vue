@@ -221,11 +221,54 @@ function getSourceIcon(source) {
     return icons[source] || null;
 }
 
-// Format location
+
+
+// Format location 
 function formatLocation(location) {
     if (!location) return '';
-    const parsed = JSON.parse(location);
-    return parsed[0].type + ": " + parsed[0].value;
+    
+    // If it's already a string, return it directly
+    if (typeof location === 'string') {
+        return location;
+    }
+    
+    // If it's an array, process the first location
+    if (Array.isArray(location)) {
+        if (location.length === 0) return '';
+        
+        const firstLocation = location[0];
+        if (typeof firstLocation === 'string') {
+            return firstLocation;
+        }
+        
+        // Handle location object
+        if (firstLocation.type === 'google_meet') {
+            return 'Google Meet';
+        } else if (firstLocation.type === 'link') {
+            return firstLocation.value || 'Meeting Link';
+        } else if (firstLocation.type === 'address') {
+            return firstLocation.value || 'Address';
+        } else if (firstLocation.type === 'in_person') {
+            return firstLocation.address || 'In Person';
+        } else if (firstLocation.type === 'custom') {
+            return firstLocation.custom || 'Custom Location';
+        }
+        
+        return firstLocation.value || firstLocation.address || 'Location';
+    }
+    
+    // Try to parse as JSON (backwards compatibility)
+    try {
+        const parsed = JSON.parse(location);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            const firstLocation = parsed[0];
+            return `${firstLocation.type}: ${firstLocation.value || firstLocation.address || ''}`;
+        }
+        return location;
+    } catch (error) {
+        // If JSON parsing fails, return the location as-is
+        return location;
+    }
 }
 
 // Format attendees

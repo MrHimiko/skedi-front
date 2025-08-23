@@ -1,11 +1,23 @@
+// File: src/panels/user/plugins/dashboard/services/calendar.js
+
 import { api } from '@utils/api';
 import { UserStore } from '@stores/user';
 import { storage } from '@utils/storage';
+import { BookingsService } from '@user_bookings/services/bookings';
 
 /**
  * CalendarService - Enhanced service with timezone support for dashboard calendar
+ * Now fetches ALL event types: bookings + external events + availability
  */
 export class CalendarService {
+    
+    // Cache for out of office data (only refreshed on page load)
+    static availabilityCache = {
+        data: null,
+        timestamp: null,
+        expires: 30 * 60 * 1000 // 30 minutes cache
+    };
+
     /**
      * Get user's timezone preference or browser default
      */
@@ -30,12 +42,14 @@ export class CalendarService {
     }
     
     /**
-     * Get events for a specific week - directly using your API
+     * Get ALL events for a specific date range - bookings + external + availability
      */
     static async getWeekEvents(weekStartDate) {
         try {
             console.log('🔍 CalendarService.getWeekEvents called with:', weekStartDate);
             
+            // FIXED: Calculate proper end date based on current view
+            // This will be overridden by the calling function if needed
             const weekStart = new Date(weekStartDate);
             weekStart.setHours(0, 0, 0, 0);
             
@@ -53,75 +67,326 @@ export class CalendarService {
             const userId = userStore.getId();
             console.log('👤 User ID:', userId);
 
-            // Build query params for your API
-            const params = new URLSearchParams({
-                start_time: weekStart.toISOString(),
-                end_time: weekEnd.toISOString(),
-                status: 'all',
-                page: '1',
-                page_size: '200'
-            });
+            const startTimeISO = weekStart.toISOString();
+            const endTimeISO = weekEnd.toISOString();
 
-            const apiUrl = `user/${userId}/bookings?${params.toString()}`;
-            console.log('🔗 API URL:', apiUrl);
+            // Fetch ALL event types in parallel for better performance
+            const [bookingsData, externalEventsData, availabilityData] = await Promise.allSettled([
+                this.fetchBookings(userId, startTimeISO, endTimeISO),
+                this.fetchExternalEvents(startTimeISO, endTimeISO),
+                this.fetchAvailabilityEvents() // FIXED: Cached, no date params needed
+            ]);
 
-            // Call your API directly
-            console.log('📞 Making API call...');
-            const response = await api.get(apiUrl);
-            console.log('📦 Raw API response:', response);
+            console.log('🔄 All API calls completed');
 
-            if (!response || !response.success) {
-                console.log('❌ API call failed or not successful');
-                return [];
+            // Process each data source
+            let allEvents = [];
+
+            // 1. Process internal bookings
+            if (bookingsData.status === 'fulfilled' && bookingsData.value) {
+                const bookingEvents = bookingsData.value.map(booking => 
+                    this.transformBookingToEvent(booking)
+                );
+                console.log('📚 Booking events:', bookingEvents.length);
+                allEvents.push(...bookingEvents);
+            } else {
+                console.warn('❌ Failed to fetch bookings:', bookingsData.reason);
             }
 
-            // Extract bookings from response
-            const bookings = response.data?.bookings || [];
-            console.log('📚 Found bookings:', bookings.length);
+            // 2. Process external events (Google Calendar, Outlook, etc.)
+            if (externalEventsData.status === 'fulfilled' && externalEventsData.value) {
+                const processedExternalEvents = this.processExternalEvents(
+                    externalEventsData.value,
+                    allEvents // Pass existing bookings for duplicate detection
+                );
+                console.log('🌐 External events:', processedExternalEvents.length);
+                allEvents.push(...processedExternalEvents);
+            } else {
+                console.warn('❌ Failed to fetch external events:', externalEventsData.reason);
+            }
 
-            // Transform bookings to calendar events with timezone handling
-            const events = bookings.map(booking => this.transformBookingToEvent(booking));
-            console.log('🎯 Transformed events:', events);
+            // 3. Process availability events (Vacation, Out of Office, etc.)
+            if (availabilityData.status === 'fulfilled' && availabilityData.value) {
+                // FIXED: Filter and expand multi-day availability events for the requested range
+                const availabilityEvents = this.processAvailabilityEvents(
+                    availabilityData.value,
+                    weekStart,
+                    weekEnd
+                );
+                console.log('🏖️ Availability events:', availabilityEvents.length);
+                allEvents.push(...availabilityEvents);
+            } else {
+                console.warn('❌ Failed to fetch availability events:', availabilityData.reason);
+            }
 
-            return events;
+            console.log('🎯 Total events combined:', allEvents.length);
+            return allEvents;
 
         } catch (error) {
-            console.error('💥 Error in getWeekEvents:', error);
+            console.error('💥 Error in CalendarService.getWeekEvents:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * FIXED: Get events for a specific date range (supports any range, not just weeks)
+     */
+    static async getEventsForDateRange(startDate, endDate) {
+        try {
+            console.log('🔍 CalendarService.getEventsForDateRange called:', {
+                start: startDate.toISOString(),
+                end: endDate.toISOString()
+            });
+
+            const userStore = UserStore();
+            const userId = userStore.getId();
+
+            const startTimeISO = startDate.toISOString();
+            const endTimeISO = endDate.toISOString();
+
+            // Fetch ALL event types in parallel
+            const [bookingsData, externalEventsData, availabilityData] = await Promise.allSettled([
+                this.fetchBookings(userId, startTimeISO, endTimeISO),
+                this.fetchExternalEvents(startTimeISO, endTimeISO),
+                this.fetchAvailabilityEvents() // Cached
+            ]);
+
+            // Process each data source
+            let allEvents = [];
+
+            // 1. Process internal bookings
+            if (bookingsData.status === 'fulfilled' && bookingsData.value) {
+                const bookingEvents = bookingsData.value.map(booking => 
+                    this.transformBookingToEvent(booking)
+                );
+                allEvents.push(...bookingEvents);
+            }
+
+            // 2. Process external events
+            if (externalEventsData.status === 'fulfilled' && externalEventsData.value) {
+                const processedExternalEvents = this.processExternalEvents(
+                    externalEventsData.value,
+                    allEvents
+                );
+                allEvents.push(...processedExternalEvents);
+            }
+
+            // 3. Process availability events
+            if (availabilityData.status === 'fulfilled' && availabilityData.value) {
+                const availabilityEvents = this.processAvailabilityEvents(
+                    availabilityData.value,
+                    startDate,
+                    endDate
+                );
+                allEvents.push(...availabilityEvents);
+            }
+
+            console.log('🎯 Total events for date range:', allEvents.length);
+            return allEvents;
+
+        } catch (error) {
+            console.error('💥 Error in CalendarService.getEventsForDateRange:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Fetch internal bookings
+     */
+    static async fetchBookings(userId, startTime, endTime) {
+        const params = new URLSearchParams({
+            start_time: startTime,
+            end_time: endTime,
+            status: 'all',
+            page: '1',
+            page_size: '200'
+        });
+
+        const apiUrl = `user/${userId}/bookings?${params.toString()}`;
+        console.log('🔗 Bookings API URL:', apiUrl);
+
+        const response = await api.get(apiUrl);
+        console.log('📦 Bookings API response:', response);
+
+        if (!response || !response.success) {
+            console.log('❌ Bookings API call failed');
+            return [];
+        }
+
+        return response.data?.bookings || [];
+    }
+
+    /**
+     * FIXED: Fetch external calendar events with proper date formatting
+     */
+    static async fetchExternalEvents(startTimeISO, endTimeISO) {
+        try {
+            // FIXED: Use proper date formatting for the API
+            const startDate = startTimeISO.split('T')[0]; // "2025-08-01"
+            const endDate = endTimeISO.split('T')[0];     // "2025-08-31"
+            
+            console.log('🔗 External events date range:', { startDate, endDate });
+            
+            const params = new URLSearchParams({
+                start_date: startDate,
+                end_date: endDate,
+                sync: 'auto' // Use auto sync, not force to avoid rate limits
+            });
+            
+            const apiUrl = `user/integrations/events?${params.toString()}`;
+            console.log('🔗 External events API URL:', apiUrl);
+            
+            const response = await api.get(apiUrl);
+            console.log('📦 External events API response:', response);
+            
+            if (!response || !response.success) {
+                console.log('❌ External events API call failed');
+                return [];
+            }
+            
+            return response.data?.events || [];
+        } catch (error) {
+            console.error('💥 Error fetching external events:', error);
             return [];
         }
     }
 
     /**
-     * Transform booking object to calendar event format with timezone handling
+     * FIXED: Fetch availability events with caching (only refresh on page load)
+     */
+    static async fetchAvailabilityEvents() {
+        try {
+            // Check cache first
+            const now = Date.now();
+            if (
+                this.availabilityCache.data &&
+                this.availabilityCache.timestamp &&
+                (now - this.availabilityCache.timestamp) < this.availabilityCache.expires
+            ) {
+                console.log('📦 Using cached availability events');
+                return this.availabilityCache.data;
+            }
+
+            const apiUrl = 'user/out-of-office';
+            console.log('🔗 Availability API URL:', apiUrl);
+            
+            const response = await api.get(apiUrl);
+            console.log('📦 Availability API response:', response);
+            
+            if (!response || !response.success) {
+                console.log('❌ Availability API call failed');
+                return [];
+            }
+
+            const data = response.data || [];
+            
+            // Cache the results
+            this.availabilityCache = {
+                data: data,
+                timestamp: now
+            };
+            
+            console.log('💾 Cached availability events:', data.length);
+            return data;
+        } catch (error) {
+            console.error('💥 Error fetching availability events:', error);
+            return [];
+        }
+    }
+
+    /**
+     * FIXED: Process and expand multi-day availability events for date range
+     */
+    static processAvailabilityEvents(availabilityData, startDate, endDate) {
+        const processedEvents = [];
+        const startTimeMs = startDate.getTime();
+        const endTimeMs = endDate.getTime();
+        
+        console.log('🔄 Processing availability events for date range:', {
+            total: availabilityData.length,
+            range: `${startDate.toDateString()} - ${endDate.toDateString()}`
+        });
+        
+        for (const availability of availabilityData) {
+            try {
+                // Parse availability dates
+                const availStartDate = new Date(availability.start_time + (availability.start_time.endsWith('Z') ? '' : 'Z'));
+                const availEndDate = new Date(availability.end_time + (availability.end_time.endsWith('Z') ? '' : 'Z'));
+                
+                // Check if availability overlaps with requested range
+                if (availStartDate.getTime() >= endTimeMs || availEndDate.getTime() <= startTimeMs) {
+                    continue; // No overlap, skip
+                }
+                
+                // FIXED: Create event for each day the availability spans within the range
+                const currentDate = new Date(Math.max(availStartDate.getTime(), startTimeMs));
+                currentDate.setHours(0, 0, 0, 0);
+                
+                const rangeEndDate = new Date(Math.min(availEndDate.getTime(), endTimeMs));
+                
+                while (currentDate <= rangeEndDate) {
+                    const dayStart = new Date(currentDate);
+                    const dayEnd = new Date(currentDate);
+                    
+                    // For the first day, use the actual start time
+                    if (currentDate.toDateString() === availStartDate.toDateString()) {
+                        dayStart.setHours(availStartDate.getHours(), availStartDate.getMinutes(), 0, 0);
+                    } else {
+                        dayStart.setHours(0, 0, 0, 0);
+                    }
+                    
+                    // For the last day, use the actual end time
+                    if (currentDate.toDateString() === availEndDate.toDateString()) {
+                        dayEnd.setHours(availEndDate.getHours(), availEndDate.getMinutes(), 0, 0);
+                    } else {
+                        dayEnd.setHours(23, 59, 59, 999);
+                    }
+                    
+                    // Create event for this day
+                    const dailyEvent = this.transformAvailabilityToEvent(availability, dayStart, dayEnd);
+                    processedEvents.push(dailyEvent);
+                    
+                    // Move to next day
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+                
+            } catch (error) {
+                console.error('💥 Error processing availability event:', availability, error);
+            }
+        }
+        
+        console.log('✅ Processed availability events:', processedEvents.length);
+        return processedEvents;
+    }
+
+    /**
+     * Transform booking to calendar event
      */
     static transformBookingToEvent(booking) {
         const userTimezone = this.getUserTimezone();
         
-        // Parse server times as UTC
+        // Convert times to user timezone for display
         const startUTC = this.convertToUserTimezone(booking.start_time);
         const endUTC = this.convertToUserTimezone(booking.end_time);
         
-        // Format location
+        // Determine location string
         let locationString = '';
-        if (booking.location) {
-            if (typeof booking.location === 'object') {
-                locationString = booking.location.name || 
-                                booking.location.address || 
-                                booking.location.value ||
-                                JSON.stringify(booking.location);
-            } else {
-                locationString = booking.location;
-            }
+        if (booking.location && Array.isArray(booking.location)) {
+            booking.location.forEach(loc => {
+                if (loc.type === 'google_meet') {
+                    locationString += 'Google Meet';
+                } else if (loc.type === 'link') {
+                    locationString += loc.value;
+                } else if (loc.type === 'address') {
+                    locationString += loc.value;
+                }
+            });
         }
         
-        // Format attendees
+        // Determine attendees string
         let attendeesString = '';
         if (booking.guests && Array.isArray(booking.guests)) {
-            attendeesString = booking.guests.map(g => g.name || g.email || g).join(', ');
-        } else if (booking.attendees && Array.isArray(booking.attendees)) {
-            attendeesString = booking.attendees.map(a => a.name || a.email || a).join(', ');
-        } else if (booking.guests) {
-            attendeesString = booking.guests;
+            attendeesString = booking.guests.map(g => g.name || g.email).join(', ');
         } else if (booking.attendees) {
             attendeesString = booking.attendees;
         }
@@ -142,13 +407,13 @@ export class CalendarService {
             timeZone: userTimezone
         });
         
-        const event = {
+        return {
             id: booking.id,
             title: booking.title || 'Untitled Event',
-            start_time: booking.start_time, // Keep original for calculations
-            end_time: booking.end_time,     // Keep original for calculations
-            start_date_local: startUTC,     // Converted to user timezone
-            end_date_local: endUTC,         // Converted to user timezone
+            start_time: booking.start_time,
+            end_time: booking.end_time,
+            start_date_local: startUTC,
+            end_date_local: endUTC,
             formattedStart: userTimeFormatter.format(startUTC),
             formattedEnd: userTimeFormatter.format(endUTC),
             dateKey: userDateFormatter.format(startUTC),
@@ -158,31 +423,180 @@ export class CalendarService {
             attendees: attendeesString,
             guests: booking.guests,
             meeting_link: booking.meeting_link,
-            type: booking.is_external ? 'external' : 'internal',
-            source: booking.calendar_source || null,
-            source_icon: this.getSourceIcon(booking.calendar_source),
-            raw: booking // Keep original booking data
+            type: 'booking',
+            source: 'internal',
+            cancelled: booking.cancelled || false,
+            booking_id: booking.id, // FIXED: Add booking_id for popup
+            raw: booking // Keep original data for popup
         };
-
-        console.log('🔄 Transformed booking to event with timezone:', {
-            original: booking,
-            transformed: event,
-            timezone: userTimezone
-        });
-
-        return event;
     }
 
     /**
-     * Get icon for calendar source
+     * Process external events and check for duplicates
      */
-    static getSourceIcon(source) {
-        const icons = {
-            'google_calendar': 'https://global.divhunt.com/3858bb278694ec6c098fef9b26e059ab_2357.svg',
-            'outlook': 'https://global.divhunt.com/41d16cde92f23c0849a7ddfd2065aa2e_3202.svg',
-            'apple_calendar': '/icons/apple-calendar.svg'
+    static processExternalEvents(events, existingBookings = []) {
+        const processedEvents = [];
+        const userTimezone = this.getUserTimezone();
+        
+        console.log("🔍 Processing external events:", events.length);
+        
+        // Get all internal bookings for duplicate checking
+        const internalBookings = existingBookings.filter(item => 
+            item && item.type === 'booking'
+        );
+        
+        for (const event of events) {
+            try {
+                if (!event.start_time) continue;
+                
+                // Check if this external event is a duplicate of any internal booking
+                let isDuplicate = false;
+                for (const booking of internalBookings) {
+                    if (BookingsService.areEventsDuplicate && BookingsService.areEventsDuplicate(booking, event)) {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+                
+                // Skip if duplicate
+                if (isDuplicate) {
+                    console.log(`⏭️ Skipping duplicate external event: ${event.title}`);
+                    continue;
+                }
+                
+                let startDateTime, endDateTime;
+                
+                if (event.start_time.includes('T')) {
+                    startDateTime = new Date(event.start_time);
+                    endDateTime = new Date(event.end_time || event.start_time);
+                } else {
+                    const [startDatePart, startTimePart] = event.start_time.split(' ');
+                    const [endDatePart, endTimePart] = event.end_time ? 
+                        event.end_time.split(' ') : 
+                        [startDatePart, startTimePart];
+                    
+                    startDateTime = new Date(`${startDatePart}T${startTimePart}Z`);
+                    endDateTime = new Date(`${endDatePart}T${endTimePart}Z`);
+                }
+                
+                // Format times
+                const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                    timeZone: userTimezone
+                });
+                
+                const userDateFormatter = new Intl.DateTimeFormat('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    weekday: 'long',
+                    timeZone: userTimezone
+                });
+                
+                const transformedEvent = {
+                    id: `external_${event.id || Math.random()}`,
+                    title: event.title || event.summary || 'External Event',
+                    start_time: event.start_time,
+                    end_time: event.end_time,
+                    start_date_local: startDateTime,
+                    end_date_local: endDateTime,
+                    formattedStart: userTimeFormatter.format(startDateTime),
+                    formattedEnd: userTimeFormatter.format(endDateTime),
+                    dateKey: userDateFormatter.format(startDateTime),
+                    status: event.status || 'confirmed',
+                    location: event.location || '',
+                    description: event.description || '',
+                    type: 'external',
+                    source: event.source || 'external_calendar',
+                    calendar_name: event.calendar_name,
+                    cancelled: false,
+                    raw: event
+                };
+                
+                processedEvents.push(transformedEvent);
+                
+            } catch (error) {
+                console.error('💥 Error processing external event:', event, error);
+            }
+        }
+        
+        return processedEvents;
+    }
+
+    /**
+     * FIXED: Transform availability entry to calendar event with custom date range
+     */
+    static transformAvailabilityToEvent(availability, customStartDate = null, customEndDate = null) {
+        const userTimezone = this.getUserTimezone();
+        
+        // Use custom dates if provided (for multi-day events), otherwise use original dates
+        const startDateTime = customStartDate || new Date(availability.start_time + (availability.start_time.endsWith('Z') ? '' : 'Z'));
+        const endDateTime = customEndDate || new Date(availability.end_time + (availability.end_time.endsWith('Z') ? '' : 'Z'));
+        
+        // Format times
+        const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: userTimezone
+        });
+        
+        const userDateFormatter = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long',
+            timeZone: userTimezone
+        });
+
+        // Extract reason from description for better display
+        let displayTitle = availability.title || 'Unavailable';
+        let reasonIcon = '';
+
+        if (availability.description) {
+            const description = availability.description;
+            
+            if (description.includes('Vacation')) {
+                reasonIcon = '🏝️ ';
+                displayTitle = 'Vacation';
+            } else if (description.includes('Travel')) {
+                reasonIcon = '✈️ ';
+                displayTitle = 'Travel';
+            } else if (description.includes('Sick leave')) {
+                reasonIcon = '🤒 ';
+                displayTitle = 'Sick Leave';
+            } else if (description.includes('Public holiday')) {
+                reasonIcon = '📅 ';
+                displayTitle = 'Public Holiday';
+            } else if (availability.source === 'out_of_office') {
+                reasonIcon = '🚫 ';
+                displayTitle = 'Out of Office';
+            }
+        }
+        
+        // Create unique ID for each day
+        const dayKey = startDateTime.toISOString().split('T')[0];
+        
+        return {
+            id: `availability_${availability.id}_${dayKey}`,
+            title: `${reasonIcon}${displayTitle}`,
+            start_time: startDateTime.toISOString().replace('Z', '').replace('T', ' '),
+            end_time: endDateTime.toISOString().replace('Z', '').replace('T', ' '),
+            start_date_local: startDateTime,
+            end_date_local: endDateTime,
+            formattedStart: userTimeFormatter.format(startDateTime),
+            formattedEnd: userTimeFormatter.format(endDateTime),
+            dateKey: userDateFormatter.format(startDateTime),
+            status: availability.status || 'confirmed',
+            location: '',
+            description: availability.description || '',
+            type: 'availability',
+            source: availability.source || 'out_of_office',
+            cancelled: false,
+            raw: availability
         };
-        return icons[source] || null;
     }
 
     /**
@@ -204,177 +618,200 @@ export class CalendarService {
     }
 
     /**
-     * Get today's events (for today cards and popup) with timezone handling
+     * Get today's events - all types (for today cards)
      */
     static async getTodayEvents() {
         try {
+            console.log('🔍 CalendarService.getTodayEvents called');
+            
+            const today = new Date();
             const userTimezone = this.getUserTimezone();
             
-            // Get today's start and end in user's timezone
-            const today = new Date();
+            // Get start and end of today in user's timezone
             const startOfDay = new Date(today);
             startOfDay.setHours(0, 0, 0, 0);
             
             const endOfDay = new Date(today);
             endOfDay.setHours(23, 59, 59, 999);
             
-            console.log('📅 Getting today events in timezone:', userTimezone, {
-                start: startOfDay.toISOString(),
-                end: endOfDay.toISOString()
-            });
-
-            // Get current user ID
-            const userStore = UserStore();
-            const userId = userStore.getId();
-
-            // Build query params for today's events
-            const params = new URLSearchParams({
-                start_time: startOfDay.toISOString(),
-                end_time: endOfDay.toISOString(),
-                status: 'all',
-                page: '1',
-                page_size: '50'
-            });
-
-            const apiUrl = `user/${userId}/bookings?${params.toString()}`;
-            console.log('🔗 Today events API URL:', apiUrl);
-
-            // Call API
-            const response = await api.get(apiUrl);
-            
-            if (!response || !response.success) {
-                console.log('❌ Failed to fetch today events');
-                return [];
-            }
-
-            // Extract and transform bookings
-            const bookings = response.data?.bookings || [];
-            const events = bookings.map(booking => this.transformBookingToEvent(booking));
-            
-            // Filter to only include events that fall on today in user's timezone
-            const todayEvents = events.filter(event => {
-                const eventDate = this.convertToUserTimezone(event.start_time);
-                const eventDateStr = eventDate.toDateString();
-                const todayStr = today.toDateString();
-                return eventDateStr === todayStr;
-            });
-            
-            // Add timing information for today's events
-            const enrichedEvents = todayEvents.map(event => this.enrichEventWithTiming(event));
-            
-            console.log('📅 Today events enriched:', enrichedEvents);
-            return enrichedEvents;
+            // Use the enhanced date range method
+            return await this.getEventsForDateRange(startOfDay, endOfDay);
             
         } catch (error) {
-            console.error('Error fetching today events:', error);
+            console.error('💥 Error fetching today events:', error);
             return [];
         }
     }
 
     /**
-     * Enrich event with timing information (for today's events)
+     * Transform booking to today event format (for cards)
      */
-    static enrichEventWithTiming(event) {
+    static transformBookingToTodayEvent(booking) {
+        const userTimezone = this.getUserTimezone();
+        
+        // Convert times to user timezone for display
+        const startUTC = this.convertToUserTimezone(booking.start_time);
+        const endUTC = this.convertToUserTimezone(booking.end_time);
+        
+        // Determine location string
+        let locationString = '';
+        if (booking.location && Array.isArray(booking.location)) {
+            booking.location.forEach(loc => {
+                if (loc.type === 'google_meet') {
+                    locationString += 'Google Meet';
+                } else if (loc.type === 'link') {
+                    locationString += loc.value;
+                } else if (loc.type === 'address') {
+                    locationString += loc.value;
+                }
+            });
+        }
+        
+        // Determine attendees string
+        let attendeesString = '';
+        if (booking.guests && Array.isArray(booking.guests)) {
+            attendeesString = booking.guests.map(g => g.name || g.email).join(', ');
+        }
+        
+        // Calculate timing
         const now = new Date();
-        const startTime = this.convertToUserTimezone(event.start_time);
-        const endTime = this.convertToUserTimezone(event.end_time);
+        const isNow = now >= startUTC && now <= endUTC;
+        const isUpcoming = startUTC > now;
+        const isPast = endUTC < now;
         
-        // Check if happening now
-        const isNow = startTime <= now && endTime >= now;
-        
-        // Check if upcoming today
-        const isUpcoming = startTime > now && startTime.toDateString() === now.toDateString();
-        
-        // Check if past
-        const isPast = endTime < now;
-        
-        // Calculate time until start
-        let startsIn = null;
+        let startsIn = '';
         if (isUpcoming) {
-            const timeDiff = startTime.getTime() - now.getTime();
-            const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-            const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-            
-            if (hours > 0) {
-                startsIn = `${hours}h ${minutes}m`;
+            const diffMs = startUTC.getTime() - now.getTime();
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            if (diffMins < 60) {
+                startsIn = `in ${diffMins} min`;
             } else {
-                startsIn = `${minutes}m`;
+                const diffHours = Math.floor(diffMins / 60);
+                startsIn = `in ${diffHours}h ${diffMins % 60}m`;
             }
         }
         
-        // Format attendees list
-        let attendeesString = '';
-        if (event.guests && Array.isArray(event.guests)) {
-            const guestNames = event.guests.map(g => g.name || g.email || g).filter(Boolean);
-            attendeesString = guestNames.length > 0 ? guestNames.join(', ') : '';
-        } else if (event.attendees) {
-            attendeesString = event.attendees;
-        }
-        
         return {
-            ...event,
+            id: booking.id,
+            title: booking.title || 'Untitled Event',
+            start_time: booking.start_time,
+            end_time: booking.end_time,
+            timeRange: CalendarService.formatTimeRange(booking.start_time, booking.end_time),
+            status: booking.status || 'confirmed',
+            location: locationString,
+            attendees: attendeesString,
+            type: 'booking',
+            source: 'internal',
             isNow,
             isUpcoming,
             isPast,
             startsIn,
-            timeRange: this.formatTimeRange(event.start_time, event.end_time),
-            attendees: attendeesString || 'No attendees'
+            raw: booking
         };
     }
 
     /**
-     * Get events for a specific date range with timezone handling
+     * Transform availability to today event format (for cards)
      */
-    static async getEventsForDateRange(startDate, endDate) {
-        try {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
-            
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
-            
-            // Get current user ID
-            const userStore = UserStore();
-            const userId = userStore.getId();
-
-            // Build query params
-            const params = new URLSearchParams({
-                start_time: start.toISOString(),
-                end_time: end.toISOString(),
-                status: 'all',
-                page: '1',
-                page_size: '200'
-            });
-
-            const apiUrl = `user/${userId}/bookings?${params.toString()}`;
-            
-            // Call API
-            const response = await api.get(apiUrl);
-            
-            if (!response || !response.success) {
-                return [];
-            }
-
-            // Extract and transform bookings
-            const bookings = response.data?.bookings || [];
-            return bookings.map(booking => this.transformBookingToEvent(booking));
-            
-        } catch (error) {
-            console.error('Error fetching events for date range:', error);
-            return [];
-        }
-    }
-    
-    /**
-     * Get current timezone display string
-     */
-    static getCurrentTimezoneDisplay() {
-        const userTimezone = this.getUserTimezone();
-        const offset = new Date().getTimezoneOffset();
-        const hours = Math.abs(Math.floor(offset / 60));
-        const minutes = Math.abs(offset % 60);
-        const sign = offset <= 0 ? '+' : '-';
+    static transformAvailabilityToTodayEvent(availability) {
+        // Parse times - availability times are stored as UTC in the database
+        const startDateTime = new Date(availability.start_time + (availability.start_time.endsWith('Z') ? '' : 'Z'));
+        const endDateTime = new Date(availability.end_time + (availability.end_time.endsWith('Z') ? '' : 'Z'));
         
-        return `${userTimezone} (UTC${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')})`;
+        // Extract reason from description for better display
+        let displayTitle = availability.title || 'Unavailable';
+        let reasonIcon = '';
+
+        if (availability.description) {
+            const description = availability.description;
+            
+            if (description.includes('Vacation')) {
+                reasonIcon = '🏝️ ';
+                displayTitle = 'Vacation';
+            } else if (description.includes('Travel')) {
+                reasonIcon = '✈️ ';
+                displayTitle = 'Travel';
+            } else if (description.includes('Sick leave')) {
+                reasonIcon = '🤒 ';
+                displayTitle = 'Sick Leave';
+            } else if (description.includes('Public holiday')) {
+                reasonIcon = '📅 ';
+                displayTitle = 'Public Holiday';
+            } else if (availability.source === 'out_of_office') {
+                reasonIcon = '🚫 ';
+                displayTitle = 'Out of Office';
+            }
+        }
+        
+        // Calculate timing
+        const now = new Date();
+        const isNow = now >= startDateTime && now <= endDateTime;
+        const isUpcoming = startDateTime > now;
+        const isPast = endDateTime < now;
+        
+        return {
+            id: `availability_${availability.id}`,
+            title: `${reasonIcon}${displayTitle}`,
+            start_time: availability.start_time,
+            end_time: availability.end_time,
+            timeRange: CalendarService.formatTimeRange(availability.start_time, availability.end_time),
+            status: availability.status || 'confirmed',
+            location: '',
+            attendees: '',
+            type: 'availability',
+            source: availability.source || 'out_of_office',
+            isNow,
+            isUpcoming,
+            isPast,
+            startsIn: '',
+            raw: availability
+        };
+    }
+
+    /**
+     * Transform any event to today event format (for cards)
+     */
+    static transformToTodayEvent(event) {
+        // Calculate timing
+        const now = new Date();
+        const startDateTime = new Date(event.start_time);
+        const endDateTime = new Date(event.end_time);
+        
+        const isNow = now >= startDateTime && now <= endDateTime;
+        const isUpcoming = startDateTime > now;
+        const isPast = endDateTime < now;
+        
+        let startsIn = '';
+        if (isUpcoming) {
+            const diffMs = startDateTime.getTime() - now.getTime();
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            if (diffMins < 60) {
+                startsIn = `in ${diffMins} min`;
+            } else {
+                const diffHours = Math.floor(diffMins / 60);
+                startsIn = `in ${diffHours}h ${diffMins % 60}m`;
+            }
+        }
+        
+        return {
+            ...event,
+            timeRange: CalendarService.formatTimeRange(event.start_time, event.end_time),
+            isNow,
+            isUpcoming,
+            isPast,
+            startsIn,
+            raw: event
+        };
+    }
+
+    /**
+     * Clear availability cache (call on page refresh)
+     */
+    static clearAvailabilityCache() {
+        this.availabilityCache = {
+            data: null,
+            timestamp: null,
+            expires: 30 * 60 * 1000
+        };
     }
 }

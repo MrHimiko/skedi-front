@@ -1,4 +1,3 @@
-// src/panels/user/plugins/dashboard/components/calendar/view.vue
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
@@ -27,11 +26,6 @@ const calendarData = ref({
 const allEvents = ref([]);
 
 // Computed properties
-const currentMonthYear = computed(() => {
-    const date = currentView.value === 'week' ? currentWeekStart.value : selectedDate.value;
-    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-});
-
 const navigationLabel = computed(() => {
     if (currentView.value === 'week') {
         // Show week range like "Dec 15 - Dec 21, 2024"
@@ -105,13 +99,14 @@ const monthDays = computed(() => {
     const days = [];
     const current = new Date(startDate);
     
+    // Create the days grid - include days from previous month to fill grid
     while (current <= lastDay || current.getDay() !== 0) {
         days.push({
             date: new Date(current),
             dayNumber: current.getDate(),
             isCurrentMonth: current.getMonth() === month,
             isToday: isToday(current),
-            events: getEventsForDay(current)
+            events: [] // Initialize empty, will be populated in updateEvents
         });
         current.setDate(current.getDate() + 1);
     }
@@ -119,12 +114,53 @@ const monthDays = computed(() => {
     return days;
 });
 
+// Add this function to get additional CSS classes for availability events
+function getAvailabilityClasses(event) {
+    if (event.type !== 'availability') return '';
+    
+    const classes = [];
+    
+    if (event.title.includes('🏝️') || event.title.toLowerCase().includes('vacation')) {
+        classes.push('vacation');
+    } else if (event.title.includes('✈️') || event.title.toLowerCase().includes('travel')) {
+        classes.push('travel');
+    } else if (event.title.includes('🤒') || event.title.toLowerCase().includes('sick')) {
+        classes.push('sick-leave');
+    } else if (event.title.includes('📅') || event.title.toLowerCase().includes('holiday')) {
+        classes.push('public-holiday');
+    }
+    
+    return classes.join(' ');
+}
+
+// Add this function to get data attributes for event styling
+function getEventDataAttributes(event) {
+    return {
+        'data-type': event.type || 'unknown',
+        'data-source': event.source || '',
+        'data-status': event.status || 'confirmed'
+    };
+}
+
+// Update the getSourceDisplayName function to handle availability events
+function getSourceDisplayName(source) {
+    const names = {
+        'google_calendar': 'Google Calendar',
+        'outlook': 'Outlook Calendar',
+        'apple_calendar': 'Apple Calendar',
+        'out_of_office': 'Out of Office',
+        'internal': 'Internal',
+        'external_calendar': 'External Calendar'
+    };
+    return names[source] || source || 'Unknown';
+}
+
 // Initialize calendar
 async function initializeCalendar() {
     if (currentView.value === 'week') {
         await initializeWeekView();
     } else if (currentView.value === 'day') {
-        initializeDayView();
+        await initializeDayView();
     } else if (currentView.value === 'month') {
         await initializeMonthView();
     }
@@ -214,11 +250,11 @@ function getEventsForDay(date) {
     });
 }
 
-// Fetch calendar events
+// FIXED: Fetch calendar events with proper date ranges for each view
 async function fetchCalendarEvents() {
     try {
         isLoading.value = true;
-        console.log('📅 Fetching calendar events...');
+        console.log('📅 Fetching calendar events for view:', currentView.value);
         
         let startDate, endDate;
         
@@ -238,24 +274,38 @@ async function fetchCalendarEvents() {
             endDate = new Date(selectedDate.value);
             endDate.setHours(23, 59, 59, 999);
         } else if (currentView.value === 'month') {
+            // FIXED: For month view, get the full month + surrounding days
             const year = selectedDate.value.getFullYear();
             const month = selectedDate.value.getMonth();
-            startDate = new Date(year, month, 1);
-            endDate = new Date(year, month + 1, 0);
+            
+            // Start from first day of month
+            const firstDayOfMonth = new Date(year, month, 1);
+            // Go back to Sunday before the first day
+            startDate = new Date(firstDayOfMonth);
+            startDate.setDate(startDate.getDate() - firstDayOfMonth.getDay());
+            startDate.setHours(0, 0, 0, 0);
+            
+            // End at last day of month
+            const lastDayOfMonth = new Date(year, month + 1, 0);
+            // Go forward to Saturday after the last day
+            endDate = new Date(lastDayOfMonth);
+            const daysToAdd = 6 - lastDayOfMonth.getDay();
+            endDate.setDate(endDate.getDate() + daysToAdd);
             endDate.setHours(23, 59, 59, 999);
         }
         
         console.log('📅 Fetching events for date range:', {
+            view: currentView.value,
             start: startDate.toISOString(),
-            end: endDate.toISOString()
+            end: endDate.toISOString(),
+            totalDays: Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
         });
         
-        // Use CalendarService for consistent data handling
-        const events = await CalendarService.getWeekEvents(startDate);
-        console.log('📦 Received events from CalendarService:', events);
+        // FIXED: Use getEventsForDateRange for proper date range support
+        const events = await CalendarService.getEventsForDateRange(startDate, endDate);
+        console.log('📦 Received events from CalendarService:', events.length, 'events');
         
         allEvents.value = events;
-        console.log('💾 Stored in allEvents.value:', allEvents.value);
         
         updateEvents();
         
@@ -268,10 +318,10 @@ async function fetchCalendarEvents() {
     }
 }
 
-// Update events based on filters
+// FIXED: Update events with proper month view handling
 function updateEvents() {
     console.log('🔄 updateEvents called');
-    console.log('📦 allEvents.value:', allEvents.value);
+    console.log('📦 allEvents.value:', allEvents.value.length, 'events');
     console.log('🔍 showCanceled.value:', showCanceled.value);
     console.log('📍 currentView:', currentView.value);
     
@@ -294,8 +344,22 @@ function updateEvents() {
         });
         calendarData.value.events = dayEvents;
     } else if (currentView.value === 'month') {
-        // Month view handles events differently
+        // FIXED: Month view - populate events for each day
         calendarData.value.events = filteredEvents;
+        
+        // Update each day in monthDays with its events
+        const days = monthDays.value;
+        days.forEach(day => {
+            day.events = filteredEvents.filter(event => {
+                const eventDate = new Date(event.start_time);
+                return eventDate.getDate() === day.date.getDate() &&
+                       eventDate.getMonth() === day.date.getMonth() &&
+                       eventDate.getFullYear() === day.date.getFullYear();
+            });
+        });
+        
+        console.log('📅 Month view events populated for', days.length, 'days');
+        console.log('📅 Events per day sample:', days.slice(0, 5).map(d => ({ date: d.date.toDateString(), events: d.events.length })));
     }
 }
 
@@ -330,174 +394,94 @@ function updateWeekViewEvents(events) {
             const start = CalendarService.convertToUserTimezone(event.start_time);
             const end = CalendarService.convertToUserTimezone(event.end_time);
             
-            const formatter = new Intl.DateTimeFormat('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-                timeZone: userTimezone
-            });
+            startHour = start.getHours() + (start.getMinutes() / 60);
+            endHour = end.getHours() + (end.getMinutes() / 60);
             
-            const startFormatted = formatter.format(start);
-            const endFormatted = formatter.format(end);
-            
-            const [startHours, startMinutes] = startFormatted.split(':').map(Number);
-            const [endHours, endMinutes] = endFormatted.split(':').map(Number);
-            
-            startHour = startHours + (startMinutes / 60);
-            endHour = endHours + (endMinutes / 60);
-            
-            console.log('🕐 Calculated from timezone formatter:', {
-                startFormatted,
-                endFormatted,
+            console.log('🕐 Using fallback calculation:', {
+                start: start.toString(),
+                end: end.toString(),
                 startHour,
-                endHour,
-                timezone: userTimezone
+                endHour
             });
         }
         
-        // Find which day column this event belongs to (using dateKey or manual check)
+        // Calculate position and height
+        const position = startHour * 80; // 80px per hour
+        const height = Math.max((endHour - startHour) * 80, 20); // Minimum 20px height
+        
+        // Find which day this event belongs to
         const eventDate = CalendarService.convertToUserTimezone(event.start_time);
-        const eventDateFormatter = new Intl.DateTimeFormat('en-US', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            timeZone: userTimezone
+        let dayIndex = -1;
+        
+        calendarData.value.days.forEach((day, index) => {
+            if (day.date.getDate() === eventDate.getDate() &&
+                day.date.getMonth() === eventDate.getMonth() &&
+                day.date.getFullYear() === eventDate.getFullYear()) {
+                dayIndex = index;
+            }
         });
-        const eventDateStr = eventDateFormatter.format(eventDate);
-        
-        const dayIndex = calendarData.value.days.findIndex(day => {
-            const dayDate = new Date(day.date);
-            const dayDateStr = eventDateFormatter.format(dayDate);
-            return dayDateStr === eventDateStr;
-        });
-        
-        console.log('📅 Event day index:', dayIndex, 'for date:', eventDateStr);
-        
-        if (dayIndex === -1) {
-            console.log('⚠️ Event outside current week view:', event.title);
-            return null;
-        }
-        
-        // Calculate position and height based on timezone-aware hours
-        const position = (startHour * 80) + 10; // 80px per hour + 10px offset
-        const duration = endHour - startHour;
-        let height = duration * 80; // 80px per hour
-        
-        // Handle events that span across midnight
-        if (endHour < startHour) {
-            // Event ends next day
-            height = ((24 - startHour) + endHour) * 80;
-        }
-        
-        // Minimum height for short events
-        const minHeight = 25;
-        if (height < minHeight) {
-            height = minHeight;
-        }
-        
-        console.log(`📏 Event position: ${position}px, height: ${height}px (duration: ${duration}h)`);
         
         return {
             ...event,
-            dayIndex,
             position,
             height,
-            startHour,
-            endHour,
+            dayIndex,
             left: 0,
             width: 100,
             overlapping: false
         };
-    }).filter(Boolean);
-    
-    // Group events by day
-    const eventsByDay = {};
-    eventsWithPositions.forEach(event => {
-        if (!eventsByDay[event.dayIndex]) {
-            eventsByDay[event.dayIndex] = [];
-        }
-        eventsByDay[event.dayIndex].push(event);
     });
     
-    // Process overlaps for each day
-    Object.keys(eventsByDay).forEach(dayIndex => {
-        const dayEvents = eventsByDay[dayIndex];
-        
-        // Sort events by start time
-        dayEvents.sort((a, b) => a.startHour - b.startHour);
-        
-        // Find overlapping groups
-        const groups = [];
-        dayEvents.forEach(event => {
-            let placed = false;
-            
-            for (const group of groups) {
-                const overlaps = group.some(groupEvent => {
-                    return event.startHour < groupEvent.endHour && 
-                           event.endHour > groupEvent.startHour;
-                });
-                
-                if (overlaps) {
-                    group.push(event);
-                    placed = true;
-                    break;
-                }
-            }
-            
-            if (!placed) {
-                groups.push([event]);
-            }
-        });
-        
-        // Calculate positions for each group
-        groups.forEach(group => {
-            const count = group.length;
-            if (count > 1) {
-                const widthPerEvent = 100 / count;
-                group.forEach((event, index) => {
-                    event.width = widthPerEvent;
-                    event.left = index * widthPerEvent;
-                    event.overlapping = true;
-                });
-            } else {
-                group[0].width = 100;
-                group[0].left = 0;
-            }
-        });
-    });
-    
+    // Store events with positions
     calendarData.value.events = eventsWithPositions;
-    console.log('✅ Final events with positions:', calendarData.value.events);
 }
 
-// Format event time using timezone-aware formatting
+// Format event time for display
 function formatEventTime(event) {
-    // Use the formatted times from the service which respect user's timezone
     if (event.formattedStart && event.formattedEnd) {
         return `${event.formattedStart} - ${event.formattedEnd}`;
     }
     
-    // Fallback to manual formatting
-    const userTimezone = CalendarService.getUserTimezone();
-    const start = CalendarService.convertToUserTimezone(event.start_time);
-    const end = CalendarService.convertToUserTimezone(event.end_time);
-    
-    const formatter = new Intl.DateTimeFormat('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: userTimezone
-    });
-    
-    return `${formatter.format(start)} - ${formatter.format(end)}`;
+    return CalendarService.formatTimeRange(event.start_time, event.end_time);
 }
 
-// Handle event click
+// Parse hour from string to number
+function parseHour(hourStr) {
+    const [time, period] = hourStr.split(' ');
+    let hour = parseInt(time);
+    
+    if (period === 'AM') {
+        return hour === 12 ? 0 : hour;
+    } else {
+        return hour === 12 ? 12 : hour + 12;
+    }
+}
+
+// Get events for specific hour (day view)
+function getEventsForHour(hour) {
+    if (currentView.value !== 'day') return [];
+    
+    const hourNumber = parseHour(hour);
+    
+    return calendarData.value.events.filter(event => {
+        // Use formatted start time to get the hour in user's timezone
+        if (event.formattedStart) {
+            const [eventHours] = event.formattedStart.split(':').map(Number);
+            return eventHours === hourNumber;
+        }
+        
+        // Fallback
+        const startTime = CalendarService.convertToUserTimezone(event.start_time);
+        return startTime.getHours() === hourNumber;
+    });
+}
+
+// Handle event click - FIXED: Pass correct data structure
 function handleEventClick(event) {
-    console.log('Event clicked:', event);
+    console.log('🖱️ Event clicked:', event);
     
     if (event.type === 'external') {
-        // Use the ExternalEventPopup component for external events
+        // Show external event popup
         popup.open(
             'external-event-detail',
             null,
@@ -507,57 +491,53 @@ function handleEventClick(event) {
                 position: 'center'
             }
         );
-    } else {
-        // Use the BookingDetailView for internal events
-        if (event.raw) {
-            popup.open(
-                'booking-detail',
-                null,
-                BookingDetailView,
-                {
-                    bookingId: event.raw.id || event.id,
-                    bookingData: event.raw,
-                    callback: (needsRefresh) => {
-                        if (needsRefresh) {
-                            // Refresh calendar events if booking was modified
-                            fetchCalendarEvents();
-                        }
+    } else if (event.type === 'booking' || event.type === 'internal' || event.source === 'internal') {
+        // FIXED: Show internal booking details with proper data structure
+        const bookingData = event.raw || {
+            id: event.booking_id || event.id,
+            title: event.title,
+            start_time: event.start_time,
+            end_time: event.end_time,
+            description: event.description,
+            location: event.location,
+            guests: event.guests,
+            status: event.status
+        };
+        
+        popup.open(
+            'booking-detail',
+            null,
+            BookingDetailView,
+            {
+                bookingId: event.booking_id || event.id,
+                bookingData: bookingData,
+                callback: (needsRefresh) => {
+                    if (needsRefresh) {
+                        // Refresh calendar if booking was modified
+                        fetchCalendarEvents();
                     }
-                },
-                {
-                    position: 'center'
                 }
-            );
-        } else {
-            console.error('No booking data available for internal event:', event);
-            common.notification('Unable to load booking details', false);
-        }
+            },
+            {
+                position: 'center'
+            }
+        );
+    } else if (event.type === 'availability') {
+        // Show availability event info (you might want to create a dedicated popup for this)
+        common.notification(`${event.title}: ${event.description || 'No details'}`, true);
     }
 }
 
-// Handle Today button click - opens popup with today's events
+// Handle today button click
 function handleTodayClick() {
-    popup.open(
-        'today-events',
-        null,
-        TodayEventsPopup,
-        {
-            onEventClick: handleEventClick
-        },
-        {
-            position: 'center'
-        }
-    );
-}
-
-// Get source display name
-function getSourceDisplayName(source) {
-    const names = {
-        'google_calendar': 'Google Calendar',
-        'outlook': 'Outlook Calendar',
-        'apple_calendar': 'Apple Calendar'
-    };
-    return names[source] || 'External Calendar';
+    const today = new Date();
+    if (currentView.value === 'week') {
+        currentWeekStart.value = today;
+        initializeCalendar();
+    } else {
+        selectedDate.value = today;
+        initializeCalendar();
+    }
 }
 
 // View management functions
@@ -572,6 +552,7 @@ function navigatePeriod(direction) {
         const newDate = new Date(currentWeekStart.value);
         newDate.setDate(newDate.getDate() + (direction * 7));
         currentWeekStart.value = newDate;
+        initializeCalendar();
     } else if (currentView.value === 'day') {
         // Navigate by day
         const newDate = new Date(selectedDate.value);
@@ -587,67 +568,26 @@ function navigatePeriod(direction) {
     }
 }
 
-function goToToday() {
-    const today = new Date();
-    if (currentView.value === 'week') {
-        currentWeekStart.value = today;
-    } else {
-        selectedDate.value = today;
-    }
-    initializeCalendar();
-}
-
 function selectDay(day) {
     selectedDate.value = day.date;
     setView('day');
 }
 
-// Get events for specific hour (day view)
-function getEventsForHour(hour) {
-    if (currentView.value !== 'day') return [];
-    
-    const hourNumber = parseHour(hour);
-    const userTimezone = CalendarService.getUserTimezone();
-    
-    return calendarData.value.events.filter(event => {
-        // Use formatted start time to get the hour in user's timezone
-        if (event.formattedStart) {
-            const [eventHours] = event.formattedStart.split(':').map(Number);
-            return eventHours === hourNumber;
-        }
-        
-        // Fallback: format the time to get hour in user's timezone
-        const startTime = CalendarService.convertToUserTimezone(event.start_time);
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-            timeZone: userTimezone
-        });
-        
-        const formatted = formatter.format(startTime);
-        const [eventHours] = formatted.split(':').map(Number);
-        return eventHours === hourNumber;
-    });
-}
-
-// Parse hour string to number
-function parseHour(hourStr) {
-    const [time, period] = hourStr.split(' ');
-    let hour = parseInt(time);
-    if (period === 'PM' && hour !== 12) hour += 12;
-    if (period === 'AM' && hour === 12) hour = 0;
-    return hour;
-}
-
-// Watch for week changes
-watch(currentWeekStart, () => {
-    initializeCalendar();
-});
-
 // Initialize on mount
 onMounted(() => {
     initializeCalendar();
+});
+
+// Watch for view changes
+watch(currentView, () => {
+    initializeCalendar();
+});
+
+// Watch for week changes
+watch(currentWeekStart, () => {
+    if (currentView.value === 'week') {
+        initializeCalendar();
+    }
 });
 </script>
 
@@ -739,11 +679,13 @@ onMounted(() => {
                                 :class="[
                                     'calendar-item',
                                     event.type,
+                                    getAvailabilityClasses(event),
                                     {
                                         'is-canceled': event.status === 'canceled',
                                         'overlapping': event.overlapping
                                     }
                                 ]"
+                                v-bind="getEventDataAttributes(event)"
                                 :style="{
                                     top: `${event.position}px`,
                                     height: `${event.height}px`,
@@ -753,14 +695,14 @@ onMounted(() => {
                                 }"
                                 @click="handleEventClick(event)"
                             >
-                                <!-- External event source icon -->
-                                <div class="event-source-icon" v-if="event.source">
-                                    <img :src="event.source_icon" :alt="getSourceDisplayName(event.source)" />
-                                </div>
+
                                 
                                 <div class="event-content">
                                     <div class="event-title">{{ event.title }}</div>
-                                    <div class="event-time">{{ formatEventTime(event) }}</div>
+                                    <div class="event-time" v-if="event.type !== 'availability'">{{ formatEventTime(event) }}</div>
+                                    <div class="event-time availability-time" v-else-if="event.formattedStart && event.formattedEnd">
+                                        {{ event.formattedStart }} - {{ event.formattedEnd }}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -792,18 +734,20 @@ onMounted(() => {
                             :class="[
                                 'day-event',
                                 event.type,
+                                getAvailabilityClasses(event),
                                 { 'is-canceled': event.status === 'canceled' }
                             ]"
+                            v-bind="getEventDataAttributes(event)"
                             @click="handleEventClick(event)"
                         >
-                            <!-- External event source icon -->
-                            <div class="event-source-icon" v-if="event.source">
-                                <img :src="event.source_icon" :alt="getSourceDisplayName(event.source)" />
-                            </div>
+
                             
                             <div class="event-content">
                                 <div class="event-title">{{ event.title }}</div>
                                 <div class="event-time">{{ formatEventTime(event) }}</div>
+                                <div v-if="event.description && event.type === 'availability'" class="event-description">
+                                    {{ event.description }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -837,8 +781,15 @@ onMounted(() => {
                         <div
                             v-for="(event, eventIndex) in day.events.slice(0, 3)"
                             :key="event.id"
-                            :class="['month-event', event.type]"
+                            :class="[
+                                'month-event', 
+                                event.type,
+                                getAvailabilityClasses(event),
+                                { 'is-canceled': event.status === 'canceled' }
+                            ]"
+                            v-bind="getEventDataAttributes(event)"
                             @click.stop="handleEventClick(event)"
+                            :title="`${event.title} (${formatEventTime(event)})`"
                         >
                             {{ event.title }}
                         </div>

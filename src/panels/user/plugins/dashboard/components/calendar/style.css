@@ -620,3 +620,120 @@
         grid-auto-rows: 80px;
     }
 }
+
+
+/* Add these CSS rules to: src/panels/user/plugins/dashboard/components/calendar/style.css */
+
+/* Internal events (bookings) */
+.dashboard-c-calendar .calendar-item.internal,
+.dashboard-c-calendar .calendar-item[data-type="booking"] {
+    background: var(--brand-blue-light, #dbeafe);
+    border-color: var(--brand-blue, #3b82f6);
+}
+
+/* External events (Google Calendar, Outlook, etc.) */
+.dashboard-c-calendar .calendar-item.external,
+.dashboard-c-calendar .calendar-item[data-type="external"] {
+    background: var(--brand-orange-light, #fed7aa);
+    border-color: var(--brand-orange, #ea580c);
+}
+
+/* Availability events (Vacation, Out of Office, etc.) */
+.dashboard-c-calendar .calendar-item.availability,
+.dashboard-c-calendar .calendar-item[data-type="availability"] {
+    background: var(--brand-purple-light, #e9d5ff);
+    border-color: var(--brand-purple, #9333ea);
+    border-style: dashed; /* Dashed border to distinguish from regular events */
+}
+
+/* Specific availability types with custom colors */
+.dashboard-c-calendar .calendar-item.availability.vacation {
+    background: var(--brand-green-light, #dcfce7);
+    border-color: var(--brand-green, #16a34a);
+}
+
+.dashboard-c-calendar .calendar-item.availability.travel {
+    background: var(--brand-yellow-light, #fef3c7);
+    border-color: var(--brand-yellow, #eab308);
+}
+
+.dashboard-c-calendar .calendar-item.availability.sick-leave {
+    background: var(--brand-red-light, #fee2e2);
+    border-color: var(--brand-red, #dc2626);
+}
+
+.dashboard-c-calendar .calendar-item.availability.public-holiday {
+    background: var(--brand-indigo-light, #e0e7ff);
+    border-color: var(--brand-indigo, #6366f1);
+}
+
+/* Month view availability events */
+.month-event.availability {
+    background: var(--brand-purple-light, #e9d5ff);
+    border: 1px dashed var(--brand-purple, #9333ea);
+}
+
+.month-event.availability.vacation {
+    background: var(--brand-green-light, #dcfce7);
+    border-color: var(--brand-green, #16a34a);
+}
+
+.month-event.availability.travel {
+    background: var(--brand-yellow-light, #fef3c7);
+    border-color: var(--brand-yellow, #eab308);
+}
+
+.month-event.availability.sick-leave {
+    background: var(--brand-red-light, #fee2e2);
+    border-color: var(--brand-red, #dc2626);
+}
+
+.month-event.availability.public-holiday {
+    background: var(--brand-indigo-light, #e0e7ff);
+    border-color: var(--brand-indigo, #6366f1);
+}
+
+/* Day view availability events */
+.day-event.availability {
+    background: var(--brand-purple-light, #e9d5ff);
+    border: 1px dashed var(--brand-purple, #9333ea);
+}
+
+.day-event.availability.vacation {
+    background: var(--brand-green-light, #dcfce7);
+    border-color: var(--brand-green, #16a34a);
+}
+
+.day-event.availability.travel {
+    background: var(--brand-yellow-light, #fef3c7);
+    border-color: var(--brand-yellow, #eab308);
+}
+
+.day-event.availability.sick-leave {
+    background: var(--brand-red-light, #fee2e2);
+    border-color: var(--brand-red, #dc2626);
+}
+
+.day-event.availability.public-holiday {
+    background: var(--brand-indigo-light, #e0e7ff);
+    border-color: var(--brand-indigo, #6366f1);
+}
+
+/* Hover effects for availability events */
+.dashboard-c-calendar .calendar-item.availability:hover,
+.month-event.availability:hover,
+.day-event.availability:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(147, 51, 234, 0.15);
+}
+
+/* Overlapping availability events */
+.dashboard-c-calendar .calendar-item.overlapping.availability:nth-child(odd) {
+    background: var(--brand-purple-light, #e9d5ff);
+    border-color: var(--brand-purple, #9333ea);
+}
+
+.dashboard-c-calendar .calendar-item.overlapping.availability:nth-child(even) {
+    background: var(--brand-pink-light, #fce7f3);
+    border-color: var(--brand-pink, #ec4899);
+}
