@@ -168,6 +168,7 @@ export class FormsService {
         }
     }
     
+
     /**
      * Update an existing form
      */
@@ -175,7 +176,7 @@ export class FormsService {
         try {
             console.log('Updating form with data:', formData);
             
-            // Use global forms endpoint
+            // Use global forms endpoint only - no fallback
             const response = await api.put(`forms/${formId}`, formData);
             
             if (response && response.success) {
@@ -190,26 +191,6 @@ export class FormsService {
             throw new Error(response?.message || 'Failed to update form');
         } catch (error) {
             console.error('Error updating form:', error);
-            
-            // Fallback to organization-based endpoint for backward compatibility
-            if (organizationId || this.getCurrentOrganizationId()) {
-                const orgId = organizationId || this.getCurrentOrganizationId();
-                try {
-                    const response = await api.put(`organizations/${orgId}/forms/${formId}`, formData);
-                    
-                    if (response && response.success) {
-                        // Clear cache to force refresh
-                        this.formsCache = {
-                            data: [],
-                            timestamp: 0
-                        };
-                        return response.data;
-                    }
-                } catch (fallbackError) {
-                    console.error('Fallback error:', fallbackError);
-                }
-            }
-            
             throw error;
         }
     }

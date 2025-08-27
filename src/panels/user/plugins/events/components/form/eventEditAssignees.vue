@@ -24,8 +24,8 @@ const isLoadingData = ref(true);
 
 // Initial form values
 const formValues = ref({
-    availabilityType: 'one_available',
-    acceptanceRequired: 'auto_accept',
+    availabilityType: 'one_host_available',
+    acceptanceRequired: 'false',
     assignees: [{ user_id: '', role: 'admin' }]
 });
 
@@ -83,7 +83,6 @@ const tabs = ref([
                 width: 6,
                 properties: {
                     placeholder: 'Select availability type',
-                    value: 'one_host_available',
                     options: [
                         { label: 'Only one host needs to be available', value: 'one_host_available' },
                         { label: 'All hosts must be available', value: 'all_hosts_available' }
@@ -97,10 +96,9 @@ const tabs = ref([
                 width: 6,
                 properties: {
                     placeholder: 'Select acceptance requirement',
-                    value: 'true',
                     options: [
-                        { label: 'Auto-accept meetings', value: 'true' },
-                        { label: 'Hosts must accept meetings', value: 'false' }
+                        { label: 'Auto-accept meetings', value: 'false' },
+                        { label: 'Hosts must accept meetings', value: 'true' }
                     ]
                 }
             },
@@ -112,11 +110,12 @@ const tabs = ref([
 async function fetchEventData() {
     try {
         const response = await api.get(`events/${props.eventId}?organization_id=${props.organizationId}`);
+
         if (response?.success) {
             // Extract event settings
             const settings = {
-                availabilityType: response.data.availabilityType || 'one_available',
-                acceptanceRequired: response.data.acceptanceRequired || 'auto_accept'
+                availabilityType: response.data.availabilityType || 'one_host_available',
+                acceptanceRequired: String(response.data.acceptanceRequired) || 'false'
             };
             
             // Extract assignees if available
@@ -167,8 +166,8 @@ async function loadData() {
         
         // Update form values with fetched data
         formValues.value = {
-            availabilityType: eventData.settings?.availabilityType || 'one_available',
-            acceptanceRequired: eventData.settings?.acceptanceRequired || 'auto_accept',
+            availabilityType: eventData.settings?.availabilityType || 'one_host_available',
+            acceptanceRequired: String(eventData.settings?.acceptanceRequired) || 'false',
             assignees: eventData.assignees || [{ user_id: '', role: 'admin' }]
         };
     } catch (error) {
@@ -178,8 +177,6 @@ async function loadData() {
         isLoadingData.value = false;
     }
 }
-
-
 
 onMounted(() => {
     loadData();
@@ -209,8 +206,6 @@ onMounted(() => {
         </template>
     </PopupView>
 </template>
-
-
 
 <style>
 .event-assignees {
@@ -286,16 +281,12 @@ onMounted(() => {
     gap: 10px;
 }
 
-
 .event-assignees   .c-repeater  .content > div > .components > div > div > .top {
     display:none;
 }
-
 
 .event-assignees  .c-builder {
     border:none;
     padding:0;
 }
-
-
 </style>
