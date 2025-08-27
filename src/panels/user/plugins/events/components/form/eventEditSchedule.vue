@@ -5,6 +5,8 @@ import { common } from '@utils/common';
 import EditTime from '@user_events/components/form/editTime/editTime.vue';
 import PopupView from '@layouts/popup/view.vue';
 import Button from '@form/button/view.vue';
+import SelectComponent from '@form/select/view.vue';
+import { PhQuestion } from '@phosphor-icons/vue';
 
 const props = defineProps({
     eventId: {
@@ -23,13 +25,31 @@ const isLoading = ref(true);
 const isSubmitting = ref(false);
 const eventData = ref(null);
 const scheduleData = ref(null);
+const bufferTime = ref(0);
 const errorMessage = ref('');
 const currentTimezone = ref('');
+
+// Buffer time options
+const bufferTimeOptions = [
+    { label: 'No buffer time', value: 0 },
+    { label: '15 minutes', value: 15 },
+    { label: '30 minutes', value: 30 },
+    { label: '45 minutes', value: 45 },
+    { label: '1 hour', value: 60 },
+    { label: '1 hour 30 minutes', value: 90 },
+    { label: '2 hours', value: 120 }
+];
 
 // Method to handle the schedule update from the EditTime component
 const updateSchedule = (data) => {
     console.log('Schedule data updated:', data);
     scheduleData.value = data;
+};
+
+// Method to handle buffer time change
+const updateBufferTime = (value) => {
+    bufferTime.value = value;
+    console.log('Buffer time updated:', value);
 };
 
 // Fetch the current event data when the component is mounted
@@ -51,7 +71,11 @@ onMounted(async () => {
             // Initialize the schedule data with the existing schedule
             scheduleData.value = { schedule: response.data.schedule || {} };
             
+            // Initialize buffer time from event data
+            bufferTime.value = response.data.buffer_time || 0;
+            
             console.log('Loaded event data:', eventData.value);
+            console.log('Loaded buffer time:', bufferTime.value);
         } else {
             errorMessage.value = response?.message || 'Failed to load event data';
         }
@@ -73,18 +97,19 @@ const handleSubmit = async () => {
     try {
         isSubmitting.value = true;
         
-        // Prepare update data
+        // Prepare update data including both schedule and buffer time
         const updateData = {
-            schedule: scheduleData.value.schedule
+            schedule: scheduleData.value.schedule,
+            bufferTime: bufferTime.value
         };
         
-        console.log('Updating schedule with data:', updateData);
+        console.log('Updating schedule and buffer time with data:', updateData);
         
         // Call API to update the event
         const response = await api.put(`events/${props.eventId}?organization_id=${props.organizationId}`, updateData);
         
         if (response && response.success) {
-            common.notification('Schedule updated successfully!', true);
+            common.notification('Schedule and buffer time updated successfully!', true);
             
             // Call the callback if provided
             if (props.callback) {
@@ -118,17 +143,34 @@ const handleSubmit = async () => {
             </div>
             
             <div v-else class="form-section">
-                <!-- Timezone info message -->
-                <div class="timezone-info">
-                    <i class="info-icon">info</i>
-                    <p>Times are displayed in your local timezone ({{ currentTimezone }}), but stored in UTC for consistency.</p>
-                </div>
-
-                <!-- EditTime Component -->
+                <p  style="margin-bottom:10px">Timezone ({{ currentTimezone }}).</p>
+                <!-- EditTime Component --> 
                 <div class="content scrollable">
                     <edit-time
                         @update="updateSchedule"
                         :initialSchedule="scheduleData"
+                    />
+                </div>
+
+
+               <div class="buffer-time-section" style="margin-top: 24px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 600;">Buffer Time</h4>
+                        <PhQuestion 
+                            :size="16" 
+                            style="color: var(--text-tertiary); cursor: help;" 
+                            v-tooltip="{
+                                content: 'Buffer time is the required break period after each meeting ends. For example, if you set a 30-minute buffer and have a meeting from 2:00-3:00 PM, your next available slot will be at 3:30 PM. This gives you time to wrap up, take notes, or prepare for the next meeting.',
+                                placement: 'top'
+                            }"
+                        />
+                    </div>
+                    
+                    <SelectComponent
+                        :value="bufferTime"
+                        @change="updateBufferTime"
+                        :options="bufferTimeOptions"
+                        placeholder="Select buffer time"
                     />
                 </div>
                 
