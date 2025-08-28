@@ -313,25 +313,7 @@ const handleSubmit = async () => {
                 <div class="step-container">
                     <!-- Step 1: Basic Info -->
                     <div class="step-content" :class="{ 'active-step': currentStep === 1 }">
-                        <div class="form-group">
-                            <InputComponent
-                                label="Event Type Name"
-                                :value="eventName"
-                                placeholder="e.g., Consultation Call"
-                                required
-                                @onInput="updateEventName"
-                            />
-                        </div>
-                        
-                        <!-- Location component -->
-                        <div class="form-group">
-                            <LocationSelect
-                                :initialValue="locationData"
-                                @update:value="updateLocation"
-                                :callback="updateLocation"
-                            />
-                        </div>
-                        
+
                         <!-- Show organization selection only if not preselected -->
                         <div class="form-group" v-if="showOrgSelection && !rawProps.endpoint?.includes('organization_id')">
                             <SelectComponent
@@ -351,6 +333,28 @@ const handleSubmit = async () => {
                                 <div class="field-value">{{ selectedOrgName }}</div>
                             </div>
                         </div>
+
+                        
+                        <div class="form-group">
+                            <InputComponent
+                                label="Event Type Name"
+                                :value="eventName"
+                                placeholder="e.g., Consultation Call"
+                                required
+                                @onInput="updateEventName"
+                            />
+                        </div>
+                        
+                        <!-- Location component -->
+                        <div class="form-group">
+                            <LocationSelect
+                                :initialValue="locationData"
+                                @update:value="updateLocation"
+                                :callback="updateLocation"
+                            />
+                        </div>
+                        
+                        
                     </div>
                     
                     <!-- Step 2: Duration Options -->
@@ -436,6 +440,7 @@ const handleSubmit = async () => {
 <style scoped>
 .create-event-form {
     padding: 0;
+    min-width:600px
 }
 
 /* Step Progress Indicator */

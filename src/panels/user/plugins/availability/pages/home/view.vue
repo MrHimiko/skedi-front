@@ -334,6 +334,8 @@ onMounted(() => {
 
 .empty-icon {
     margin-bottom: 16px;
+        display: flex;
+    justify-content: center;
 }
 
 .empty-title {

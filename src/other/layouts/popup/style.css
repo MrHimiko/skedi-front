@@ -22,6 +22,11 @@
     height: 51px;
 }
 
+.inline-form-settings .l-popup > .top {
+    display:none!important;
+}
+
+
 .l-popup > .content 
 {
     flex: 1;

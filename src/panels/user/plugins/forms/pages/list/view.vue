@@ -365,6 +365,8 @@ const formatEventsDisplay = (count) => {
 .empty-icon {
     color: #D1D5DB;
     margin-bottom: 16px;
+    display: flex;
+    justify-content: center;
 }
 
 .empty-title {

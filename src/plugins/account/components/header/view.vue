@@ -18,6 +18,12 @@
             type: Boolean,
         },
     });
+
+    const emit = defineEmits(['google-auth']);
+
+    function handleGoogleClick() {
+        emit('google-auth');
+    }
 </script>
 
 <template>
@@ -34,7 +40,12 @@
         <div v-if="google" class="p-xl"></div>
 
         <div v-if="google">
-            <button-component as="stroke" :iconLeft="{ component: PhGoogleLogo, weight: 'bold' }" label="Connect with Google" />
+            <button-component 
+                as="stroke" 
+                :iconLeft="{ component: PhGoogleLogo, weight: 'bold' }" 
+                label="Connect with Google" 
+                @click="handleGoogleClick"
+            />
         </div>
 
         <div v-if="google" class="p-xl"></div>

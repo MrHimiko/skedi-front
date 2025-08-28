@@ -257,6 +257,7 @@ onMounted(() => {
     padding: var(--spacing-4xl) 0;
 }
 
+
 .form-settings-content {
     padding: var(--spacing-2xl);
 }
@@ -305,4 +306,6 @@ onMounted(() => {
     padding-top: var(--spacing-2xl);
     border-top: 1px solid var(--border-primary);
 }
+
+
 </style>

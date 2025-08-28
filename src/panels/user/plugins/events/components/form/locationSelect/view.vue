@@ -321,6 +321,7 @@ onMounted(async () => {
         
         <!-- Display when Google Meet integration is not available -->
         <div v-if="apiCheckComplete && !googleMeetIntegration && !isLoading" class="integration-notice">
+            <img style="height:24px" src="https://global.divhunt.com/6dea696e910d70e2925a5c3e453a69ff_644.svg">
             <p>Want to automatically generate Google Meet links for your bookings?</p>
             <ButtonComponent 
                 label="Connect Google Meet" 
@@ -360,13 +361,14 @@ onMounted(async () => {
 }
 
 .integration-notice {
-    margin-top: 16px;
     padding: 16px;
-    background-color: var(--background-1);
+    background-color: var(--background-0);
+    border: 1px solid var(--border);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+
 }
 
 .integration-notice p {

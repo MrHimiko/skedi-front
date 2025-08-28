@@ -18,7 +18,7 @@
                             <div class="plan-header">
                                 <h3>{{ plan.name }}</h3>
                                 <div class="plan-price">
-                                    <span v-if="plan.slug === 'enterprise'">Custom pricing</span>
+                                    <span v-if="plan.slug === 'enterprise'" style="font-size: 14px;font-weight: 600;color: var(--brand-blue);">Custom pricing</span>
                                     <template v-else>
                                         <span class="currency">$</span>
                                         <span class="amount">{{ plan.price_monthly / 100 }}</span>
@@ -333,6 +333,7 @@ onUnmounted(() => {
     display: flex;
     align-items: baseline;
     gap: 2px;
+    height: 42px;
 }
 
 .plan-price .currency {

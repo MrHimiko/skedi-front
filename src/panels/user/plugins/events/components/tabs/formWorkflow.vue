@@ -387,4 +387,17 @@ onMounted(() => {
         align-self: stretch;
     }
 }
+
+
+.inline-form-settings .l-popup > .top {
+    display:none!important;
+}
+
+.inline-form-settings .l-popup {
+    border: none;
+    width: 100%;
+    max-width: 100%;
+    background: white;
+}
+
 </style>

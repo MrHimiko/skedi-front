@@ -27,3 +27,14 @@
 .c-select .c-input > .holder {
     padding-right: 15px;
 }
+
+.c-input .select-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.c-input .required-indicator {
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+}

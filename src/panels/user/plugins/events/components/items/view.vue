@@ -10,7 +10,8 @@
     import { api } from '@utils/api';
     import { markRaw, ref, onMounted, toRaw } from 'vue';
     import { useRouter } from 'vue-router';
-
+    import { BillingStore } from '@stores/billing';
+    import BillingUpgradeModal from '@user_billing/components/upgrade-modal.vue';
 
     const router = useRouter();
 
@@ -49,6 +50,45 @@
     const selectedTeams = ref({});
     const expandedOrgs = ref({});
 
+
+    const billingStore = BillingStore();
+
+   function getPlanBadge(orgId) {
+        // Check if billing data is loaded for this org
+        if (!billingStore.subscriptions[orgId]) {
+            // Trigger loading in background if not loaded
+            billingStore.loadSubscription(orgId);
+            return 'Loading...';
+        }
+        
+        const planLevel = billingStore.getPlanLevel(orgId);
+        const plans = ['Free', 'Professional', 'Business', 'Enterprise'];
+        return plans[planLevel - 1] || 'Free';
+    }
+
+    function getPlanBadgeColor(orgId) {
+        const planLevel = billingStore.getPlanLevel(orgId);
+        const colors = ['#6b7280', '#3b82f6', '#8b5cf6', '#10b981'];
+        return colors[planLevel - 1] || '#6b7280';
+    }
+
+    function handlePlanClick(org) {
+        popup.open(
+            'billing-upgrade',
+            null,
+            BillingUpgradeModal,
+            {
+                organizationId: org.id,
+                message: 'Upgrade your plan to unlock more features',
+                recommendedPlan: 'professional'
+            },
+            {
+                position: 'center'
+            }
+        );
+    }
+
+
     // Reload data from API
     async function reloadData() {
         try {
@@ -56,6 +96,15 @@
             if (response.success && response.data) {
                 userStore.setData(response.data);
                 organizations.value = mergeOrganizationsAndTeams();
+                
+                console.log('Organizations:', organizations.value.map(org => ({ id: org.id, name: org.name })));
+                
+                // Load billing data for all organizations and WAIT for it
+                await billingStore.loadAllOrganizationSubscriptions(organizations.value);
+                
+                console.log('After loading billing data:', billingStore.subscriptions);
+                
+                // Force reactivity update after billing data is loaded
                 eventsItems.value++;
             }
         } catch (error) {
@@ -509,7 +558,11 @@
     };
 
     // Initialize data on component mount
-    onMounted(() => {
+    onMounted(async () => {
+
+        await reloadData();
+
+
         organizations.value = mergeOrganizationsAndTeams();
         
         // Initialize all orgs as expanded
@@ -568,6 +621,14 @@
                         </div>
                         <p>
                             {{ org.name }}
+                            <span 
+                                class="plan-badge" 
+                                :style="{ backgroundColor: getPlanBadgeColor(org.id) + '20', color: getPlanBadgeColor(org.id) }"
+                                @click="handlePlanClick(org)"
+                                style="cursor: pointer; margin-left: 8px; padding: 2px 8px; border-radius: 12px; font-size: 12px;"
+                            >
+                                {{ getPlanBadge(org.id) }}
+                            </span>
                             <span>{{ getFilteredEvents(org).length }}</span>
                         </p>
                     </div>
