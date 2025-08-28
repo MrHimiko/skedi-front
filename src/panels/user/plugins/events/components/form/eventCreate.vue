@@ -10,6 +10,7 @@ import InputComponent from '@form/input/view.vue';
 import SelectComponent from '@form/select/view.vue';
 import { common } from '@utils/common';
 import LocationSelect from '@user_events/components/form/locationSelect/view.vue';
+import { PhQuestion } from '@phosphor-icons/vue';
 
 const userStore = UserStore();
 const currentTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -23,11 +24,23 @@ const showOrgSelection = ref(true);
 const scheduleData = ref(null);
 const durationData = ref(null);
 const locationData = ref(null);
+const bufferTime = ref(0);
 const isSubmitting = ref(false);
 
 // Reference to duration component
 const durationOptionsRef = ref(null);
 const editTimeRef = ref(null);
+
+// Buffer time options
+const bufferTimeOptions = [
+    { label: 'No buffer time', value: 0 },
+    { label: '15 minutes', value: 15 },
+    { label: '30 minutes', value: 30 },
+    { label: '45 minutes', value: 45 },
+    { label: '1 hour', value: 60 },
+    { label: '1 hour 30 minutes', value: 90 },
+    { label: '2 hours', value: 120 }
+];
 
 // Initialize with the default values
 durationData.value = [
@@ -132,6 +145,12 @@ const updateLocation = (data) => {
     console.log('Updated location data:', locationData.value);
 };
 
+// Method to handle buffer time change
+const updateBufferTime = (value) => {
+    bufferTime.value = value;
+    console.log('Buffer time updated:', value);
+};
+
 const nextStep = () => {
     if (currentStep.value === 1 && !canProceedToStep2.value) {
         common.notification('Please enter an event name and select an organization', false);
@@ -216,7 +235,8 @@ const handleSubmit = async () => {
     const apiData = {
         name: eventName.value,
         schedule: {},
-        location: locationData.value || ''
+        location: locationData.value || '',
+        bufferTime: bufferTime.value
     };
     
     // Include durations if available
@@ -253,9 +273,6 @@ const handleSubmit = async () => {
             if (props.callback) {
                 props.callback(null, apiData, response, true);
             }
-            
-            // Close popup using i-popup-close class
-            document.querySelector('.i-popup-close').click();
         } else {
             common.notification('Failed to create event: ' + (response?.message || 'Unknown error'), false);
         }
@@ -269,28 +286,30 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-    <PopupView title="Create Event Type" customClass="h-auto event-times">
+    <PopupView title="Create Event Type" customClass="h-auto event-create">
         <template #content>
-            <div class="form-section">
-                <!-- Step indicator -->
-                <div class="steps-indicator">
-                    <div class="step" :class="{ active: currentStep >= 1, completed: currentStep > 1 }">
-                        <div class="step-number">1</div>
-                        <div class="step-label">Basic Info</div>
+            <div class="create-event-form">
+                <!-- Step Progress Indicator -->
+                <div class="step-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" :style="{ width: `${(currentStep / totalSteps) * 100}%` }"></div>
                     </div>
-                    <div class="step-line" :class="{ active: currentStep > 1 }"></div>
-                    <div class="step" :class="{ active: currentStep >= 2, completed: currentStep > 2 }">
-                        <div class="step-number">2</div>
-                        <div class="step-label">Duration Options</div>
-                    </div>
-                    <div class="step-line" :class="{ active: currentStep > 2 }"></div>
-                    <div class="step" :class="{ active: currentStep >= 3 }">
-                        <div class="step-number">3</div>
-                        <div class="step-label">Availability</div>
+                    <div class="step-indicators">
+                        <div 
+                            v-for="step in totalSteps" 
+                            :key="step" 
+                            class="step-indicator"
+                            :class="{ 
+                                'active': step === currentStep, 
+                                'completed': step < currentStep 
+                            }"
+                        >
+                            {{ step }}
+                        </div>
                     </div>
                 </div>
-                
-                <!-- Step content sections - using CSS display instead of v-if -->
+
+                <!-- All Step Contents - using CSS display instead of v-if -->
                 <div class="step-container">
                     <!-- Step 1: Basic Info -->
                     <div class="step-content" :class="{ 'active-step': currentStep === 1 }">
@@ -324,6 +343,14 @@ const handleSubmit = async () => {
                                 @change="updateOrganization"
                             />
                         </div>
+                        
+                        <!-- Show preselected organization -->
+                        <div class="form-group" v-if="!showOrgSelection">
+                            <div class="preselected-org">
+                                <div class="field-label">Organization</div>
+                                <div class="field-value">{{ selectedOrgName }}</div>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Step 2: Duration Options -->
@@ -346,16 +373,32 @@ const handleSubmit = async () => {
                         <h3 class="step-title">Availability Schedule</h3>
                         <p class="step-description">Set your weekly availability for this event type.</p>
                         
-                        <!-- Add timezone info message -->
-                        <div class="timezone-info">
-                            <i class="info-icon">info</i>
-                            <p>Times are displayed in your local timezone ({{ currentTimezone }}), but stored in UTC for consistency.</p>
-                        </div>
-                        
                         <div class="schedule-section">
                             <edit-time
                                 @update="updateSchedule"
                                 ref="editTimeRef"
+                            />
+                        </div>
+
+                        <!-- Buffer Time Section -->
+                        <div class="buffer-time-section" style="margin-top: 24px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                                <h4 style="margin: 0; font-size: 16px; font-weight: 600;">Buffer Time</h4>
+                                <PhQuestion 
+                                    :size="16" 
+                                    style="color: var(--text-tertiary); cursor: help;" 
+                                    v-tooltip="{
+                                        content: 'Buffer time is the required break period after each meeting ends. For example, if you set a 30-minute buffer and have a meeting from 2:00-3:00 PM, your next available slot will be at 3:30 PM. This gives you time to wrap up, take notes, or prepare for the next meeting.',
+                                        placement: 'top'
+                                    }"
+                                />
+                            </div>
+                            
+                            <SelectComponent
+                                :value="bufferTime"
+                                @change="updateBufferTime"
+                                :options="bufferTimeOptions"
+                                placeholder="Select buffer time"
                             />
                         </div>
                     </div>
@@ -363,36 +406,27 @@ const handleSubmit = async () => {
                 
                 <!-- Navigation buttons -->
                 <div class="form-navigation">
-                    <div>
-                        <!-- Back button (for steps 2 and 3) -->
-                        <Button 
-                            v-if="currentStep > 1"
-                            type="button" 
-                            as="tertiary"
-                            label="Back" 
-                            @click="prevStep"
-                        />
-                        <!-- Cancel button (for step 1) -->
-                        <div v-else class="c-button tertiary pointer i-popup-close">Cancel</div>
-                    </div>
+                    <Button 
+                        v-if="currentStep > 1"
+                        label="Previous"
+                        as="secondary"
+                        @click="prevStep"
+                    />
+                    <div v-else></div>
                     
-                    <div>
-                        <!-- Next button (for steps 1 and 2) -->
-                        <Button 
-                            v-if="currentStep < totalSteps"
-                            type="button" 
-                            label="Next" 
-                            @click="nextStep"
-                        />
-                        <!-- Submit button (for step 3) -->
-                        <Button 
-                            v-else
-                            type="button" 
-                            label="Create Event" 
-                            :loading="isSubmitting" 
-                            @click="handleSubmit"
-                        />
-                    </div>
+                    <Button 
+                        v-if="currentStep < totalSteps"
+                        label="Next"
+                        @click="nextStep"
+                        :disabled="currentStep === 1 && !canProceedToStep2 || currentStep === 2 && !canProceedToStep3"
+                    />
+                    <Button 
+                        v-else
+                        label="Create Event Type"
+                        @click="handleSubmit"
+                        :loading="isSubmitting"
+                        :disabled="!canSubmitForm"
+                    />
                 </div>
             </div>
         </template>
@@ -400,32 +434,87 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-
-.form-section {
-    margin-bottom: 30px;
+.create-event-form {
+    padding: 0;
 }
 
+/* Step Progress Indicator */
+.step-progress {
+    margin-bottom: 30px;
+    padding: 0 20px;
+}
+
+.progress-bar {
+    height: 4px;
+    background-color: var(--background-2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--black);
+    transition: width 0.3s ease;
+}
+
+.step-indicators {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.step-indicator {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    background-color: var(--background-2);
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.step-indicator.active {
+    background-color: var(--black);
+    color: white;
+}
+
+.step-indicator.completed {
+    background-color: var(--black);
+    color: white;
+}
+
+/* Step Container */
 .step-container {
-    position: relative;
+    padding: 0 20px;
 }
 
 .step-content {
     display: none;
-    margin-bottom: 20px;
+    animation: fadeIn 0.3s ease;
 }
 
 .step-content.active-step {
     display: block;
 }
 
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 .step-title {
-    margin: 20px 0 15px;
-    font-weight: 600;
     font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
 }
 
 .step-description {
-    margin-bottom: 20px;
     color: var(--text-secondary);
     font-size: 14px;
 }
@@ -502,8 +591,6 @@ const handleSubmit = async () => {
     display: none;
 }
 
-
-
 .timezone-info {
     display: flex;
     align-items: center;
@@ -515,7 +602,7 @@ const handleSubmit = async () => {
 }
 
 .timezone-info .info-icon {
-    color: var(--brand-default);
+    color: var(--black);
 }
 
 .timezone-info p {
@@ -524,4 +611,9 @@ const handleSubmit = async () => {
     margin: 0;
 }
 
+/* Buffer time section styles */
+.buffer-time-section {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+}
 </style>

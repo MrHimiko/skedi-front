@@ -30,6 +30,17 @@ const formValues = ref({
     duration: [{ title: 'Standard Meeting', description: '', duration: 30 }]
 });
 
+// Duration options for the select dropdown
+const durationOptions = [
+    { value: 15, label: '15 minutes' },
+    { value: 30, label: '30 minutes' },
+    { value: 45, label: '45 minutes' },
+    { value: 60, label: '1 hour' },
+    { value: 90, label: '1 hour 30 minutes' },
+    { value: 120, label: '2 hours' },
+    { value: 180, label: '3 hours' }
+];
+
 // Return current form values for the builder component
 function getFormValues() {
     // If we have values from props, use those; otherwise use our default
@@ -63,13 +74,13 @@ const tabs = ref([
                             }
                         },
                         {
-                            type: 'Input',
+                            type: 'Select',
                             name: 'duration',
-                            label: 'Duration (minutes)',
+                            label: 'Duration',
                             width: 4,
                             properties: {
-                                placeholder: '30',
-                                type: 'number'
+                                options: durationOptions,
+                                placeholder: 'Select duration'
                             }
                         },
                     ]
@@ -111,13 +122,13 @@ onMounted(() => {
                         :endpoint="endpoint"
                         :type="type"
                         :callback="callback"
-                        as="form"
                     />
                 </div>
             </div>
         </template>
     </PopupView>
 </template>
+
 
 <style>
 .event-durations {
@@ -144,6 +155,10 @@ onMounted(() => {
 .event-durations .c-repeater {
     margin-top: 10px;
     background: transparent;
+}
+
+.event-durations > .top {
+    display: none;
 }
 
 .event-durations .c-repeater > .items > .item {

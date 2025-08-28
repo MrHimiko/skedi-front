@@ -14,6 +14,7 @@
                 </div>
                 
                 <div v-else class="events-list-container">
+                    
                     <!-- Event count indicator -->
                     <div class="event-count">
                         <span class="count-badge">{{ todayEvents.length }}</span>
@@ -58,11 +59,7 @@
                                 </span>
                             </div>
                             
-                            <!-- Source Icon -->
-                            <div class="source-icon" v-if="event.source">
-                                <img :src="getSourceIcon(event.source)" :alt="event.source" />
-                            </div>
-                            
+
                             <!-- Event Content -->
                             <div class="card-content">
                                 <h3 class="event-title">{{ event.title }}</h3>
@@ -305,16 +302,17 @@ onMounted(() => {
 }
 
 /* Pending status special styling */
-.event-card.is-pending {
-    border-color: var(--brand-orange, #ea580c);
-    background: linear-gradient(135deg, #fff7ed 0%, var(--background-0) 100%);
-}
+
 
 /* Status Bar */
 .event-status-bar {
     position: absolute;
     top: 16px;
     right: 16px;
+}
+
+.event-card:has(.past) {
+        opacity: 0.6;
 }
 
 .status-badge {
@@ -326,6 +324,9 @@ onMounted(() => {
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
+        position: absolute;
+    right: 0px;
+    top:0px;
 }
 
 .status-badge.live {
@@ -344,13 +345,14 @@ onMounted(() => {
 }
 
 .status-badge.canceled {
-    background: var(--background-2);
-    color: var(--text-secondary);
+    background: var(--red-default);
+    color: white;
 }
 
 .status-badge.past {
     background: #f3f4f6;
     color: #6b7280;
+
 }
 
 /* Pulse animation for live events */
@@ -393,7 +395,6 @@ onMounted(() => {
 /* Card Content */
 .card-content {
     flex: 1;
-    margin-top: 30px;
 }
 
 .event-title {

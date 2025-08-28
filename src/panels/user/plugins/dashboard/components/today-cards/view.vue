@@ -1,5 +1,3 @@
-// src/panels/user/plugins/dashboard/components/today-cards/view.vue
-
 <template>
     <div v-if="todayEvents.length > 0 || isLoading">
         <div class="schedule-header">
@@ -13,7 +11,8 @@
                 ({{ todayEvents.length }})
             </span>
         </div>
-        <div class="today-cards" v-if="!isLoading && todayEvents.length > 0">
+        
+        <div class="today-cards" v-if="false">
             <!-- Check if we need slider (more than 3 events) -->
             <div v-if="todayEvents.length > 3" class="cards-slider-container">
                 <div class="cards-slider" ref="sliderContainer">
