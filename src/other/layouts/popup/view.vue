@@ -12,7 +12,7 @@ defineProps({
 </script>
 
 <template>
-    <div :class="['l-popup', customClass]">
+    <div :class="['l-popup h-auto', customClass]">
         <div class="top flex-between gap-xl">
             <div class="flex gap-lg">
                 <i v-if="icon">{{ icon }}</i>

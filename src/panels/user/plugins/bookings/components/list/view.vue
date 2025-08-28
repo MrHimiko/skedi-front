@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, markRaw } from 'vue';
 import { UserStore } from '@stores/user';
 import ButtonComponent from '@form/button/view.vue';
 import { common } from '@utils/common';
@@ -15,6 +15,8 @@ import MenusComponent from '@global/menus/view.vue';
 import BookingDetailView from '@user_bookings/components/detail/view.vue';
 import { popup } from '@utils/popup';
 import ConfirmComponent from '@floated/confirm/view.vue';
+
+import CancelBookingModal from '@user_bookings/components/cancelModal/view.vue';
 
 const props = defineProps({
     bookings: {
@@ -153,22 +155,14 @@ async function handleBookingAction(event, action, booking) {
             
         case 'Cancel':
             popup.open(
-                'cancel-booking-confirm',
+                'cancel-booking-modal',
                 null,
-                ConfirmComponent,
+                markRaw(CancelBookingModal),
                 {
-                    as: 'red',
-                    description: `Are you sure you want to cancel this booking?`,
-                    callback: async (event, data, response, success) => {
+                    booking: booking,
+                    callback: (success) => {
                         if (success) {
-                            try {
-                                await changeBookingStatus(booking, 'canceled');
-                                common.notification('Booking canceled successfully', true);
-                                document.querySelector('.i-popup-close').click();
-                                emit('refresh');
-                            } catch (error) {
-                                common.notification('Error canceling booking: ' + (error.message || 'Unknown error'), false);
-                            }
+                            emit('refresh');
                         }
                     }
                 }
