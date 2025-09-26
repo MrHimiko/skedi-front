@@ -1,6 +1,6 @@
 <script setup>
 import './style.css';
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { fetch } from '@utils/fetch';
 import { PhCaretDown } from "@phosphor-icons/vue";
 import MenusComponent from '@global/menus/view.vue';
@@ -38,16 +38,17 @@ const emit = defineEmits(['update:value', 'change']);
 
 const refValue = ref(props.value);
 const displayValue = ref('');
+const loadingDisplay = ref(false);
 
 // Watch for changes in the props.value
 watch(() => props.value, (newValue) => {
     refValue.value = newValue;
     updateDisplayValue(newValue);
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 // Update the display value based on the current value
 function updateDisplayValue(value) {
-    if (!value) {
+    if (!value && value !== 0) {
         displayValue.value = '';
         return;
     }
@@ -57,30 +58,39 @@ function updateDisplayValue(value) {
         if (option) {
             displayValue.value = option.label;
         }
+    } else if (props.endpoint && value && !loadingDisplay.value) {
+        loadingDisplay.value = true;
+        displayValue.value = 'Loading...';
+        
+        fetch.one(`${props.endpoint}/${value}`).then((data) => {
+            displayValue.value = data.name || data.title || data.label || value;
+            loadingDisplay.value = false;
+        }).catch(() => {
+            displayValue.value = value;
+            loadingDisplay.value = false;
+        });
     }
 }
 
 // Handle selecting an item from the dropdown
 function handleSelect(event, item) {
+    if (!item || item.value === undefined) return;
+    
+    // Update both internal state and display immediately
     refValue.value = item.value;
     displayValue.value = item.label;
     
-    // Emit the value as the first parameter
-    emit('update:value', item.value);
-    emit('change', item.value);
+    // Use nextTick to ensure DOM is updated before emitting
+    nextTick(() => {
+        // Emit the value as the first parameter
+        emit('update:value', item.value);
+        emit('change', item.value);
+    });
 }
 
 // Load data from endpoint if needed
 onMounted(() => {
-    if (props.endpoint && props.value) {
-        displayValue.value = 'Loading...';
-        
-        fetch.one(`${props.endpoint}/${props.value}`).then((data) => {
-            displayValue.value = data.name || data.title || data.label || props.value;
-        }).catch(() => {
-            displayValue.value = props.value;
-        });
-    }
+    updateDisplayValue(props.value);
 });
 </script>
 
@@ -119,4 +129,3 @@ onMounted(() => {
         </div>
     </div>
 </template>
-

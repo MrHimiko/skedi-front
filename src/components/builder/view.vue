@@ -1,6 +1,6 @@
 <script setup>
     import './style.css'
-    import { ref } from 'vue'
+    import { ref, watch } from 'vue'
     import { form } from '@utils/form'
     import TabsComponent from '@global/tabs/view.vue'
     import Input from '@form/input/view.vue'
@@ -64,9 +64,20 @@
         JSON.parse(JSON.stringify(typeof props.values === 'function' ? props.values() : {}))
     )
 
+    // Watch for changes in props.values and re-initialize if needed
+    watch(() => props.values, () => {
+        if (typeof props.values === 'function') {
+            const newValues = props.values();
+            // Update our local state with the new values
+            Object.keys(newValues).forEach(key => {
+                activeValues.value[key] = newValues[key];
+            });
+        }
+    }, { deep: true })
+
     props.tabs.forEach((tab) => {
         tab.components.forEach((component) => {
-            if ('properties' in component && 'value' in component.properties && !('value' in activeValues.value)) {
+            if ('properties' in component && 'value' in component.properties && !(component.name in activeValues.value)) {
                 activeValues.value[component.name] = component.properties.value
             }
         })
@@ -89,7 +100,22 @@
     }
 
     function handleChange(item, event, value) {
-        activeValues.value[item.name] = value
+        // Handle the Select component's emitted value properly
+        if (item.type === 'Select' && value === undefined && typeof event !== 'object') {
+            // Select emits value directly as first parameter
+            activeValues.value[item.name] = event;
+        } else if (event && event.target) {
+            // Regular form inputs with event.target
+            activeValues.value[item.name] = event.target.value;
+        } else {
+            // Other components that emit value directly
+            activeValues.value[item.name] = value !== undefined ? value : event;
+        }
+        
+        // If we have a callback and we're in a repeater context, call it with all current values
+        if (props.callback && !props.actions) {
+            props.callback(activeValues.value);
+        }
     }
 </script>
 
@@ -164,6 +190,8 @@
                                     :name="item.name"
                                     :value="'onValue' in item ? item.onValue(getValue(item.name)) : getValue(item.name)"
                                     v-bind="item.properties"
+                                    @update:value="(value) => handleChange(item, null, value)"
+                                    @change="(value) => handleChange(item, null, value)"
                                 />
                             </div>
                         </div>

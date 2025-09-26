@@ -62,15 +62,31 @@ function formatMeeting(meeting) {
     const date = new Date(meeting.date);
     const now = new Date();
     
-    // For past meetings, show relative time
-    if (date < now) {
+    // Reset time for accurate day comparison
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // For meetings today or in the future, show as upcoming
+    if (dateOnly >= nowOnly) {
+        const options = { 
+            month: 'short', 
+            day: 'numeric'
+        };
+        
+        if (dateOnly.getTime() === nowOnly.getTime()) {
+            // Meeting is today - show as upcoming
+            return `${meeting.event_name} • Today`;
+        } else {
+            // Meeting is in the future
+            return `${meeting.event_name} • ${date.toLocaleDateString('en-US', options)}`;
+        }
+    } else {
+        // For past meetings, show relative time
         const diffTime = Math.abs(now - date);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
         let dateStr;
-        if (diffDays < 1) {
-            dateStr = 'Today';
-        } else if (diffDays === 1) {
+        if (diffDays === 1) {
             dateStr = 'Yesterday';
         } else if (diffDays < 7) {
             dateStr = `${diffDays} days ago`;
@@ -79,13 +95,6 @@ function formatMeeting(meeting) {
         }
         
         return `${meeting.event_name} • ${dateStr}`;
-    } else {
-        // For future meetings, show date and time
-        const options = { 
-            month: 'short', 
-            day: 'numeric'
-        };
-        return `${meeting.event_name} • ${date.toLocaleDateString('en-US', options)}`;
     }
 }
 

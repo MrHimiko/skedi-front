@@ -1,40 +1,51 @@
-.c-select input[value] {
-    display: none;
+.c-select .holder {
+    cursor: pointer;
+    position: relative;
+    padding: 0 25px 0 10px;
+    min-width: 80px;
 }
 
-.c-select input {
-    pointer-events: none;
+.c-select .holder.disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.c-select input[type="hidden"] {
+    display: none;
 }
 
 .c-select .display {
     font-size: 13px;
-    padding: 0 var(--spacing-lg);
+    min-height: 20px;
+    display: flex;
+    align-items: center;
 }
 
-.c-select {
-    cursor: pointer;
-    position: relative;
+.c-select .display .placeholder {
+    color: var(--text-tertiary);
 }
 
-.c-select > svg {
+.c-select .display .loading {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.c-select .caret-icon {
     position: absolute;
-    bottom: 13px;
-    right: 5px;
-    height: 10px;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
     pointer-events: none;
 }
 
-.c-select .c-input > .holder {
-    padding-right: 15px;
-}
-
-.c-input .select-header {
+.c-select .select-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: var(--spacing-lg);
 }
 
-.c-input .required-indicator {
+.c-select .required-indicator {
     color: var(--text-secondary);
     font-size: var(--text-xs);
 }

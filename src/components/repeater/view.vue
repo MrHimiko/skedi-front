@@ -87,37 +87,62 @@ function toggle(index) {
 
 // Return a function that provides the current state of the item
 // This ensures BuilderComponent always gets up-to-date values
-function getItemValues(item) {
+function getItemValues(itemIndex) {
     return function() {
-        // Find the actual item in our array (in case it's been updated)
-        const index = items.value.indexOf(item);
-        if (index >= 0) {
-            return items.value[index]; 
+        if (itemIndex >= 0 && itemIndex < items.value.length) {
+            return items.value[itemIndex] || {};
         }
-        return item;
+        return {};
     };
 }
 
 function handleBuilderChange(itemIndex, event, newValue) {
     // Ensure we have a valid index
     if (typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < items.value.length) {
-        // Get the current item and create a copy
-        const currentItem = items.value[itemIndex];
-        const updatedItem = {...currentItem};
+        // Get the field name from the event
+        let fieldName = null;
+        let fieldValue = null;
         
-        // Handle direct DOM events
+        // Handle different event types
         if (event && event.target && event.target.name) {
-            updatedItem[event.target.name] = event.target.value;
+            // Regular form input event
+            fieldName = event.target.name;
+            fieldValue = event.target.value;
+        } else if (event && typeof event === 'string') {
+            // Direct value from select or other components (event is the value)
+            // We need to figure out which field this is for
+            // This happens when select emits just the value
+            // We'll handle this case by looking at the last focused field
+            // For now, we can't determine the field name from this
+            return;
         }
         
-        // Update our local state
-        const newItems = [...items.value];
-        newItems[itemIndex] = updatedItem;
-        items.value = newItems;
+        // Update only the specific field that changed
+        if (fieldName) {
+            // Create a new item object preserving all existing values
+            const updatedItem = {...(items.value[itemIndex] || {})};
+            updatedItem[fieldName] = fieldValue;
+            
+            // Update our local state
+            items.value[itemIndex] = updatedItem;
+            
+            // Notify parent of the change
+            if (props.onChange) {
+                props.onChange(updatedItem, event, items.value);
+            }
+        }
+    }
+}
+
+// New function to handle callback from Builder component
+function handleBuilderCallback(itemIndex, formData) {
+    if (typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < items.value.length) {
+        // Update the entire item with the form data
+        items.value[itemIndex] = {...formData};
         
         // Notify parent of the change
         if (props.onChange) {
-            props.onChange(updatedItem, event, items.value);
+            props.onChange(items.value[itemIndex], null, items.value);
         }
     }
 }
@@ -139,10 +164,10 @@ function handleBuilderChange(itemIndex, event, newValue) {
                     </div>
                 </div>
                 <div class="bottom flex gap-xl" style="flex-wrap: nowrap" v-show="!toggled.includes(itemIndex)">
-                    <!-- Key is critical to force re-render when item data changes -->
+                    <!-- Use only index as key to prevent re-renders when item data changes -->
                     <builder-component 
-                        :key="`builder-${itemIndex}-${JSON.stringify(item)}`"
-                        :values="getItemValues(item)" 
+                        :key="`builder-${itemIndex}`"
+                        :values="getItemValues(itemIndex)" 
                         :name="name" 
                         :actions="false" 
                         :tabs="[
@@ -151,6 +176,7 @@ function handleBuilderChange(itemIndex, event, newValue) {
                                 components,
                             }
                         ]"
+                        :callback="(formData) => handleBuilderCallback(itemIndex, formData)"
                         @change="(e, v) => handleBuilderChange(itemIndex, e, v)"
                     ></builder-component>
                     <div v-if="!heading && remove">
