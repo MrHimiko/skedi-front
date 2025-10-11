@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/vue";
 import ConfirmComponent from '@floated/confirm/view.vue';
 import { popup } from '@utils/popup';
+import { CalendarService } from '@user_dashboard/services/calendar';
 
 const props = defineProps({
     bookingId: {
@@ -52,6 +53,9 @@ const locationInfo = computed(() => {
     };
 });
 
+
+
+
 // Check if form data has custom fields
 const hasCustomFields = computed(() => {
 
@@ -81,6 +85,31 @@ const parsedFormData = computed(() => {
         console.error('Error parsing form data:', e);
         return null;
     }
+});
+
+
+const formattedDateTime = computed(() => {
+    if (!booking.value || !booking.value.start_time) return {};
+    
+    // Use CalendarService for consistent timezone handling
+    const userTimezone = CalendarService.getUserTimezone();
+    const startDate = CalendarService.convertToUserTimezone(booking.value.start_time);
+    const endDate = CalendarService.convertToUserTimezone(booking.value.end_time);
+    
+    const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: userTimezone
+    });
+    
+    const duration = Math.round((endDate - startDate) / (1000 * 60)); // minutes
+    
+    return {
+        startTime: timeFormatter.format(startDate),
+        endTime: timeFormatter.format(endDate),
+        duration: `${duration} minutes`
+    };
 });
 
 // Handle tab changes
@@ -367,8 +396,8 @@ onMounted(() => {
                         <div class="info-content">
                             <div class="info-label">Time</div>
                             <div class="info-value">
-                                {{ formatTime(booking.start_time) }} - {{ formatTime(booking.end_time) }}
-                                <span class="duration">({{ getDuration(booking.start_time, booking.end_time) }} minutes)</span>
+                                {{ formattedDateTime.startTime }} - {{ formattedDateTime.endTime }}
+                                <span class="duration">({{ formattedDateTime.duration }})</span>
                             </div>
                         </div>
                     </div>

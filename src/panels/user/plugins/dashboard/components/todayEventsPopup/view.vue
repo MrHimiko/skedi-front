@@ -1,118 +1,8 @@
-<template>
-    <PopupView title="Today's Schedule" customClass="today-events-popup">
-        <template #content>
-            <div class="today-events-container">
-                <div v-if="isLoading" class="loading-state">
-                    <div class="loading-spinner"></div>
-                    <p>Loading today's events...</p>
-                </div>
-                
-                <div v-else-if="!todayEvents || todayEvents.length === 0" class="empty-state">
-                    <PhCalendarBlank :size="48" />
-                    <h3>No events scheduled for today</h3>
-                    <p>Your schedule is clear for the rest of the day.</p>
-                </div>
-                
-                <div v-else class="events-list-container">
-                    
-                    <!-- Event count indicator -->
-                    <div class="event-count">
-                        <span class="count-badge">{{ todayEvents.length }}</span>
-                        <span class="count-text">events today</span>
-                    </div>
-                    
-                    <!-- Events List -->
-                    <div class="events-list">
-                        <div 
-                            v-for="(event, index) in todayEvents" 
-                            :key="`event-${index}`"
-                            :class="[
-                                'event-card',
-                                event.type,
-                                { 
-                                    'is-now': event.isNow,
-                                    'is-canceled': event.status === 'canceled',
-                                    'is-pending': event.status === 'pending',
-                                    'is-upcoming': event.isUpcoming
-                                }
-                            ]"
-                            @click="handleEventClick(event)"
-                        >
-                            <!-- Status indicator -->
-                            <div class="event-status-bar">
-                                <span v-if="event.isNow" class="status-badge live">
-                                    <span class="pulse"></span>
-                                    Live Now
-                                </span>
-                                <span v-else-if="event.status === 'pending'" class="status-badge pending">
-                                    <PhWarning :size="14" />
-                                    Pending
-                                </span>
-                                <span v-else-if="event.isUpcoming" class="status-badge upcoming">
-                                    Starts in {{ event.startsIn }}
-                                </span>
-                                <span v-else-if="event.status === 'canceled'" class="status-badge canceled">
-                                    Canceled
-                                </span>
-                                <span v-else class="status-badge past">
-                                    Completed
-                                </span>
-                            </div>
-                            
-
-                            <!-- Event Content -->
-                            <div class="card-content">
-                                <h3 class="event-title">{{ event.title }}</h3>
-                                <div class="event-time">
-                                    <PhClock :size="16" />
-                                    {{ event.timeRange }}
-                                </div>
-                                
-                                <div class="event-details">
-                                    <p class="event-attendees" v-if="event.attendees && event.attendees !== 'No attendees'">
-                                        <PhUsers :size="16" />
-                                        {{ event.attendees }}
-                                    </p>
-                                    <p class="event-location" v-if="event.location">
-                                        <PhMapPin :size="16" />
-                                        {{ formatLocation(event.location) }}
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <!-- Action Buttons -->
-                            <div class="card-actions">
-                                <button 
-                                    v-if="event.meeting_link && event.isNow"
-                                    class="action-btn primary"
-                                    @click.stop="openMeeting(event.meeting_link)"
-                                >
-                                    <PhVideoCamera :size="16" />
-                                    Join Meeting
-                                </button>
-                                
-                                <button 
-                                    class="action-btn secondary"
-                                    @click.stop="handleEventClick(event)"
-                                >
-                                    <PhInfo :size="16" />
-                                    View Details
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </template>
-    </PopupView>
-</template>
-
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { CalendarService } from '@user_dashboard/services/calendar';
 import { common } from '@utils/common';
 import PopupView from '@layouts/popup/view.vue';
-
 import { 
     PhCalendarBlank, 
     PhClock, 
@@ -132,6 +22,109 @@ const props = defineProps({
 const todayEvents = ref([]);
 const isLoading = ref(true);
 
+// Enhanced status calculation (same logic as today-cards)
+function getEventStatus(event) {
+    if (!event.start_time || !event.end_time) {
+        return { status: 'unknown', text: 'Unknown', class: '' };
+    }
+
+    const now = new Date();
+    const startTime = CalendarService.convertToUserTimezone(event.start_time);
+    const endTime = CalendarService.convertToUserTimezone(event.end_time);
+    
+    // Calculate time differences in minutes
+    const startDiffMinutes = Math.floor((startTime - now) / (1000 * 60));
+    const endDiffMinutes = Math.floor((endTime - now) / (1000 * 60));
+    
+    // Current time is during the event
+    if (now >= startTime && now <= endTime) {
+        return { 
+            status: 'live', 
+            text: 'Live now', 
+            class: 'live',
+            isLive: true
+        };
+    }
+    
+    // Event is starting soon (within 10 minutes)
+    if (startDiffMinutes > 0 && startDiffMinutes <= 10) {
+        const minutesText = startDiffMinutes === 1 ? '1 minute' : `${startDiffMinutes} minutes`;
+        return { 
+            status: 'starting-soon', 
+            text: `Starting in ${minutesText}`, 
+            class: 'starting-soon',
+            isStartingSoon: true
+        };
+    }
+    
+    // Event is in the future (more than 10 minutes)
+    if (startDiffMinutes > 10) {
+        const hours = Math.floor(startDiffMinutes / 60);
+        const minutes = startDiffMinutes % 60;
+        let timeText = '';
+        
+        if (hours > 0) {
+            timeText = hours === 1 ? '1 hour' : `${hours} hours`;
+            if (minutes > 0) {
+                timeText += ` ${minutes}m`;
+            }
+        } else {
+            timeText = minutes === 1 ? '1 minute' : `${minutes} minutes`;
+        }
+        
+        return { 
+            status: 'upcoming', 
+            text: `Starts in ${timeText}`, 
+            class: 'upcoming',
+            isUpcoming: true
+        };
+    }
+    
+    // Event is in the past
+    return { 
+        status: 'completed', 
+        text: 'Completed', 
+        class: 'completed',
+        isPast: true
+    };
+}
+
+// Enhanced events with status and time info
+const enhancedTodayEvents = computed(() => {
+    return todayEvents.value.map(event => {
+        const statusInfo = getEventStatus(event);
+        
+        // Format time range in user's timezone
+        let timeRange = '';
+        if (event.formattedStart && event.formattedEnd) {
+            // Convert to 12-hour format for better readability
+            const formatTo12Hour = (time24) => {
+                const [hours, minutes] = time24.split(':');
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                return `${hour12}:${minutes} ${ampm}`;
+            };
+            
+            timeRange = `${formatTo12Hour(event.formattedStart)} - ${formatTo12Hour(event.formattedEnd)}`;
+        } else if (event.start_time && event.end_time) {
+            // Fallback using CalendarService
+            timeRange = CalendarService.formatTimeRange(event.start_time, event.end_time);
+        }
+        
+        return {
+            ...event,
+            timeRange,
+            statusInfo,
+            // Legacy properties for backward compatibility
+            isNow: statusInfo.isLive,
+            isUpcoming: statusInfo.isUpcoming,
+            isPast: statusInfo.isPast,
+            startsIn: statusInfo.isUpcoming || statusInfo.isStartingSoon ? statusInfo.text.replace('Starts in ', '') : null
+        };
+    });
+});
+
 // Get source icon based on calendar provider
 function getSourceIcon(source) {
     const icons = {
@@ -145,10 +138,27 @@ function getSourceIcon(source) {
 // Format location for display
 function formatLocation(location) {
     if (!location) return '';
-    if (typeof location === 'object') {
-        return location.name || location.address || location.value || 'Location';
+    if (typeof location === 'string') return location;
+    if (Array.isArray(location) && location.length > 0) {
+        const loc = location[0];
+        if (loc.type === 'google_meet') return 'Google Meet';
+        if (loc.type === 'zoom') return 'Zoom';
+        if (loc.type === 'link' || loc.type === 'address') return loc.value || '';
+        return loc.name || loc.value || '';
     }
-    return location;
+    return '';
+}
+
+// Format attendees for display
+function formatAttendees(attendees) {
+    if (!attendees || attendees === 'No attendees') return '';
+    if (typeof attendees === 'string') return attendees;
+    if (Array.isArray(attendees)) {
+        return attendees.length === 1 
+            ? attendees[0].name || attendees[0].email || attendees[0]
+            : `${attendees.length} attendees`;
+    }
+    return '';
 }
 
 // Handle event click
@@ -192,6 +202,115 @@ onMounted(() => {
     loadTodayEvents();
 });
 </script>
+
+<template>
+    <PopupView title="Today's Schedule" customClass="today-events-popup">
+        <template #content>
+            <div class="today-events-container">
+                <div v-if="isLoading" class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <p>Loading today's events...</p>
+                </div>
+                
+                <div v-else-if="!enhancedTodayEvents || enhancedTodayEvents.length === 0" class="empty-state">
+                    <PhCalendarBlank :size="48" />
+                    <h3>No events scheduled for today</h3>
+                    <p>Your schedule is clear for the rest of the day.</p>
+                </div>
+                
+                <div v-else class="events-list-container">
+                    <!-- Event count indicator -->
+                    <div class="event-count">
+                        <span class="count-badge">{{ enhancedTodayEvents.length }}</span>
+                        <span class="count-text">events today</span>
+                    </div>
+                    
+                    <!-- Events List -->
+                    <div class="events-list">
+                        <div 
+                            v-for="(event, index) in enhancedTodayEvents" 
+                            :key="`event-${index}`"
+                            :class="[
+                                'event-card',
+                                event.type,
+                                event.statusInfo.class,
+                                { 
+                                    'is-canceled': event.status === 'canceled',
+                                    'is-pending': event.status === 'pending'
+                                }
+                            ]"
+                            @click="handleEventClick(event)"
+                        >
+                            <!-- Status indicator -->
+                            <div class="event-status-bar">
+                                <span v-if="event.statusInfo.isLive" class="status-badge live">
+                                    <span class="pulse"></span>
+                                    🔴 {{ event.statusInfo.text }}
+                                </span>
+                                <span v-else-if="event.statusInfo.isStartingSoon" class="status-badge starting-soon">
+                                    🟡 {{ event.statusInfo.text }}
+                                </span>
+                                <span v-else-if="event.status === 'pending'" class="status-badge pending">
+                                    <PhWarning :size="14" />
+                                    Pending
+                                </span>
+                                <span v-else-if="event.statusInfo.isUpcoming" class="status-badge upcoming">
+                                    🕒 {{ event.statusInfo.text }}
+                                </span>
+                                <span v-else-if="event.status === 'canceled'" class="status-badge canceled">
+                                    Canceled
+                                </span>
+                                <span v-else class="status-badge completed">
+                                    ✅ {{ event.statusInfo.text }}
+                                </span>
+                            </div>
+                            
+                            <!-- Event Content -->
+                            <div class="card-content">
+                                <h3 class="event-title">{{ event.title }}</h3>
+                                <div class="event-time">
+                                    <PhClock :size="16" />
+                                    {{ event.timeRange }}
+                                </div>
+                                
+                                <div class="event-details">
+                                    <p class="event-attendees" v-if="formatAttendees(event.attendees)">
+                                        <PhUsers :size="16" />
+                                        {{ formatAttendees(event.attendees) }}
+                                    </p>
+                                    <p class="event-location" v-if="formatLocation(event.location)">
+                                        <PhMapPin :size="16" />
+                                        {{ formatLocation(event.location) }}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="card-actions">
+                                <button 
+                                    v-if="event.meeting_link && event.statusInfo.isLive"
+                                    class="action-btn primary"
+                                    @click.stop="openMeeting(event.meeting_link)"
+                                >
+                                    <PhVideoCamera :size="16" />
+                                    Join Meeting
+                                </button>
+                                
+                                <button 
+                                    class="action-btn secondary"
+                                    @click.stop="handleEventClick(event)"
+                                >
+                                    <PhInfo :size="16" />
+                                    View Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </PopupView>
+</template>
 
 <style scoped>
 .today-events-popup {
@@ -264,22 +383,22 @@ onMounted(() => {
 .count-badge {
     background: var(--brand-blue);
     color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 12px;
 }
 
 .count-text {
-    color: var(--text-secondary);
     font-size: 14px;
+    color: var(--text-secondary);
 }
 
 /* Events List */
 .events-list {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
+    flex-direction: column-reverse;
+    gap: 12px;
 }
 
 /* Event Card */
@@ -288,81 +407,87 @@ onMounted(() => {
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 16px;
-    position: relative;
     cursor: pointer;
     transition: all 0.2s ease;
-    display: flex;
-    flex-direction: column;
+    position: relative;
+    overflow: hidden;
 }
 
 .event-card:hover {
     border-color: var(--brand-blue);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateX(4px);
 }
 
-/* Pending status special styling */
+/* Enhanced: Live card styling */
+.event-card.live {
+    border-color: #dc2626;
+    background: linear-gradient(135deg, #fee2e2 0%, var(--background-0) 100%);
+}
 
+/* Enhanced: Starting soon styling */
+.event-card.starting-soon {
+    border-color: #ea580c;
+    background: linear-gradient(135deg, #fed7aa 0%, var(--background-0) 100%);
+}
 
-/* Status Bar */
+/* Event Status Bar */
 .event-status-bar {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-}
-
-.event-card:has(.past) {
-        opacity: 0.6;
+    margin-bottom: 12px;
 }
 
 .status-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 11px;
+    gap: 4px;
+    font-size: 12px;
     font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
     text-transform: uppercase;
-        position: absolute;
-    right: 0px;
-    top:0px;
+    letter-spacing: 0.5px;
 }
 
 .status-badge.live {
-    background: #fee2e2;
-    color: #dc2626;
+    background: #dc2626;
+    color: white;
+    animation: pulse 2s infinite;
 }
 
-.status-badge.upcoming {
-    background: #dbeafe;
-    color: #2563eb;
+.status-badge.starting-soon {
+    background: #ea580c;
+    color: white;
+    animation: glow 2s ease-in-out infinite alternate;
 }
 
 .status-badge.pending {
-    background: #fed7aa;
-    color: #ea580c;
-}
-
-.status-badge.canceled {
-    background: var(--red-default);
+    background: #f59e0b;
     color: white;
 }
 
-.status-badge.past {
-    background: #f3f4f6;
-    color: #6b7280;
-
+.status-badge.upcoming {
+    background: var(--background-1);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
 }
 
-/* Pulse animation for live events */
+.status-badge.completed {
+    background: #16a34a;
+    color: white;
+}
+
+.status-badge.canceled {
+    background: #dc2626;
+    color: white;
+    opacity: 0.7;
+}
+
 .pulse {
     display: inline-block;
     width: 8px;
     height: 8px;
-    background: #dc2626;
+    background: currentColor;
     border-radius: 50%;
-    animation: pulse 2s infinite;
+    animation: pulse-dot 1.5s infinite;
 }
 
 @keyframes pulse {
@@ -377,19 +502,24 @@ onMounted(() => {
     }
 }
 
-/* Source Icon */
-.source-icon {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    width: 24px;
-    height: 24px;
+@keyframes pulse-dot {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.7;
+    }
 }
 
-.source-icon img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+@keyframes glow {
+    from {
+        box-shadow: 0 0 5px rgba(234, 88, 12, 0.5);
+    }
+    to {
+        box-shadow: 0 0 15px rgba(234, 88, 12, 0.8);
+    }
 }
 
 /* Card Content */
@@ -492,24 +622,6 @@ onMounted(() => {
     
     .event-title {
         font-size: 15px;
-    }
-}
-
-@media (max-width: 480px) {
-    .today-events-container {
-        padding: 12px;
-    }
-    
-    .event-card {
-        padding: 10px;
-    }
-    
-    .card-actions {
-        flex-direction: column;
-    }
-    
-    .action-btn {
-        width: 100%;
     }
 }
 

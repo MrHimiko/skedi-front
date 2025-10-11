@@ -1,303 +1,151 @@
-<template>
-    <div v-if="todayEvents.length > 0 || isLoading">
-        <div class="schedule-header">
-            <h4>Today's schedule</h4>
-            <span 
-                v-if="!isLoading && todayEvents.length > 0" 
-                class="event-count-badge"
-                @click="openTodayEventsPopup"
-                title="View all today's events"
-            >
-                ({{ todayEvents.length }})
-            </span>
-        </div>
-        
-        <div class="today-cards" v-if="false">
-            <!-- Check if we need slider (more than 3 events) -->
-            <div v-if="todayEvents.length > 3" class="cards-slider-container">
-                <div class="cards-slider" ref="sliderContainer">
-                    <div class="cards-track" ref="cardsTrack" :style="trackStyle">
-                        <div 
-                            v-for="(event, index) in todayEvents" 
-                            :key="index"
-                            class="card-slide"
-                        >
-                            <div 
-                                :class="['event-card', event.type, { 
-                                    'is-now': event.isNow, 
-                                    'is-canceled': event.status === 'canceled',
-                                    'is-pending': event.status === 'pending'
-                                }]"
-                                @click="handleCardClick(event)"
-                            >
-                                <!-- Source Icon -->
-                                <div class="source-icon" v-if="event.source">
-                                    <img :src="getSourceIcon(event.source)" :alt="event.source" />
-                                </div>
-                                
-                                <!-- Pending indicator -->
-                                <div v-if="event.status === 'pending'" class="pending-indicator">
-                                    ⚠️
-                                </div>
-                                
-                                <!-- Event Content -->
-                                <div class="card-content">
-                                    <div class="event-header">
-                                        <h3 class="event-title">{{ event.title }}</h3>
-                                        <span class="event-time">{{ event.timeRange }}</span>
-                                    </div>
-                                    
-                                    <div class="event-details">
-                                        <p class="event-attendees" v-if="event.attendees && event.attendees !== 'No attendees'">
-                                            {{ formatAttendees(event.attendees) }}
-                                        </p>
-                                        <p class="event-location" v-if="event.location">
-                                            📍 {{ formatLocation(event.location) }}
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                <!-- Action Button -->
-                                <div class="card-actions">
-                                    <span v-if="event.isNow" class="live">Live now</span>
-                                    <button 
-                                        v-else-if="event.isUpcoming && event.startsIn"
-                                        class="upcoming-btn"
-                                        disabled
-                                    >
-                                        Starts {{ event.startsIn }}
-                                    </button>
-                                    <span v-else-if="event.isPast" class="past">
-                                        Completed
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Navigation arrows -->
-                <button 
-                    class="slider-arrow prev" 
-                    @click="slidePrev"
-                    :disabled="currentSlide === 0"
-                >
-                    ‹
-                </button>
-                <button 
-                    class="slider-arrow next" 
-                    @click="slideNext"
-                    :disabled="currentSlide >= maxSlide"
-                >
-                    ›
-                </button>
-                
-                <!-- Dots indicator -->
-                <div class="slider-dots">
-                    <span 
-                        v-for="(dot, index) in totalDots" 
-                        :key="index"
-                        :class="['dot', { active: index === currentSlide }]"
-                        @click="goToSlide(index)"
-                    ></span>
-                </div>
-            </div>
-            
-            <!-- Simple grid if 3 or fewer events -->
-            <div v-else class="cards-grid">
-                <div 
-                    v-for="(event, index) in todayEvents" 
-                    :key="index"
-                    class="grid-card"
-                >
-                    <div 
-                        :class="['event-card', event.type, { 
-                            'is-now': event.isNow, 
-                            'is-canceled': event.status === 'canceled',
-                            'is-pending': event.status === 'pending'
-                        }]"
-                        @click="handleCardClick(event)"
-                    >
-                        <!-- Source Icon -->
-                        <div class="source-icon" v-if="event.source">
-                            <img :src="getSourceIcon(event.source)" :alt="event.source" />
-                        </div>
-                        
-                        <!-- Pending indicator -->
-                        <div v-if="event.status === 'pending'" class="pending-indicator">
-                            ⚠️
-                        </div>
-                        
-                        <!-- Event Content -->
-                        <div class="card-content">
-                            <div class="event-header">
-                                <h3 class="event-title">{{ event.title }}</h3>
-                                <span class="event-time">{{ event.timeRange }}</span>
-                            </div>
-                            
-                            <div class="event-details">
-                                <p class="event-attendees" v-if="event.attendees && event.attendees !== 'No attendees'">
-                                    {{ formatAttendees(event.attendees) }}
-                                </p>
-                                <p class="event-location" v-if="event.location">
-                                    📍 {{ formatLocation(event.location) }}
-                                </p>
-                            </div>
-                        </div>
-                        
-                        <!-- Action Button -->
-                        <div class="card-actions">
-                            <span v-if="event.isNow" class="live">Live now</span>
-                            <button 
-                                v-else-if="event.isUpcoming && event.startsIn"
-                                class="upcoming-btn"
-                                disabled
-                            >
-                                Starts {{ event.startsIn }}
-                            </button>
-                            <span v-else-if="event.isPast" class="past">
-                                Completed
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Loading State -->
-        <div v-if="isLoading" class="loading-container">
-            <div class="loading-card">
-                <div class="loading-skeleton"></div>
-            </div>
-            <div class="loading-card">
-                <div class="loading-skeleton"></div>
-            </div>
-            <div class="loading-card">
-                <div class="loading-skeleton"></div>
-            </div>
-        </div>
-    </div>
-</template>
-
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { CalendarService } from '@user_dashboard/services/calendar';
 import { popup } from '@utils/popup';
-import BookingDetailView from '@user_bookings/components/detail/view.vue';
+import { PhCalendar } from "@phosphor-icons/vue";
 import ExternalEventPopup from '@user_dashboard/components/externalEventPopup/view.vue';
+import BookingDetailView from '@user_bookings/components/detail/view.vue';
 import TodayEventsPopup from '@user_dashboard/components/todayEventsPopup/view.vue';
 
-// State
+// Reactive data
 const todayEvents = ref([]);
-const isLoading = ref(false);
+const isLoading = ref(true);
 const currentSlide = ref(0);
 const slidesPerView = ref(3);
 
-// Computed properties
+// Computed properties for slider
 const maxSlide = computed(() => {
-    return Math.max(0, todayEvents.value.length - slidesPerView.value);
+    return Math.max(0, Math.ceil(todayEvents.value.length / slidesPerView.value) - 1);
 });
 
 const totalDots = computed(() => {
     return Math.ceil(todayEvents.value.length / slidesPerView.value);
 });
 
-const trackStyle = computed(() => {
-    const translateX = -(currentSlide.value * (100 / slidesPerView.value));
-    return {
-        transform: `translateX(${translateX}%)`,
-        transition: 'transform 0.3s ease'
+const trackStyle = computed(() => ({
+    transform: `translateX(-${currentSlide.value * (100 / slidesPerView.value)}%)`
+}));
+
+// Enhanced status calculation with buffer times
+function getEventStatus(event) {
+    if (!event.start_time || !event.end_time) {
+        return { status: 'unknown', text: 'Unknown', class: '' };
+    }
+
+    const now = new Date();
+    const startTime = CalendarService.convertToUserTimezone(event.start_time);
+    const endTime = CalendarService.convertToUserTimezone(event.end_time);
+    
+    // Calculate time differences in minutes
+    const startDiffMinutes = Math.floor((startTime - now) / (1000 * 60));
+    const endDiffMinutes = Math.floor((endTime - now) / (1000 * 60));
+    
+    // Current time is during the event
+    if (now >= startTime && now <= endTime) {
+        return { 
+            status: 'live', 
+            text: 'Live now', 
+            class: 'live',
+            isLive: true
+        };
+    }
+    
+    // Event is starting soon (within 10 minutes)
+    if (startDiffMinutes > 0 && startDiffMinutes <= 10) {
+        const minutesText = startDiffMinutes === 1 ? '1 minute' : `${startDiffMinutes} minutes`;
+        return { 
+            status: 'starting-soon', 
+            text: `Starting in ${minutesText}`, 
+            class: 'starting-soon',
+            isStartingSoon: true
+        };
+    }
+    
+    // Event is in the future (more than 10 minutes)
+    if (startDiffMinutes > 10) {
+        const hours = Math.floor(startDiffMinutes / 60);
+        const minutes = startDiffMinutes % 60;
+        let timeText = '';
+        
+        if (hours > 0) {
+            timeText = hours === 1 ? '1 hour' : `${hours} hours`;
+            if (minutes > 0) {
+                timeText += ` ${minutes}m`;
+            }
+        } else {
+            timeText = minutes === 1 ? '1 minute' : `${minutes} minutes`;
+        }
+        
+        return { 
+            status: 'upcoming', 
+            text: `Starts in ${timeText}`, 
+            class: 'upcoming',
+            isUpcoming: true
+        };
+    }
+    
+    // Event is in the past
+    return { 
+        status: 'completed', 
+        text: 'Completed', 
+        class: 'completed',
+        isPast: true
     };
+}
+
+// Enhanced events with status and time info
+const enhancedTodayEvents = computed(() => {
+    return todayEvents.value.map(event => {
+        const statusInfo = getEventStatus(event);
+        const userTimezone = CalendarService.getUserTimezone();
+        
+        // Format time range in user's timezone
+        let timeRange = '';
+        if (event.formattedStart && event.formattedEnd) {
+            // Convert to 12-hour format for better readability
+            const formatTo12Hour = (time24) => {
+                const [hours, minutes] = time24.split(':');
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                return `${hour12}:${minutes} ${ampm}`;
+            };
+            
+            timeRange = `${formatTo12Hour(event.formattedStart)} - ${formatTo12Hour(event.formattedEnd)}`;
+        } else if (event.start_time && event.end_time) {
+            // Fallback using CalendarService
+            timeRange = CalendarService.formatTimeRange(event.start_time, event.end_time);
+        }
+        
+        return {
+            ...event,
+            timeRange,
+            statusInfo,
+            // Legacy properties for backward compatibility
+            isNow: statusInfo.isLive,
+            isUpcoming: statusInfo.isUpcoming,
+            isPast: statusInfo.isPast,
+            startsIn: statusInfo.isUpcoming || statusInfo.isStartingSoon ? statusInfo.text.replace('Starts in ', '') : null
+        };
+    });
 });
 
-// Get source icon based on calendar provider
-function getSourceIcon(source) {
-    const icons = {
-        'google_calendar': 'https://global.divhunt.com/3858bb278694ec6c098fef9b26e059ab_2357.svg',
-        'outlook': 'https://global.divhunt.com/41d16cde92f23c0849a7ddfd2065aa2e_3202.svg',
-        'apple_calendar': '/icons/apple-calendar.svg'
-    };
-    return icons[source] || null;
-}
-
-
-
-// Format location 
-function formatLocation(location) {
-    if (!location) return '';
-    
-    // If it's already a string, return it directly
-    if (typeof location === 'string') {
-        return location;
-    }
-    
-    // If it's an array, process the first location
-    if (Array.isArray(location)) {
-        if (location.length === 0) return '';
-        
-        const firstLocation = location[0];
-        if (typeof firstLocation === 'string') {
-            return firstLocation;
-        }
-        
-        // Handle location object
-        if (firstLocation.type === 'google_meet') {
-            return 'Google Meet';
-        } else if (firstLocation.type === 'link') {
-            return firstLocation.value || 'Meeting Link';
-        } else if (firstLocation.type === 'address') {
-            return firstLocation.value || 'Address';
-        } else if (firstLocation.type === 'in_person') {
-            return firstLocation.address || 'In Person';
-        } else if (firstLocation.type === 'custom') {
-            return firstLocation.custom || 'Custom Location';
-        }
-        
-        return firstLocation.value || firstLocation.address || 'Location';
-    }
-    
-    // Try to parse as JSON (backwards compatibility)
-    try {
-        const parsed = JSON.parse(location);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-            const firstLocation = parsed[0];
-            return `${firstLocation.type}: ${firstLocation.value || firstLocation.address || ''}`;
-        }
-        return location;
-    } catch (error) {
-        // If JSON parsing fails, return the location as-is
-        return location;
-    }
-}
-
-// Format attendees
-function formatAttendees(attendees) {
-    if (!attendees) return '';
-    if (attendees === 'No attendees') return '';
-    // Truncate if too long
-    if (attendees.length > 30) {
-        return attendees.substring(0, 30) + '...';
-    }
-    return attendees;
-}
-
-// Slider navigation
-function slidePrev() {
-    if (currentSlide.value > 0) {
-        currentSlide.value--;
-    }
-}
-
+// Slider functions
 function slideNext() {
     if (currentSlide.value < maxSlide.value) {
         currentSlide.value++;
     }
 }
 
+function slidePrev() {
+    if (currentSlide.value > 0) {
+        currentSlide.value--;
+    }
+}
+
 function goToSlide(index) {
-    currentSlide.value = index * slidesPerView.value;
-    if (currentSlide.value > maxSlide.value) {
-        currentSlide.value = maxSlide.value;
+    if (index >= 0 && index <= maxSlide.value) {
+        currentSlide.value = index;
     }
 }
 
@@ -395,6 +243,41 @@ function updateSlidesPerView() {
     }
 }
 
+// Helper functions for display
+function formatAttendees(attendees) {
+    if (!attendees || attendees === 'No attendees') return '';
+    if (typeof attendees === 'string') return attendees;
+    if (Array.isArray(attendees)) {
+        return attendees.length === 1 
+            ? attendees[0].name || attendees[0].email || attendees[0]
+            : `${attendees.length} attendees`;
+    }
+    return '';
+}
+
+function formatLocation(location) {
+    if (!location) return '';
+    if (typeof location === 'string') return location;
+    if (Array.isArray(location) && location.length > 0) {
+        const loc = location[0];
+        if (loc.type === 'google_meet') return 'Google Meet';
+        if (loc.type === 'zoom') return 'Zoom';
+        if (loc.type === 'link' || loc.type === 'address') return loc.value || '';
+        return loc.name || loc.value || '';
+    }
+    return '';
+}
+
+function getSourceIcon(source) {
+    const icons = {
+        'google_calendar': '/assets/icons/google-calendar.svg',
+        'outlook': '/assets/icons/outlook.svg',
+        'apple_calendar': '/assets/icons/apple-calendar.svg',
+        'internal': '/assets/icons/internal-booking.svg'
+    };
+    return icons[source] || '/assets/icons/default-calendar.svg';
+}
+
 // Refresh events periodically (every minute to update "starts in" times)
 let refreshInterval = null;
 
@@ -418,6 +301,24 @@ onUnmounted(() => {
     window.removeEventListener('resize', updateSlidesPerView);
 });
 </script>
+
+<template>
+    <div v-if="enhancedTodayEvents.length > 0 || isLoading">
+        
+        <div class="schedule-header">
+            <h4>Today's schedule</h4>
+            <span 
+                v-if="!isLoading && enhancedTodayEvents.length > 0" 
+                class="event-count-badge"
+                @click="openTodayEventsPopup"
+                title="View all today's events"
+            >
+                ({{ enhancedTodayEvents.length }})
+            </span>
+        </div>
+         
+    </div>
+</template>
 
 <style scoped>
 .schedule-header {
@@ -498,12 +399,19 @@ onUnmounted(() => {
 
 .event-card:hover {
     border-color: var(--brand-blue);
+    transform: translateY(-2px);
 }
 
-/* Live indicator */
-.event-card.is-now {
+/* ENHANCED: Live indicator with pulsing animation */
+.event-card.live {
     border-color: #dc2626;
     background: linear-gradient(135deg, #fee2e2 0%, var(--background-0) 100%);
+}
+
+/* ENHANCED: Starting soon indicator */
+.event-card.starting-soon {
+    border-color: #ea580c;
+    background: linear-gradient(135deg, #fed7aa 0%, var(--background-0) 100%);
 }
 
 /* Pending state */
@@ -555,7 +463,7 @@ onUnmounted(() => {
 .event-title {
     font-size: 15px;
     font-weight: 600;
-    margin: 0 0 4px;
+    margin: 0 0 6px;
     color: var(--text-primary);
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -567,6 +475,7 @@ onUnmounted(() => {
     font-size: 13px;
     font-weight: 500;
     color: var(--brand-blue);
+    display: block;
 }
 
 .event-details {
@@ -586,23 +495,44 @@ onUnmounted(() => {
     overflow: hidden;
 }
 
-/* Card Actions */
+/* ENHANCED: Better status badges */
 .card-actions {
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
 }
 
-.live {
-    background: #dc2626;
-    color: white;
+.status-badge {
+    display: inline-block;
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
-    text-transform: uppercase;
-    display: inline-block;
+    text-align: center;
+    width: 100%;
+}
+
+.status-badge.live {
+    background: #dc2626;
+    color: white;
     animation: pulse 2s infinite;
+}
+
+.status-badge.starting-soon {
+    background: #ea580c;
+    color: white;
+    animation: glow 2s ease-in-out infinite alternate;
+}
+
+.status-badge.upcoming {
+    background: var(--background-1);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.status-badge.completed {
+    background: #16a34a;
+    color: white;
 }
 
 @keyframes pulse {
@@ -617,21 +547,13 @@ onUnmounted(() => {
     }
 }
 
-.upcoming-btn {
-    background: var(--background-1);
-    color: var(--text-secondary);
-    padding: 6px 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.past {
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-style: italic;
+@keyframes glow {
+    from {
+        box-shadow: 0 0 5px rgba(234, 88, 12, 0.5);
+    }
+    to {
+        box-shadow: 0 0 15px rgba(234, 88, 12, 0.8);
+    }
 }
 
 /* Slider Navigation */
