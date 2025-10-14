@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { common } from '@utils/common';
 import { api } from '@utils/api';
 import BuilderComponent from '@/components/builder/view.vue';
@@ -21,6 +21,7 @@ const props = defineProps({
 
 // State management
 const isLoadingData = ref(true);
+const allPeopleOptions = ref([]);
 
 // Initial form values
 const formValues = ref({
@@ -45,6 +46,7 @@ const tabs = ref([
                 label: 'Event Hosts',
                 width: 12,
                 properties: {
+                    minItems: 1, // At least 1 host required
                     components: [
                         {
                             type: 'Select',
@@ -143,6 +145,9 @@ async function fetchPeopleOptions() {
                 value: item.user.id.toString()
             }));
             
+            // Store all options
+            allPeopleOptions.value = peopleOptions;
+            
             // Update options in the Select component
             tabs.value[0].components[0].properties.components[0].properties.options = peopleOptions;
             return true;
@@ -151,6 +156,39 @@ async function fetchPeopleOptions() {
         console.error('Failed to fetch people options:', error);
     }
     return false;
+}
+
+// Watch for changes in assignees to filter out already selected users from dropdown
+watch(() => formValues.value.assignees, (newAssignees) => {
+    updateFilteredOptions();
+}, { deep: true });
+
+function updateFilteredOptions() {
+    // Get all selected user IDs
+    const selectedUserIds = formValues.value.assignees
+        .map(assignee => assignee.user_id)
+        .filter(id => id && id !== '');
+    
+    // Filter options to exclude already selected users
+    const filteredOptions = allPeopleOptions.value.filter(
+        option => !selectedUserIds.includes(option.value)
+    );
+    
+    // For each assignee, add back their own selection to the filtered list
+    // This ensures current selection remains visible in its own dropdown
+    formValues.value.assignees.forEach((assignee, index) => {
+        if (assignee.user_id) {
+            const currentSelection = allPeopleOptions.value.find(
+                opt => opt.value === assignee.user_id
+            );
+            if (currentSelection && !filteredOptions.find(opt => opt.value === currentSelection.value)) {
+                filteredOptions.push(currentSelection);
+            }
+        }
+    });
+    
+    // Update the options in the repeater component
+    tabs.value[0].components[0].properties.components[0].properties.options = filteredOptions;
 }
 
 // Load all required data and update form values
@@ -170,6 +208,9 @@ async function loadData() {
             acceptanceRequired: String(eventData.settings?.acceptanceRequired) || 'false',
             assignees: eventData.assignees || [{ user_id: '', role: 'admin' }]
         };
+        
+        // Initial filter of options
+        updateFilteredOptions();
     } catch (error) {
         console.error('Failed to load data:', error);
         common.notification('Failed to load data', false);

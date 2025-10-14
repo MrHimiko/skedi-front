@@ -1,6 +1,6 @@
 <script setup>
 import './style.css';
-import {onMounted, onUnmounted, ref} from 'vue';
+import {onMounted, onUnmounted, ref, computed} from 'vue';
 import BuilderComponent from '@/components/builder/view.vue';
 
 const props = defineProps({
@@ -39,10 +39,19 @@ const props = defineProps({
         type: Boolean,
         default: true
     },
+    minItems: {
+        type: Number,
+        default: 0
+    },
 });
 
 const items = ref([]);
 const toggled = ref([]);
+
+// Computed property to check if we can remove items
+const canRemoveItems = computed(() => {
+    return props.remove && items.value.length > props.minItems;
+});
 
 onMounted(() => {
     // Initialize items from props
@@ -68,6 +77,11 @@ function addItem() {
 }
 
 function removeItem(indexToRemove) {
+    // Don't allow removal if we're at minimum
+    if (items.value.length <= props.minItems) {
+        return;
+    }
+    
     items.value = items.value.filter((_, index) => index !== indexToRemove);
     
     // Notify parent component of the change
@@ -160,7 +174,7 @@ function handleBuilderCallback(itemIndex, formData) {
                         <div :class="['action', 'toggle', !toggled.includes(itemIndex) ? 'opened' : '']" @click="toggle(itemIndex)">
                             <i>keyboard_arrow_down</i>
                         </div>
-                        <i v-if="remove" class="action" @click="() => removeItem(itemIndex)">close</i>
+                        <i v-if="canRemoveItems" class="action" @click="() => removeItem(itemIndex)">close</i>
                     </div>
                 </div>
                 <div class="bottom flex gap-xl" style="flex-wrap: nowrap" v-show="!toggled.includes(itemIndex)">
@@ -179,7 +193,7 @@ function handleBuilderCallback(itemIndex, formData) {
                         :callback="(formData) => handleBuilderCallback(itemIndex, formData)"
                         @change="(e, v) => handleBuilderChange(itemIndex, e, v)"
                     ></builder-component>
-                    <div v-if="!heading && remove">
+                    <div v-if="!heading && canRemoveItems">
                         <i class="action" @click="() => removeItem(itemIndex)">close</i>
                     </div>
                 </div>

@@ -28,7 +28,8 @@ import {
     PhUser,
     PhSignOut,
     PhShoppingCart,
-    PhWarning
+    PhWarning,
+    PhUserPlus  
 } from "@phosphor-icons/vue";
 
 const props = defineProps({
@@ -65,6 +66,7 @@ const searchQuery = ref('');
 const currentUserId = computed(() => userStore.getId());
 const isAdmin = ref(false);
 const isLoading = ref(false);
+const organizationMembers = ref([]);
 
 // Invitation form state
 const inviteEmail = ref('');
@@ -117,9 +119,16 @@ const filteredItems = computed(() => {
         invitation.email.toLowerCase().includes(query)
     );
     
+    // NEW: Filter organization members
+    const filteredOrgMembers = organizationMembers.value.filter(orgMember =>
+        orgMember.user.name.toLowerCase().includes(query) ||
+        orgMember.user.email.toLowerCase().includes(query)
+    );
+    
     return {
         members: filteredMembers,
-        invitations: filteredInvitations
+        invitations: filteredInvitations,
+        organizationMembers: filteredOrgMembers
     };
 });
 
@@ -148,6 +157,38 @@ const modalTitle = computed(() => {
     return `${props.entityName} - Members`;
 });
 
+
+// Add organization member directly to team
+async function addOrganizationMember(orgMember, role) {
+    try {
+        isLoading.value = true;
+        
+        const endpoint = `organizations/${props.organizationId}/teams/${props.entityId}/members/add-org-member`;
+        
+        const response = await api.post(endpoint, {
+            user_id: orgMember.user.id,
+            role: role
+        });
+        
+        if (response.success) {
+            common.notification('Member added successfully', true);
+            loadData();
+            
+            if (props.callback) {
+                props.callback();
+            }
+        } else {
+            common.notification(response.message || 'Failed to add member', false);
+        }
+    } catch (error) {
+        console.error('Failed to add member:', error);
+        common.notification('Failed to add member', false);
+    } finally {
+        isLoading.value = false;
+    }
+}
+
+
 // Load members and invitations
 async function loadData() {
     try {
@@ -161,10 +202,20 @@ async function loadData() {
             membersEndpoint = `organizations/${props.organizationId}/teams/${props.entityId}/members`;
         }
         
-        const [membersResponse, invitationsResponse] = await Promise.all([
+        const promises = [
             api.get(membersEndpoint),
             api.get(`invitations/sent?${props.type}_id=${props.entityId}`)
-        ]);
+        ];
+        
+        // NEW: For teams, also load organization members who are not in the team
+        if (props.type === 'team') {
+            promises.push(
+                api.get(`organizations/${props.organizationId}/teams/${props.entityId}/non-members`)
+            );
+        }
+        
+        const responses = await Promise.all(promises);
+        const [membersResponse, invitationsResponse, orgMembersResponse] = responses;
         
         if (membersResponse.success) {
             // Handle different response structures
@@ -190,6 +241,11 @@ async function loadData() {
         if (invitationsResponse.success) {
             invitations.value = invitationsResponse.data.filter(inv => inv.status === 'pending') || [];
         }
+        
+        // NEW: Load organization members for teams
+        if (props.type === 'team' && orgMembersResponse && orgMembersResponse.success) {
+            organizationMembers.value = orgMembersResponse.data || [];
+        }
     } catch (error) {
         console.error('Failed to load data:', error);
         common.notification('Failed to load members', false);
@@ -197,7 +253,6 @@ async function loadData() {
         isLoading.value = false;
     }
 }
-
 
 const shouldShowInviteForm = computed(() => {
     return isAdmin.value && !showNoSeatsMessage.value;
@@ -634,6 +689,43 @@ function getStatusColor(status) {
                         </div>
                     </div>
                 </div>
+
+
+                <!-- Organization Members (NEW - Add this section) -->
+                <div v-if="props.type === 'team' && isAdmin && filteredItems.organizationMembers && filteredItems.organizationMembers.length > 0" class="section">
+                    <h3 class="section-title">ORGANIZATION MEMBERS ({{ filteredItems.organizationMembers.length }})</h3>
+                    <div class="member-list">
+                        <div 
+                            v-for="orgMember in filteredItems.organizationMembers" 
+                            :key="orgMember.id"
+                            class="member-item org-member-item"
+                        >
+                            <div class="member-info">
+                                <div class="member-avatar">
+                                    {{ getUserInitials(orgMember.user.name) }}
+                                </div>
+                                <div class="member-details">
+                                    <h4>{{ orgMember.user.name }}</h4>
+                                    <p>{{ orgMember.user.email }}</p>
+                                </div>
+                            </div>
+                            <div class="member-actions org-member-actions">
+                                <span class="add-as-label">Add as</span>
+                                <ButtonComponent
+                                    as="tertiary size36"
+                                    label="Admin"
+                                    @click="addOrganizationMember(orgMember, 'admin')"
+                                />
+                                <ButtonComponent
+                                    as="tertiary size36"
+                                    label="Member"
+                                    @click="addOrganizationMember(orgMember, 'member')"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 
                 <!-- Empty State -->
                 <div v-if="!isLoading && filteredItems.members.length === 0 && filteredItems.invitations.length === 0" class="empty-state">
@@ -795,7 +887,7 @@ function getStatusColor(status) {
 }
 
 .member-item.is-current-user {
-    background: var(--background-1);
+    background: var(--background-0);
 }
 
 .member-info {
@@ -893,7 +985,23 @@ background: var(--brand-yellow);
     align-items: center;
 }
 
+/* Organization Members Styles */
+.org-member-item {
+    background: var(--background-1);
+}
 
+.org-member-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.add-as-label {
+    font-size: 13px;
+    margin-right: 0;
+    font-weight: 500;
+    min-width: 50px;
+}
 
 
 .no-seats-alert .alert-content h4 {

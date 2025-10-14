@@ -1,14 +1,11 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { api } from '@utils/api';
-import { UserStore } from '@stores/user';
+import { BookingsService } from '@user_bookings/services/bookings';
+import { storage } from '@utils/storage';
 
 // Components
 import TabsComponent from '@global/tabs/view.vue';
 import BookingsList from '@user_bookings/components/list/view.vue';
-
-// Icons
-import { PhCalendar, PhClock, PhX, PhCheck } from '@phosphor-icons/vue';
 
 const props = defineProps({
     event: {
@@ -26,12 +23,14 @@ const props = defineProps({
 });
 
 // State
-const userStore = UserStore();
-const bookings = ref([]);
+const allBookings = ref([]);
 const isLoading = ref(false);
 const currentTab = ref('upcoming');
 const searchQuery = ref('');
 const refreshCounter = ref(0);
+
+// Constants
+const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
 
 // Tabs configuration
 const tabs = computed(() => [
@@ -57,7 +56,115 @@ const tabs = computed(() => [
     }
 ]);
 
-// Booking statistics
+// Get user's timezone (same as BookingsService)
+function getUserTimezone() {
+    return storage.get('user.timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+// Normalize booking data with TIMEZONE CONVERSION (same as BookingsService)
+function normalizeBooking(booking) {
+    if (!booking || booking.type === 'header') return booking;
+    
+    try {
+        const userTimezone = getUserTimezone();
+        
+        // Extract date and time parts from server format "2025-10-14 13:45:00"
+        const [datePart, timePart] = booking.start_time.split(' ');
+        const [endDatePart, endTimePart] = booking.end_time.split(' ');
+        
+        // Parse as UTC to preserve the exact time point
+        // This is critical - we treat server time as UTC
+        const serverDate = new Date(`${datePart}T${timePart}Z`);
+        const serverEndDate = new Date(`${endDatePart}T${endTimePart}Z`);
+        
+        // Format time in user's timezone
+        const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: userTimezone
+        });
+        
+        const userDateFormatter = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long',
+            timeZone: userTimezone
+        });
+        
+        // These are properly localized to user's timezone
+        const formattedStart = userTimeFormatter.format(serverDate);
+        const formattedEnd = userTimeFormatter.format(serverEndDate);
+        const dateKey = userDateFormatter.format(serverDate);
+        
+        // CRITICAL: Add type: 'booking' - BookingsList component requires this!
+        return {
+            ...booking,
+            type: 'booking', // THIS IS REQUIRED!
+            dateKey: dateKey,
+            booking_id: booking.booking_id || booking.id,
+            id: booking.id || booking.booking_id,
+            event_id: booking.event_id,
+            start_time: booking.start_time, // Keep original for date comparisons
+            end_time: booking.end_time,
+            formattedStart: formattedStart, // Timezone-converted times for display
+            formattedEnd: formattedEnd,
+            title: booking.title || booking.event_name || 'Untitled Booking',
+            status: booking.status || 'confirmed',
+            guests: booking.guests || [],
+            hosts: booking.hosts || [],
+            location: booking.location || [],
+            meeting_link: booking.meeting_link || null,
+            color: '#FFDE0E', // Default color
+            // Keep these for reference
+            originalStartTime: booking.start_time,
+            originalEndTime: booking.end_time
+        };
+    } catch (error) {
+        console.error('Error in timezone conversion:', error, booking);
+        // Fallback to raw values
+        return {
+            ...booking,
+            type: 'booking',
+            formattedStart: booking.start_time.split(' ')[1].substring(0, 5),
+            formattedEnd: booking.end_time.split(' ')[1].substring(0, 5),
+            dateKey: booking.start_time.split(' ')[0],
+            title: booking.title || booking.event_name || 'Untitled Booking',
+            booking_id: booking.booking_id || booking.id,
+            id: booking.id || booking.booking_id,
+            guests: booking.guests || [],
+            hosts: booking.hosts || [],
+            location: booking.location || [],
+            color: '#FFDE0E'
+        };
+    }
+}
+
+// Filter bookings for this specific event only
+const eventBookings = computed(() => {
+    if (!Array.isArray(allBookings.value)) return [];
+    
+    const filtered = allBookings.value.filter(item => {
+        if (!item) return false;
+        if (item.type === 'header') return false;
+        
+        // Convert both to strings for comparison
+        const itemEventId = String(item.event_id);
+        const targetEventId = String(props.eventId);
+        
+        return itemEventId === targetEventId;
+    });
+    
+    // Normalize all bookings - this adds type: 'booking' and timezone conversion
+    const normalized = filtered.map(normalizeBooking);
+    
+    console.log('✅ Normalized bookings with timezone conversion:', normalized);
+    
+    return normalized;
+});
+
+// STATIC booking statistics - always show all bookings for this event
 const bookingStats = computed(() => {
     const stats = {
         upcoming: 0,
@@ -67,209 +174,289 @@ const bookingStats = computed(() => {
         all: 0
     };
     
-    if (!Array.isArray(bookings.value)) return stats;
+    const now = new Date();
     
-    bookings.value.forEach(booking => {
+    eventBookings.value.forEach(booking => {
         if (!booking || booking.type === 'header') return;
         
         stats.all++;
         
-        switch (booking.status?.toLowerCase()) {
-            case 'confirmed':
-                const bookingTime = new Date(booking.start_time);
-                const now = new Date();
-                if (bookingTime > now) {
-                    stats.upcoming++;
-                } else {
-                    stats.past++;
-                }
-                break;
-            case 'canceled':
-                stats.canceled++;
-                break;
-            case 'pending':
-                stats.pending++;
-                break;
+        const status = booking.status?.toLowerCase();
+        
+        if (status === 'canceled') {
+            stats.canceled++;
+        } else if (status === 'pending') {
+            stats.pending++;
+        } else if (status === 'confirmed') {
+            // Parse server time as UTC for comparison
+            const [datePart, timePart] = booking.originalStartTime.split(' ');
+            const bookingTime = new Date(`${datePart}T${timePart}Z`);
+            
+            if (bookingTime > now) {
+                stats.upcoming++;
+            } else {
+                stats.past++;
+            }
         }
     });
     
     return stats;
 });
 
-// Get bookings happening now
-const nowBookings = computed(() => {
-    if (!Array.isArray(bookings.value)) return [];
-    
+// Filter by current tab
+const tabFilteredBookings = computed(() => {
     const now = new Date();
-    const nowStart = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes before
-    const nowEnd = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes after
     
-    return bookings.value.filter(booking => {
+    const filtered = eventBookings.value.filter(booking => {
         if (!booking || booking.type === 'header') return false;
         
-        const startTime = new Date(booking.start_time);
-        return startTime >= nowStart && startTime <= nowEnd && booking.status === 'confirmed';
-    });
-});
-
-// Filter bookings based on current tab and search
-const filteredBookings = computed(() => {
-    if (!Array.isArray(bookings.value)) return [];
-    
-    let filtered = bookings.value.filter(booking => {
-        if (!booking) return false;
-        if (booking.type === 'header') return true;
+        const status = booking.status?.toLowerCase();
         
-        // Filter by tab
-        const now = new Date();
-        const bookingTime = new Date(booking.start_time);
+        // Parse server time as UTC for comparison
+        const [datePart, timePart] = booking.originalStartTime.split(' ');
+        const bookingTime = new Date(`${datePart}T${timePart}Z`);
+        
+        let shouldShow = false;
         
         switch (currentTab.value) {
             case 'upcoming':
-                if (booking.status !== 'confirmed' || bookingTime <= now) return false;
+                shouldShow = status === 'confirmed' && bookingTime > now;
                 break;
             case 'past':
-                if (booking.status !== 'confirmed' || bookingTime > now) return false;
+                shouldShow = status === 'confirmed' && bookingTime <= now;
                 break;
             case 'canceled':
-                if (booking.status !== 'canceled') return false;
+                shouldShow = status === 'canceled';
                 break;
             case 'pending':
-                if (booking.status !== 'pending') return false;
+                shouldShow = status === 'pending';
                 break;
             case 'all':
-                // Show all bookings
+                shouldShow = true;
                 break;
             default:
-                return false;
+                shouldShow = false;
         }
         
-        return true;
+        return shouldShow;
     });
     
-    // Apply search filter
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase();
-        filtered = filtered.filter(booking => {
-            if (!booking || booking.type === 'header') return true;
-            
-            return (
-                (booking.title && booking.title.toLowerCase().includes(query)) ||
-                (booking.guests && Array.isArray(booking.guests) && 
-                 booking.guests.some(guest => 
-                     (guest.name && guest.name.toLowerCase().includes(query)) ||
-                     (guest.email && guest.email.toLowerCase().includes(query))
-                 )) ||
-                (booking.hosts && Array.isArray(booking.hosts) && 
-                 booking.hosts.some(host => 
-                     (host.name && host.name.toLowerCase().includes(query)) ||
-                     (host.email && host.email.toLowerCase().includes(query))
-                 ))
-            );
-        });
-    }
+    console.log('After tab filter:', filtered.length, 'bookings');
     
     return filtered;
 });
 
-// Load bookings for this specific event
+// Add date headers to filtered bookings
+const bookingsWithHeaders = computed(() => {
+    if (tabFilteredBookings.value.length === 0) return [];
+    
+    const grouped = {};
+    
+    // Group bookings by dateKey (already timezone-converted in normalizeBooking)
+    tabFilteredBookings.value.forEach(booking => {
+        const dateKey = booking.dateKey;
+        
+        if (!grouped[dateKey]) {
+            grouped[dateKey] = {
+                dateKey: dateKey,
+                bookings: []
+            };
+        }
+        
+        grouped[dateKey].bookings.push(booking);
+    });
+    
+    // Sort date keys
+    const sortedDates = Object.keys(grouped).sort((a, b) => {
+        return new Date(a) - new Date(b);
+    });
+    
+    // Build result with headers
+    const result = [];
+    sortedDates.forEach(dateKey => {
+        const group = grouped[dateKey];
+        
+        // Add header
+        result.push({
+            type: 'header',
+            date: new Date(dateKey),
+            formattedDate: dateKey // Already formatted by normalizeBooking
+        });
+        
+        // Add bookings sorted by original time (UTC)
+        const sortedBookings = group.bookings.sort((a, b) => {
+            const [datePartA, timePartA] = a.originalStartTime.split(' ');
+            const [datePartB, timePartB] = b.originalStartTime.split(' ');
+            const timeA = new Date(`${datePartA}T${timePartA}Z`);
+            const timeB = new Date(`${datePartB}T${timePartB}Z`);
+            return timeA - timeB;
+        });
+        
+        result.push(...sortedBookings);
+    });
+    
+    console.log('Final data with headers:', result);
+    
+    return result;
+});
+
+// Apply search filter
+const filteredBookings = computed(() => {
+    if (!searchQuery.value) {
+        return bookingsWithHeaders.value;
+    }
+    
+    const query = searchQuery.value.toLowerCase();
+    const result = [];
+    let currentHeader = null;
+    let headerBookings = [];
+    
+    for (const item of bookingsWithHeaders.value) {
+        if (!item) continue;
+        
+        if (item.type === 'header') {
+            if (currentHeader && headerBookings.length > 0) {
+                result.push(currentHeader);
+                result.push(...headerBookings);
+            }
+            currentHeader = item;
+            headerBookings = [];
+        } else {
+            const matches = (
+                (item.title && item.title.toLowerCase().includes(query)) ||
+                (item.guests && Array.isArray(item.guests) && 
+                 item.guests.some(guest => 
+                     (guest.name && guest.name.toLowerCase().includes(query)) ||
+                     (guest.email && guest.email.toLowerCase().includes(query))
+                 )) ||
+                (item.hosts && Array.isArray(item.hosts) && 
+                 item.hosts.some(host => 
+                     (host.name && host.name.toLowerCase().includes(query)) ||
+                     (host.email && host.email.toLowerCase().includes(query))
+                 ))
+            );
+            
+            if (matches) {
+                headerBookings.push(item);
+            }
+        }
+    }
+    
+    if (currentHeader && headerBookings.length > 0) {
+        result.push(currentHeader);
+        result.push(...headerBookings);
+    }
+    
+    return result;
+});
+
+// Get bookings happening now
+const nowBookings = computed(() => {
+    const now = new Date();
+    const nowStart = new Date(now.getTime() - 5 * 60 * 1000);
+    const nowEnd = new Date(now.getTime() + 5 * 60 * 1000);
+    
+    return eventBookings.value.filter(booking => {
+        if (!booking || booking.type === 'header') return false;
+        
+        // Parse server time as UTC
+        const [datePart, timePart] = booking.originalStartTime.split(' ');
+        const startTime = new Date(`${datePart}T${timePart}Z`);
+        
+        return startTime >= nowStart && startTime <= nowEnd && booking.status === 'confirmed';
+    });
+});
+
+// Load ALL bookings at once (past + upcoming + canceled + pending)
 async function loadBookings() {
     try {
         isLoading.value = true;
         
-        // Use the correct API route with organization prefix
-        const response = await api.get(`organizations/${props.organizationId}/events/${props.eventId}/bookings`);
+        const now = new Date();
+        const pastStart = new Date(now.getTime() - THREE_MONTHS_MS).toISOString();
+        const futureEnd = new Date(now.getTime() + THREE_MONTHS_MS).toISOString();
         
-        if (response.success && response.data) {
-            // Process bookings to add date headers
-            const processedBookings = processBookingsWithHeaders(response.data);
-            bookings.value = processedBookings;
-        } else {
-            bookings.value = [];
-        }
+        console.log('=== LOADING BOOKINGS FOR EVENT', props.eventId, '===');
+        
+        // Load all types of bookings
+        const [upcomingData, pastData, canceledData, pendingData] = await Promise.all([
+            BookingsService.getBookings({
+                status: 'upcoming',
+                startTime: now.toISOString(),
+                endTime: futureEnd,
+                page: 1,
+                pageSize: 200,
+                useCache: false,
+                internalOnly: true
+            }),
+            BookingsService.getBookings({
+                status: 'past',
+                startTime: pastStart,
+                endTime: now.toISOString(),
+                page: 1,
+                pageSize: 200,
+                useCache: false,
+                internalOnly: true
+            }),
+            BookingsService.getBookings({
+                status: 'canceled',
+                startTime: pastStart,
+                endTime: futureEnd,
+                page: 1,
+                pageSize: 200,
+                useCache: false,
+                internalOnly: true
+            }),
+            BookingsService.getBookings({
+                status: 'pending',
+                startTime: now.toISOString(),
+                endTime: futureEnd,
+                page: 1,
+                pageSize: 200,
+                useCache: false,
+                internalOnly: true
+            })
+        ]);
+        
+        // Combine all bookings (filter out headers, we'll add our own)
+        // Note: BookingsService already applies timezone conversion, but we need raw data
+        // So we'll work with the original data and apply our own conversion
+        const combinedBookings = [
+            ...(upcomingData?.bookings || []),
+            ...(pastData?.bookings || []),
+            ...(canceledData?.bookings || []),
+            ...(pendingData?.bookings || [])
+        ].filter(item => item && item.type !== 'header');
+        
+        // Remove duplicates by booking_id
+        const uniqueBookings = [];
+        const seenIds = new Set();
+        
+        combinedBookings.forEach(booking => {
+            const bookingId = booking.booking_id || booking.id;
+            if (!seenIds.has(bookingId)) {
+                seenIds.add(bookingId);
+                // Use originalStartTime if it exists (from BookingsService conversion), otherwise use start_time
+                const rawBooking = {
+                    ...booking,
+                    start_time: booking.originalStartTime || booking.start_time,
+                    end_time: booking.originalEndTime || booking.end_time
+                };
+                uniqueBookings.push(rawBooking);
+            }
+        });
+        
+        allBookings.value = uniqueBookings;
+        
+        console.log('✅ Loaded', allBookings.value.length, 'total bookings');
+        console.log('✅ Filtered to', eventBookings.value.length, 'bookings for event', props.eventId);
+        
     } catch (error) {
-        console.error('Failed to load event bookings:', error);
-        bookings.value = [];
+        console.error('Failed to load bookings:', error);
+        allBookings.value = [];
     } finally {
         isLoading.value = false;
     }
-}
-
-// Process bookings to add date headers (similar to main bookings page)
-function processBookingsWithHeaders(bookingsList) {
-    if (!Array.isArray(bookingsList) || bookingsList.length === 0) {
-        return [];
-    }
-    
-    // Group bookings by date
-    const groupedByDate = {};
-    const dateHeaders = [];
-    
-    bookingsList.forEach(booking => {
-        if (!booking || !booking.start_time) return;
-        
-        // Parse the date from your API format "2025-08-27 10:00:00"
-        const [datePart, timePart] = booking.start_time.split(' ');
-        const date = new Date(`${datePart}T${timePart}`);
-        const dateKey = date.toDateString();
-        const formattedDate = date.toLocaleDateString('en-US', {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-            year: 'numeric'
-        });
-        
-        if (!groupedByDate[dateKey]) {
-            groupedByDate[dateKey] = [];
-            dateHeaders.push({
-                type: 'header',
-                formattedDate,
-                dateKey,
-                date
-            });
-        }
-        
-        // Add dateKey to booking for filtering and ensure proper format
-        booking.dateKey = dateKey;
-        
-        // Normalize booking data to match what BookingsList expects
-        const normalizedBooking = {
-            ...booking,
-            booking_id: booking.id,
-            event_id: booking.event_id,
-            // Convert your API format "2025-08-27 10:00:00" to ISO format
-            start_time: `${datePart}T${timePart}`,
-            end_time: booking.end_time ? `${booking.end_time.split(' ')[0]}T${booking.end_time.split(' ')[1]}` : `${datePart}T${timePart}`,
-            status: booking.status,
-            title: `Meeting with ${booking.guests?.[0]?.name || 'Guest'}`,
-            guests: booking.guests || [],
-            hosts: [], // Will be populated from event data if needed
-            type: 'booking', // Add type to distinguish from headers
-            // Add additional time fields that BookingsList might expect
-            dateKey,
-            formattedDate
-        };
-        
-        groupedByDate[dateKey].push(normalizedBooking);
-    });
-    
-    // Sort headers by date
-    dateHeaders.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    // Build final array with headers and bookings
-    const result = [];
-    dateHeaders.forEach(header => {
-        result.push(header);
-        const bookings = groupedByDate[header.dateKey] || [];
-        bookings.sort((a, b) => {
-            const aTime = new Date(`${a.start_time.split(' ')[0]}T${a.start_time.split(' ')[1]}`);
-            const bTime = new Date(`${b.start_time.split(' ')[0]}T${b.start_time.split(' ')[1]}`);
-            return aTime - bTime;
-        });
-        result.push(...bookings);
-    });
-    
-    return result;
 }
 
 // Handle tab change
@@ -283,11 +470,6 @@ function handleBookingRefresh() {
     loadBookings();
 }
 
-// Watch for search changes
-watch(searchQuery, () => {
-    // Debounce search if needed
-});
-
 onMounted(() => {
     loadBookings();
 });
@@ -295,7 +477,7 @@ onMounted(() => {
 
 <template>
     <div class="event-bookings">
-        <!-- Header with stats -->
+        <!-- Header with STATIC stats -->
         <div class="bookings-header">
             <div class="header-content">
                 <h3>Event Bookings</h3>
@@ -364,23 +546,18 @@ onMounted(() => {
         
         <!-- Bookings List -->
         <div class="bookings-content">
+            <div v-if="isLoading" style="padding: 40px; text-align: center;">
+                Loading bookings...
+            </div>
+            
             <BookingsList 
+                v-else
                 :bookings="filteredBookings" 
                 :isLoading="isLoading"
                 @refresh="handleBookingRefresh"
             />
             
-            <!-- Empty state -->
-            <div v-if="!isLoading && filteredBookings.length === 0" class="empty-state">
-                <PhCalendar :size="48" />
-                <h4>No bookings found</h4>
-                <p v-if="searchQuery">Try adjusting your search or switching to a different tab.</p>
-                <p v-else-if="currentTab === 'upcoming'">No upcoming bookings for this event.</p>
-                <p v-else-if="currentTab === 'past'">No past bookings for this event.</p>
-                <p v-else-if="currentTab === 'canceled'">No canceled bookings for this event.</p>
-                <p v-else-if="currentTab === 'pending'">No pending bookings for this event.</p>
-                <p v-else>This event has no bookings yet.</p>
-            </div>
+           
         </div>
     </div>
 </template>
@@ -392,7 +569,6 @@ onMounted(() => {
     gap: 24px;
 }
 
-/* Header */
 .bookings-header {
     display: flex;
     align-items: center;
@@ -442,7 +618,6 @@ onMounted(() => {
     font-weight: 500;
 }
 
-/* Search */
 .search-section {
     display: flex;
     align-items: center;
@@ -459,9 +634,9 @@ onMounted(() => {
     padding: 10px 16px;
     border: 1px solid var(--border);
     border-radius: 8px;
+    font-size: 14px;
     background: var(--background-0);
     color: var(--text-primary);
-    font-size: 14px;
 }
 
 .search-input:focus {
@@ -469,55 +644,48 @@ onMounted(() => {
     border-color: var(--primary);
 }
 
-.search-input::placeholder {
-    color: var(--text-tertiary);
-}
-
-/* Now section */
 .now-section {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    padding: 16px;
+    background: var(--primary-light);
+    border-radius: 12px;
+    border: 1px solid var(--primary);
 }
 
 .now-indicator {
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 14px;
 }
 
 .dot {
     width: 8px;
     height: 8px;
-    background: var(--success);
+    background: var(--primary);
     border-radius: 50%;
     animation: pulse 2s infinite;
 }
 
-.now-text {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--success);
-}
-
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
 }
 
-/* Tabs */
 .tabs-section {
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0;
+    margin-top: 8px;
 }
 
-/* Bookings content */
 .bookings-content {
-    flex: 1;
+    min-height: 200px;
 }
 
-/* Empty state */
 .empty-state {
     display: flex;
     flex-direction: column;
@@ -525,53 +693,30 @@ onMounted(() => {
     justify-content: center;
     padding: 60px 20px;
     text-align: center;
-    color: var(--text-secondary);
 }
 
 .empty-state h4 {
-    margin: 16px 0 8px 0;
-    color: var(--text-primary);
+    margin: 0 0 8px 0;
     font-size: 18px;
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .empty-state p {
     margin: 0;
-    max-width: 400px;
-    line-height: 1.5;
+    color: var(--text-secondary);
+    font-size: 14px;
 }
 
 @media (max-width: 768px) {
     .bookings-header {
         flex-direction: column;
         align-items: flex-start;
-        gap: 16px;
     }
     
     .booking-stats {
         width: 100%;
-        justify-content: space-between;
-        gap: 8px;
-    }
-    
-    .stat-item {
-        flex: 1;
-        min-width: 0;
-        padding: 8px 12px;
-    }
-    
-    .stat-number {
-        font-size: 16px;
-    }
-    
-    .search-section {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-    }
-    
-    .search-container {
-        max-width: none;
+        overflow-x: auto;
     }
 }
 </style>
