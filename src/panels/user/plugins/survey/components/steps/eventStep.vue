@@ -38,10 +38,16 @@ function createEvent() {
             preselectedOrganizationId: defaultOrganization.value?.id,
             callback: (event, data, response, success) => {
                 if (success) {
-                    console.log('Event created:', response);
-                    createdEvent.value = response.data || response;
+                    console.log('Event creation response:', response);
+                    console.log('Response.data:', response.data);
+                    
+                    // The event data is in response.data
+                    createdEvent.value = response.data;
                     eventCreated.value = true;
                     popup.close();
+                    
+                    // Auto-advance to next step immediately after event creation
+                    continueToCompletion();
                 }
             },
             class: 'h-auto',
@@ -88,7 +94,7 @@ function skipEventCreation() {
             <!-- Event Creation Guide -->
             <div class="event-guide">
                 <h3>What is an Event Type?</h3>
-                <div class="guide-grid">
+                <div class="guide-grid" style="margin-bottom: 30px;">
                     <div class="guide-item">
                         <PhUsers :size="24" weight="duotone" />
                         <div>
@@ -111,83 +117,17 @@ function skipEventCreation() {
                         </div>
                     </div>
                 </div>
+
+                <ButtonComponent
+                    as="primary"
+                    :iconLeft="{ component: PhCalendarPlus, weight: 'bold' }"
+                    label="Create Event Type"
+                    @click="createEvent"
+                />
             </div>
 
-            <!-- Event Creation Status -->
-            <div v-if="!eventCreated" class="creation-section">
-                <div class="creation-card">
-                    <div class="card-content">
-                        <h4>Ready to create your first event type?</h4>
-                        <p>Common examples: "30 Minute Meeting", "Discovery Call", "Team Standup", "Client Consultation"</p>
-                        
-                        <div class="creation-actions">
-                            <ButtonComponent
-                                as="primary"
-                                :iconLeft="{ component: PhCalendarPlus, weight: 'bold' }"
-                                label="Create Event Type"
-                                @click="createEvent"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Event Created Success -->
-            <div v-else class="success-section">
-                <div class="success-card">
-                    <div class="success-icon">
-                        <PhRocketLaunch :size="32" weight="duotone" />
-                    </div>
-                    <h3>🎉 Event Type Created!</h3>
-                    <p v-if="createdEvent">
-                        "<strong>{{ createdEvent.name || createdEvent.title }}</strong>" is now ready for bookings.
-                    </p>
-                    <p v-else>
-                        Your event type has been created and is ready for bookings.
-                    </p>
-                    
-                    <div class="success-features">
-                        <h4>What happens next:</h4>
-                        <ul>
-                            <li>People can now book time with you using this event type</li>
-                            <li>You'll receive email notifications for new bookings</li>
-                            <li>Automatic calendar invites will be sent to attendees</li>
-                            <li>Meeting links will be created automatically (if integrations are connected)</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Continue Actions -->
-            <div class="step-actions">
-                <div class="actions-content">
-                    <div class="action-info">
-                        <h4 v-if="eventCreated">Great job! Ready to learn more?</h4>
-                        <h4 v-else>Want to skip this step?</h4>
-                        
-                        <p v-if="eventCreated">
-                            Let's show you how to use your new scheduling platform.
-                        </p>
-                        <p v-else>
-                            You can always create event types later from the events page.
-                        </p>
-                    </div>
-                    
-                    <div class="action-buttons">
-                        <ButtonComponent
-                            v-if="!eventCreated"
-                            as="tertiary"
-                            label="Skip for now"
-                            @click="skipEventCreation"
-                        />
-                        <ButtonComponent
-                            as="primary"
-                            :label="eventCreated ? 'Continue' : 'Continue without event'"
-                            @click="continueToCompletion"
-                        />
-                    </div>
-                </div>
-            </div>
+           
         </div>
     </div>
 </template>
@@ -212,11 +152,8 @@ function skipEventCreation() {
 .step-icon {
     margin-bottom: 16px;
     color: var(--brand-default);
-
     display: flex;
     justify-content: center;
-
-
 }
 
 .step-header h2 {
@@ -308,78 +245,6 @@ function skipEventCreation() {
     line-height: 1.4;
 }
 
-/* Success Section */
-.success-section {
-    display: flex;
-    justify-content: center;
-}
-
-.success-card {
-    background: linear-gradient(135deg, var(--brand-default)10, var(--background-0));
-    border: 1px solid var(--brand-default)30;
-    border-radius: var(--radius-lg);
-    padding: 32px;
-    text-align: center;
-    max-width: 500px;
-}
-
-.success-icon {
-    margin-bottom: 16px;
-    color: var(--brand-default);
-        display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.success-card h3 {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0 0 8px 0;
-}
-
-.success-card > p {
-    font-size: 16px;
-    color: var(--text-secondary);
-    margin: 0 0 24px 0;
-}
-
-.success-features {
-    text-align: left;
-}
-
-.success-features h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 12px 0;
-}
-
-.success-features ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.success-features li {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    color: var(--text-secondary);
-    font-size: 14px;
-    line-height: 1.4;
-}
-
-.success-features li::before {
-    content: '✓';
-    color: var(--brand-default);
-    font-weight: 600;
-    margin-top: 1px;
-}
-
 /* Step Actions */
 .step-actions {
     background: var(--background-0);
@@ -423,8 +288,7 @@ function skipEventCreation() {
         grid-template-columns: 1fr;
     }
     
-    .creation-card,
-    .success-card {
+    .creation-card {
         padding: 24px;
         max-width: 100%;
     }

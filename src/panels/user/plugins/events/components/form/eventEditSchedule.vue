@@ -26,6 +26,7 @@ const isSubmitting = ref(false);
 const eventData = ref(null);
 const scheduleData = ref(null);
 const bufferTime = ref(0);
+const advanceNotice = ref(60);
 const errorMessage = ref('');
 const currentTimezone = ref('');
 
@@ -40,6 +41,18 @@ const bufferTimeOptions = [
     { label: '2 hours', value: 120 }
 ];
 
+// Advance notice options
+const advanceNoticeOptions = [
+    { label: '30 minutes', value: 30 },
+    { label: '1 hour', value: 60 },
+    { label: '2 hours', value: 120 },
+    { label: '4 hours', value: 240 },
+    { label: '8 hours', value: 480 },
+    { label: '12 hours', value: 720 },
+    { label: '24 hours (1 day)', value: 1440 },
+    { label: '48 hours (2 days)', value: 2880 }
+];
+
 // Method to handle the schedule update from the EditTime component
 const updateSchedule = (data) => {
     console.log('Schedule data updated:', data);
@@ -50,6 +63,12 @@ const updateSchedule = (data) => {
 const updateBufferTime = (value) => {
     bufferTime.value = value;
     console.log('Buffer time updated:', value);
+};
+
+// Method to handle advance notice change
+const updateAdvanceNotice = (value) => {
+    advanceNotice.value = value;
+    console.log('Advance notice updated:', value);
 };
 
 // Fetch the current event data when the component is mounted
@@ -74,8 +93,12 @@ onMounted(async () => {
             // Initialize buffer time from event data
             bufferTime.value = response.data.buffer_time || 0;
             
+            // Initialize advance notice from event data
+            advanceNotice.value = response.data.advance_notice_minutes || 60;
+            
             console.log('Loaded event data:', eventData.value);
             console.log('Loaded buffer time:', bufferTime.value);
+            console.log('Loaded advance notice:', advanceNotice.value);
         } else {
             errorMessage.value = response?.message || 'Failed to load event data';
         }
@@ -97,19 +120,20 @@ const handleSubmit = async () => {
     try {
         isSubmitting.value = true;
         
-        // Prepare update data including both schedule and buffer time
+        // Prepare update data including schedule, buffer time, and advance notice
         const updateData = {
             schedule: scheduleData.value.schedule,
-            bufferTime: bufferTime.value
+            bufferTime: bufferTime.value,
+            advanceNoticeMinutes: advanceNotice.value
         };
         
-        console.log('Updating schedule and buffer time with data:', updateData);
+        console.log('Updating schedule, buffer time, and advance notice with data:', updateData);
         
         // Call API to update the event
         const response = await api.put(`events/${props.eventId}?organization_id=${props.organizationId}`, updateData);
         
         if (response && response.success) {
-            common.notification('Schedule and buffer time updated successfully!', true);
+            common.notification('Schedule settings updated successfully!', true);
             
             // Call the callback if provided
             if (props.callback) {
@@ -152,8 +176,8 @@ const handleSubmit = async () => {
                     />
                 </div>
 
-
-               <div class="buffer-time-section" style="margin-top: 24px;">
+                <!-- Buffer Time Section -->
+                <div class="buffer-time-section" style="margin-top: 24px;">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
                         <h4 style="margin: 0; font-size: 16px; font-weight: 600;">Buffer Time</h4>
                         <PhQuestion 
@@ -171,6 +195,28 @@ const handleSubmit = async () => {
                         @change="updateBufferTime"
                         :options="bufferTimeOptions"
                         placeholder="Select buffer time"
+                    />
+                </div>
+
+                <!-- Advance Notice Section -->
+                <div class="advance-notice-section" style="margin-top: 24px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 600;">Minimum Advance Notice</h4>
+                        <PhQuestion 
+                            :size="16" 
+                            style="color: var(--text-tertiary); cursor: help;" 
+                            v-tooltip="{
+                                content: 'Minimum advance notice is the minimum time before a meeting can be scheduled. For example, if you set 2 hours advance notice and it\'s currently 1:00 PM, the earliest available slot will be 3:00 PM. This ensures you have enough preparation time.',
+                                placement: 'top'
+                            }"
+                        />
+                    </div>
+                    
+                    <SelectComponent
+                        :value="advanceNotice"
+                        @change="updateAdvanceNotice"
+                        :options="advanceNoticeOptions"
+                        placeholder="Select minimum advance notice"
                     />
                 </div>
                 
@@ -254,5 +300,12 @@ const handleSubmit = async () => {
     color: var(--text-secondary);
     font-size: 14px;
     margin: 0;
+}
+
+/* Buffer time and advance notice section styles */
+.buffer-time-section,
+.advance-notice-section {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
 }
 </style>

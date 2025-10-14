@@ -24,7 +24,7 @@ const userStore = UserStore();
 // Survey state
 const currentStep = ref(1);
 const isCompleting = ref(false);
-
+const createdEventData = ref(null);
 // Survey steps configuration
 const steps = [
     {
@@ -92,12 +92,20 @@ function finishSurvey() {
 function handleStepComplete(stepData) {
     console.log('Step completed:', stepData);
     
+    // Store event data from step 3 for use in step 4
+    if (stepData.step === 'event' && stepData.data) {
+        if (stepData.data.event) {
+            // Store the event data - handle both direct objects and Vue Proxies
+            createdEventData.value = stepData.data.eventCreated ? stepData.data.event : null;
+            console.log('Stored createdEventData:', createdEventData.value);
+        }
+    }
+    
     // Auto-advance to next step (except on last step)
     if (!isLastStep.value) {
         nextStep();
     }
 }
-
 // Get organizations for first step
 const organizations = computed(() => {
     return mergeOrganizationsAndTeams();
@@ -182,6 +190,7 @@ onMounted(() => {
                         <SurveyStepComplete
                             v-if="currentStep === 4"
                             :organizations="organizations"
+                            :createdEvent="createdEventData"
                             @complete="handleStepComplete"
                         />
                     </div>
@@ -208,12 +217,12 @@ onMounted(() => {
                                 />
                                 
                                 <ButtonComponent
-                                    v-if="!isLastStep"
+                                    v-if="!isLastStep && currentStep !== 3"
                                     as="primary"
                                     label="Next"
                                     @click="nextStep"
                                 />
-                                
+                                                                
                                 <ButtonComponent
                                     v-if="isLastStep"
                                     as="primary"

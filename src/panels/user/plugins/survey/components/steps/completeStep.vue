@@ -1,6 +1,6 @@
-<!-- src/panels/user/plugins/survey/components/steps/completeStep.vue -->
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 
 // Components
 import ButtonComponent from '@form/button/view.vue';
@@ -15,13 +15,19 @@ const props = defineProps({
     organizations: {
         type: Array,
         default: () => []
+    },
+    createdEvent: {
+        type: Object,
+        default: null
     }
 });
 
 const emit = defineEmits(['complete']);
+const router = useRouter();
 
 // State
 const linkCopied = ref(false);
+const expandedFaq = ref(null);
 
 // Computed
 const defaultOrganization = computed(() => {
@@ -30,18 +36,25 @@ const defaultOrganization = computed(() => {
 
 const bookingUrl = computed(() => {
     if (!defaultOrganization.value || !defaultOrganization.value.slug) {
-        return `${window.location.protocol}//${window.location.hostname}/book`;
+        return 'skedi.com/your-org/schedule/your-event';
     }
-    return `${window.location.protocol}//${defaultOrganization.value.slug}.${window.location.hostname}`;
+    
+    // If we have a created event with slug, show the full booking URL
+    if (props.createdEvent && props.createdEvent.slug) {
+        return `skedi.com/${defaultOrganization.value.slug}/schedule/${props.createdEvent.slug}`;
+    }
+    
+    // Otherwise show organization booking page
+    return `skedi.com/${defaultOrganization.value.slug}`;
 });
 
 // Methods
 async function copyBookingUrl() {
     try {
-        await navigator.clipboard.writeText(bookingUrl.value);
+        const fullUrl = `https://${bookingUrl.value}`;
+        await navigator.clipboard.writeText(fullUrl);
         linkCopied.value = true;
         
-        // Reset the copied state after 3 seconds
         setTimeout(() => {
             linkCopied.value = false;
         }, 3000);
@@ -51,15 +64,20 @@ async function copyBookingUrl() {
 }
 
 function openBookingPage() {
-    window.open(bookingUrl.value, '_blank');
+    window.open(`https://${bookingUrl.value}`, '_blank');
 }
 
 function viewEventSettings() {
-    // This would navigate to the events page
-    emit('complete', {
-        step: 'complete',
-        action: 'view_settings'
-    });
+    console.log('createdEvent:', props.createdEvent);
+    console.log('createdEvent.id:', props.createdEvent?.id);
+    
+    if (props.createdEvent && props.createdEvent.id) {
+        router.push(`/events/${props.createdEvent.id}`);
+    } else {
+        console.log('No event ID found, going to events list');
+        // If no event was created, go to events list
+        router.push('/events');
+    }
 }
 
 function finishSurvey() {
@@ -67,6 +85,10 @@ function finishSurvey() {
         step: 'complete',
         action: 'finish'
     });
+}
+
+function toggleFaq(index) {
+    expandedFaq.value = expandedFaq.value === index ? null : index;
 }
 
 // FAQ data
@@ -88,12 +110,6 @@ const faqs = ref([
         answer: "You can invite team members to your organization and create shared event types. Each member can have their own availability and booking settings."
     }
 ]);
-
-const expandedFaq = ref(null);
-
-function toggleFaq(index) {
-    expandedFaq.value = expandedFaq.value === index ? null : index;
-}
 </script>
 
 <template>
@@ -101,55 +117,58 @@ function toggleFaq(index) {
         <div class="step-content">
             <!-- Success Header -->
             <div class="success-header">
+                <div class="success-icon">
+                    <PhCheckCircle :size="64" weight="fill" />
+                </div>
                 <h2>🎉 You're All Set!</h2>
                 <p class="success-description">
-                    Your scheduling platform is ready to use. Here's everything you need to know to get started.
+                    Your scheduling platform is ready to use. Here's what you need to know to get started.
                 </p>
             </div>
 
-            <!-- Key Information Cards -->
+            <!-- Info Cards -->
             <div class="info-cards">
-                <!-- Booking URL Card -->
+                <!-- Booking URL -->
                 <div class="info-card highlight">
                     <div class="card-header">
                         <PhLink :size="24" weight="duotone" />
-                        <h3>Calendar URL</h3>
+                        <h3>Your Booking Page</h3>
                     </div>
                     <p class="card-description">
-                        On this URL people can schedule an event with you:
+                        Share this URL with anyone you want to schedule meetings with:
                     </p>
                     <div class="url-display">
                         <div class="url-text">{{ bookingUrl }}</div>
                         <div class="url-actions">
                             <ButtonComponent
-                                as="secondary"
-                                :iconLeft="{ component: PhCopy, weight: 'bold' }"
-                                :label="linkCopied ? 'Copied!' : 'Copy'"
+                                as="tertiary icon"
+                                :iconLeft="{ component: linkCopied ? PhCheckCircle : PhCopy, weight: 'bold' }"
                                 @click="copyBookingUrl"
-                                :disabled="linkCopied"
+                                v-tooltip="{ content: linkCopied ? 'Copied!' : 'Copy link' }"
                             />
                             <ButtonComponent
-                                as="tertiary"
+                                as="tertiary icon"
                                 :iconLeft="{ component: PhArrowSquareOut, weight: 'bold' }"
-                                label="Open"
                                 @click="openBookingPage"
+                                v-tooltip="{ content: 'Open in new tab' }"
                             />
                         </div>
                     </div>
                 </div>
 
-                <!-- Bookings Management -->
+                <!-- Calendar View -->
                 <div class="info-card">
                     <div class="card-header">
                         <PhCalendar :size="24" weight="duotone" />
-                        <h3>Bookings</h3>
+                        <h3>Where can I see my bookings?</h3>
                     </div>
                     <p class="card-description">
-                        In sidebar on left you can always access your bookings. Here you can view upcoming meetings, reschedule, or cancel bookings as needed.
+                        View all your scheduled meetings on the Calendar page.
+                        Here you can view upcoming meetings, reschedule, or cancel bookings as needed.
                     </p>
                     <div class="screenshot-placeholder">
                         <div class="screenshot-box">
-                            <img src="https://global.divhunt.com/09ba1f59765ab329591dc78b69b43d38_30751.png" alt="Bookings screesnhot">
+                            <img src="https://global.divhunt.com/09ba1f59765ab329591dc78b69b43d38_30751.png" alt="Bookings screenshot">
                         </div>
                     </div>
                 </div>
@@ -194,12 +213,13 @@ function toggleFaq(index) {
                         <p>Adjust availability, durations, questions, and more for your event types.</p>
                     </div>
                     <div>
-                    <ButtonComponent
-                        as="primary"
-                        :iconLeft="{ component: PhGearSix, weight: 'bold' }"
-                        label="View Event Settings"
-                        @click="viewEventSettings"
-                    /></div>
+                        <ButtonComponent
+                            as="secondary"
+                            :iconLeft="{ component: PhGearSix, weight: 'bold' }"
+                            label="View Event Settings"
+                            @click="viewEventSettings"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -207,20 +227,19 @@ function toggleFaq(index) {
             <div class="faq-section">
                 <div class="faq-header">
                     <PhQuestion :size="24" weight="duotone" />
-                    <h3>Do you need any more help?</h3>
+                    <h3>Frequently Asked Questions</h3>
                 </div>
-                
                 <div class="faq-list">
                     <div 
                         v-for="(faq, index) in faqs" 
                         :key="index"
-                        :class="['faq-item', { 'expanded': expandedFaq === index }]"
+                        class="faq-item"
                         @click="toggleFaq(index)"
                     >
                         <div class="faq-question">
                             <span>{{ faq.question }}</span>
                             <PhCaretDown 
-                                :size="16" 
+                                :size="20" 
                                 :style="{ transform: expandedFaq === index ? 'rotate(180deg)' : 'rotate(0deg)' }"
                             />
                         </div>
@@ -230,8 +249,6 @@ function toggleFaq(index) {
                     </div>
                 </div>
             </div>
-
-           
         </div>
     </div>
 </template>
@@ -255,7 +272,7 @@ function toggleFaq(index) {
 
 .success-icon {
     margin-bottom: 16px;
-        display: flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     color: var(--brand-default);
@@ -289,7 +306,7 @@ function toggleFaq(index) {
 }
 
 .info-card.highlight {
-    border:2px solid var(--black)
+    border: 2px solid var(--black);
 }
 
 .card-header {
@@ -358,6 +375,11 @@ function toggleFaq(index) {
     font-style: italic;
 }
 
+.screenshot-box img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+}
 
 /* Notification Timeline */
 .notification-timeline {
@@ -485,35 +507,6 @@ function toggleFaq(index) {
     line-height: 1.4;
     border-top: 1px solid var(--border);
     margin-top: -1px;
-
-}
-
-/* Final Actions */
-.final-actions {
-    background: var(--background-0);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-}
-
-.actions-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-}
-
-.action-info h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 4px 0;
-}
-
-.action-info p {
-    font-size: 14px;
-    color: var(--text-secondary);
-    margin: 0;
 }
 
 /* Responsive */
@@ -531,8 +524,7 @@ function toggleFaq(index) {
         justify-content: center;
     }
     
-    .cta-content,
-    .actions-content {
+    .cta-content {
         flex-direction: column;
         align-items: stretch;
         text-align: center;

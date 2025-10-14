@@ -2,6 +2,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { popup } from '@utils/popup';
+import { api } from '@utils/api';
+import { UserStore } from '@stores/user';
+import { mergeOrganizationsAndTeams } from '@user_shared/utils/js/organization-structure.js';
 
 // Components
 import ButtonComponent from '@form/button/view.vue';
@@ -19,6 +22,8 @@ const props = defineProps({
 
 const emit = defineEmits(['complete']);
 
+const userStore = UserStore();
+
 // State
 const selectedOrganization = ref(null);
 
@@ -32,17 +37,28 @@ const defaultOrganization = computed(() => {
 });
 
 // Methods
-function editOrganization(org) {
+async function editOrganization(org) {
     popup.open(
         'edit-organization',
         null,
         OrganizationEditForm,
         {
-            organizationId: org.id,
-            callback: (event, data, response, success) => {
+            endpoint: `organizations/${org.id}`,
+            type: 'PUT',
+            callback: async (event, data, response, success) => {
                 if (success) {
                     console.log('Organization updated:', response);
-                    // Organization data will be refreshed automatically
+                    
+                    // Refresh user data to get updated organization
+                    const userResponse = await api.get('account/user');
+                    if (userResponse.success && userResponse.data) {
+                        userStore.setData(userResponse.data);
+                        
+                        // Update selected organization with fresh data
+                        const updatedOrgs = mergeOrganizationsAndTeams();
+                        selectedOrganization.value = updatedOrgs.find(o => o.id === org.id);
+                    }
+                    
                     popup.close();
                 }
             },
@@ -60,8 +76,8 @@ function continueWithOrganization() {
 }
 
 function getOrganizationUrl(org) {
-    if (!org || !org.slug) return '#';
-    return `${window.location.protocol}//${org.slug}.${window.location.hostname}`;
+    if (!org || !org.slug) return 'skedi.com/your-slug';
+    return `skedi.com/${org.slug}`;
 }
 
 // Initialize
@@ -88,60 +104,52 @@ onMounted(() => {
 
             <!-- Organization Card -->
             <div v-if="defaultOrganization" class="organization-card">
-                <div class="org-header">
-                    <div class="org-info">
-
-                        <div class="org-details">
-                            <h3>{{ defaultOrganization.name || 'Your Organization' }}</h3>
-                            <div class="org-url">
-                                <PhGlobe :size="16" />
-                                <span>{{ getOrganizationUrl(defaultOrganization) }}</span>
-                            </div>
+                <div class="org-info">
+                    <div class="org-icon">
+                        <PhBuildings :size="24" weight="duotone" />
+                    </div>
+                    <div class="org-details">
+                        <h3>{{ defaultOrganization.name || 'Your Organization' }}</h3>
+                        <div class="org-url">
+                            <PhGlobe :size="16" />
+                            <span>{{ getOrganizationUrl(defaultOrganization) }}</span>
                         </div>
                     </div>
-                    <div>
-                   
+                </div>
+                <div class="org-actions">
                     <ButtonComponent
                         as="secondary"
                         :iconLeft="{ component: PhPencil, weight: 'bold' }"
                         label="Edit"
                         @click="editOrganization(defaultOrganization)"
-                    /></div>
-                </div>
-
-                <div class="org-features">
-                    <h4>What you get with your organization:</h4>
-                    <ul>
-                        <li>Custom branded booking pages</li>
-                        <li>Team member management</li>
-                        <li>Shared event types</li>
-                        <li>Organization-wide settings</li>
-                    </ul>
+                    />
                 </div>
             </div>
 
-            <!-- No Organization State -->
-            <div v-else class="no-organization">
-                <div class="empty-state">
-                    <PhBuildings :size="48" weight="duotone" />
-                    <h3>No Organization Found</h3>
-                    <p>It looks like you don't have an organization set up yet. This is unusual - please contact support.</p>
-                </div>
+            <!-- Info Box -->
+            <div class="info-box">
+                <h4>What is an organization?</h4>
+                <p>
+                    Your organization is your booking brand. The URL slug becomes part of your booking page address,
+                    making it easy for people to find and book time with you.
+                </p>
             </div>
 
-            <!-- Continue Action -->
+            <!-- Continue Actions -->
             <div class="step-actions">
-                <div class="action-info">
-                    <h4>Ready to continue?</h4>
-                    <p>You can always edit your organization details later from the teams page.</p>
+                <div class="actions-content">
+                    <div class="action-info">
+                        <h4>Ready to continue?</h4>
+                        <p>You can always edit your organization details later from the settings page.</p>
+                    </div>
+                    <div class="action-buttons">
+                        <ButtonComponent
+                            as="primary"
+                            label="Continue"
+                            @click="continueWithOrganization"
+                        />
+                    </div>
                 </div>
-                <div>
-                <ButtonComponent
-                    as="primary"
-                    label="Continue Setup"
-                    :disabled="!defaultOrganization"
-                    @click="continueWithOrganization"
-                /></div>
             </div>
         </div>
     </div>
@@ -149,7 +157,7 @@ onMounted(() => {
 
 <style scoped>
 .organization-step {
-    max-width: 600px;
+    max-width: 700px;
     margin: 0 auto;
 }
 
@@ -191,103 +199,80 @@ onMounted(() => {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 24px;
-}
-
-.org-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
+    gap: 20px;
 }
 
 .org-info {
     display: flex;
     align-items: center;
     gap: 16px;
+    flex: 1;
 }
 
-.org-logo {
+.org-icon {
     width: 48px;
     height: 48px;
-    background: var(--brand-gradient);
-    border-radius: 50%;
+    background: var(--background-1);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
-    font-weight: 700;
-    color: white;
+    color: var(--brand-default);
 }
 
 .org-details h3 {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-primary);
-    margin: 0 0 4px 0;
+    margin: 0 0 8px 0;
 }
 
 .org-url {
     display: flex;
     align-items: center;
-    gap: 6px;
-    color: var(--text-secondary);
+    gap: 8px;
     font-size: 14px;
+    color: var(--text-secondary);
 }
 
-.org-features h4 {
+/* Info Box */
+.info-box {
+    background: var(--background-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+}
+
+.info-box h4 {
     font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
-    margin: 0 0 12px 0;
+    margin: 0 0 8px 0;
 }
 
-.org-features ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.org-features li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-secondary);
+.info-box p {
     font-size: 14px;
-}
-
-.org-features li::before {
-    content: '✓';
-    color: var(--brand-default);
-    font-weight: 600;
-}
-
-/* No Organization State */
-.no-organization {
-    text-align: center;
-    padding: 40px;
-}
-
-.empty-state {
     color: var(--text-secondary);
-}
-
-.empty-state h3 {
-    color: var(--text-primary);
-    margin: 16px 0 8px 0;
+    line-height: 1.4;
+    margin: 0;
 }
 
 /* Step Actions */
 .step-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 24px;
     background: var(--background-0);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+    padding: 24px;
+}
+
+.actions-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
 }
 
 .action-info h4 {
@@ -309,17 +294,25 @@ onMounted(() => {
         max-width: 100%;
     }
     
-    .org-header {
+    .organization-card {
         flex-direction: column;
-        gap: 16px;
         align-items: stretch;
     }
     
-    .step-actions {
+    .org-info {
         flex-direction: column;
-        gap: 16px;
+        text-align: center;
+    }
+    
+    .actions-content {
+        flex-direction: column;
         align-items: stretch;
         text-align: center;
+    }
+    
+    .action-buttons {
+        display: flex;
+        justify-content: center;
     }
 }
 </style>
