@@ -3,6 +3,13 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@utils/api';
 import { UserStore } from '@stores/user';
+import { popup } from '@utils/popup';
+
+// Import popup components for editing
+import EventEditDuration from '@user_events/components/form/eventEditDuration.vue';
+import EventEditLocation from '@user_events/components/form/eventEditLocation.vue';
+import EventEditAssignees from '@user_events/components/form/eventEditAssignees.vue';
+import EventEditSchedule from '@user_events/components/form/eventEditSchedule.vue';
 
 // Components
 import ButtonComponent from '@form/button/view.vue';
@@ -10,12 +17,20 @@ import ButtonComponent from '@form/button/view.vue';
 // Icons
 import { 
     PhClock, PhMapPin, PhUsers, PhCalendar, PhLink, 
-    PhBuildings, PhUsersThree, PhArrowSquareOut, PhCopy, PhGearSix
+    PhBuildings, PhUsersThree, PhArrowSquareOut, PhCopy, PhGearSix, PhPencilSimple
 } from '@phosphor-icons/vue';
 
 const props = defineProps({
     event: {
         type: Object,
+        required: true
+    },
+    eventId: {
+        type: [String, Number],
+        required: true
+    },
+    organizationId: {
+        type: [String, Number],
         required: true
     },
     organization: {
@@ -100,8 +115,37 @@ const hostsDisplay = computed(() => {
 });
 
 const availabilityDisplay = computed(() => {
-    // This would need to be enhanced based on your availability structure
-    return props.event.schedule ? 'Availability configured' : 'No availability set';
+    if (!props.event.schedule || Object.keys(props.event.schedule).length === 0) {
+        return 'No availability set';
+    }
+    
+    const schedule = props.event.schedule;
+    const enabledDays = Object.keys(schedule).filter(day => 
+        schedule[day] && schedule[day].enabled
+    );
+    
+    if (enabledDays.length === 0) {
+        return 'No available days';
+    }
+    
+    // Build display text with days + buffer + advance notice
+    let displayParts = [];
+    
+    // Working days
+    const daysText = `${enabledDays.length} working day${enabledDays.length !== 1 ? 's' : ''}`;
+    displayParts.push(daysText);
+    
+    // Buffer time
+    if (props.event.buffer_time) {
+        displayParts.push(`${props.event.buffer_time} min buffer`);
+    }
+    
+    // Advance notice (if available in event data)
+    if (props.event.advance_notice) {
+        displayParts.push(`${props.event.advance_notice} min advance notice`);
+    }
+    
+    return displayParts.join(' • ');
 });
 
 // Load booking statistics
@@ -168,6 +212,97 @@ function assignToTeam() {
     console.log('Assign to team clicked');
 }
 
+// Edit functions matching settings tab
+function editAvailability() {
+    popup.open(
+        'edit-event-schedule',
+        null,
+        EventEditSchedule,
+        {
+            eventId: props.eventId,
+            organizationId: props.organizationId,
+            callback: (event, data, response, success) => {
+                if (success) {
+                    emit('refresh');
+                }
+            },
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+function editDuration() {
+    popup.open(
+        'edit-event-duration',
+        null,
+        EventEditDuration,
+        {
+            endpoint: `events/${props.eventId}?organization_id=${props.organizationId}`,
+            type: 'PUT',
+            callback: (event, data, response, success) => {
+                if (success) {
+                    emit('refresh');
+                    popup.close();
+                }
+            },
+            values: () => ({
+                duration: props.event.duration || []
+            }),
+            class: 'h-auto',
+            title: `Edit Duration for ${props.event.name}`,
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+function editLocation() {
+    popup.open(
+        'edit-event-location',
+        null,
+        EventEditLocation,
+        {
+            eventId: props.eventId,
+            organizationId: props.organizationId,
+            callback: (event, data, response, success) => {
+                if (success) {
+                    emit('refresh');
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+function editHosts() {
+    popup.open(
+        'edit-event-assignees',
+        null,
+        EventEditAssignees,
+        {
+            endpoint: `events/${props.eventId}/assignees?organization_id=${props.organizationId}`,
+            type: 'PUT',
+            eventId: props.eventId,
+            organizationId: props.organizationId,
+            callback: (event, data, response, success) => {
+                if (success) {
+                    emit('refresh');
+                }
+            },
+            class: 'h-auto event-assignees',
+            title: `Edit Hosts for ${props.event.name}`,
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
 onMounted(() => {
     loadBookingStats();
 });
@@ -200,82 +335,108 @@ onMounted(() => {
             </div>
         </div>
 
-        <!-- Event Details -->
+        <!-- Event Details Section -->
         <div class="section">
             <h3>Event Details</h3>
             <div class="details-grid">
-                <div class="detail-item">
-                    <div class="detail-icon">
-                        <PhClock :size="20" />
+                <!-- Availability Card - First -->
+                <div class="detail-card">
+                    <div class="detail-card-content">
+                        <div class="detail-icon">
+                            <PhCalendar :size="24" />
+                        </div>
+                        <div class="detail-info">
+                            <h4>Availability</h4>
+                            <p>{{ availabilityDisplay }}</p>
+                        </div>
                     </div>
-                    <div class="detail-content">
-                        <span class="detail-label">Duration</span>
-                        <span class="detail-value">{{ durationDisplay }}</span>
-                    </div>
+                    <button class="icon-button" @click="editAvailability">
+                        <PhPencilSimple :size="16" weight="bold" />
+                    </button>
                 </div>
 
-                <div class="detail-item">
-                    <div class="detail-icon">
-                        <PhMapPin :size="20" />
+                <!-- Duration Card -->
+                <div class="detail-card">
+                    <div class="detail-card-content">
+                        <div class="detail-icon">
+                            <PhClock :size="24" />
+                        </div>
+                        <div class="detail-info">
+                            <h4>Duration</h4>
+                            <p>{{ durationDisplay }}</p>
+                        </div>
                     </div>
-                    <div class="detail-content">
-                        <span class="detail-label">Location</span>
-                        <span class="detail-value">{{ locationDisplay }}</span>
-                    </div>
+                    <button class="icon-button" @click="editDuration">
+                        <PhPencilSimple :size="16" weight="bold" />
+                    </button>
                 </div>
 
-                <div class="detail-item">
-                    <div class="detail-icon">
-                        <PhUsers :size="20" />
+                <!-- Location Card -->
+                <div class="detail-card">
+                    <div class="detail-card-content">
+                        <div class="detail-icon">
+                            <PhMapPin :size="24" />
+                        </div>
+                        <div class="detail-info">
+                            <h4>Location</h4>
+                            <p>{{ locationDisplay }}</p>
+                        </div>
                     </div>
-                    <div class="detail-content">
-                        <span class="detail-label">Hosts</span>
-                        <span class="detail-value">{{ hostsDisplay }}</span>
-                    </div>
+                    <button class="icon-button" @click="editLocation">
+                        <PhPencilSimple :size="16" weight="bold" />
+                    </button>
                 </div>
 
-                <div class="detail-item">
-                    <div class="detail-icon">
-                        <PhCalendar :size="20" />
+                <!-- Hosts Card -->
+                <div class="detail-card">
+                    <div class="detail-card-content">
+                        <div class="detail-icon">
+                            <PhUsers :size="24" />
+                        </div>
+                        <div class="detail-info">
+                            <h4>Hosts</h4>
+                            <p>{{ hostsDisplay }}</p>
+                        </div>
                     </div>
-                    <div class="detail-content">
-                        <span class="detail-label">Availability</span>
-                        <span class="detail-value">{{ availabilityDisplay }}</span>
-                    </div>
+                    <button class="icon-button" @click="editHosts">
+                        <PhPencilSimple :size="16" weight="bold" />
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Organization & Team Management -->
+        <!-- Organization & Team Section -->
         <div class="section">
             <h3>Organization & Team</h3>
             <div class="org-team-grid">
+                <!-- Organization -->
                 <div class="org-team-item">
                     <div class="detail-icon">
-                        <PhBuildings :size="20" />
+                        <PhBuildings :size="24" />
                     </div>
                     <div class="detail-content">
-                        <span class="detail-label">Organization</span>
-                        <span class="detail-value">{{ organization?.name || 'Loading...' }}</span>
+                        <div class="detail-label">Organization</div>
+                        <div class="detail-value">{{ organization?.name || 'No organization' }}</div>
                     </div>
-                    <div v-if="multipleOrganizations" class="detail-actions">
+                    <div class="detail-actions" v-if="multipleOrganizations">
                         <ButtonComponent 
                             @click="changeOrganization"
                             as="transparent" 
-                            label="Change Organization"
+                            label="Change"
                             :iconLeft="{ component: PhBuildings, weight: 'bold' }"
                         />
                     </div>
                 </div>
 
+                <!-- Team -->
                 <div class="org-team-item">
                     <div class="detail-icon">
-                        <PhUsersThree :size="20" />
+                        <PhUsersThree :size="24" />
                     </div>
                     <div class="detail-content">
-                        <span class="detail-label">Team</span>
-                        <span class="detail-value">{{ team?.name || 'Not assigned to any team' }}</span>
-                        <span v-if="!team" class="detail-note">This event is at the organization level</span>
+                        <div class="detail-label">Team</div>
+                        <div class="detail-value">{{ team?.name || 'Not assigned to any team' }}</div>
+                        <div v-if="!team" class="detail-note">This event is at the organization level</div>
                     </div>
                     <div class="detail-actions">
                         <ButtonComponent 
@@ -379,26 +540,94 @@ onMounted(() => {
     gap: 8px;
 }
 
-/* Details Grid */
+/* Details Grid - Matching settings tab design */
 .details-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 16px;
 }
 
-.detail-item {
+.detail-card {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
+    justify-content: space-between;
+    padding: 20px;
     background: var(--background-1);
     border: 1px solid var(--border);
     border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.detail-card:hover {
+    border-color: var(--border-hover);
+    background: var(--background-2);
+}
+
+.detail-card-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
 }
 
 .detail-icon {
     color: var(--text-secondary);
     flex-shrink: 0;
+}
+
+.detail-info {
+    flex: 1;
+}
+
+.detail-info h4 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.detail-info p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.icon-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.icon-button:hover {
+    background: var(--background-3);
+    color: var(--text-primary);
+}
+
+/* Organization & Team Grid */
+.org-team-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.org-team-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    background: var(--background-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
 }
 
 .detail-content {
@@ -426,21 +655,9 @@ onMounted(() => {
     font-style: italic;
 }
 
-/* Organization & Team Grid */
-.org-team-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.org-team-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 16px;
-    background: var(--background-1);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+.detail-actions {
+    flex-shrink: 0;
+    margin-left: 16px;
 }
 
 /* Statistics */
