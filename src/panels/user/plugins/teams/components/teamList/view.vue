@@ -1,6 +1,6 @@
 <script setup>
 import ButtonComponent from '@form/button/view.vue';
-import { PhLink, PhUsers, PhCode, PhPlus, PhDotsThree, PhTrash, PhUserPlus, PhCaretRight, PhSignOut } from "@phosphor-icons/vue";
+import { PhLink, PhUsers, PhCode, PhPlus, PhDotsThree, PhTrash, PhUserPlus, PhCaretRight, PhSignOut, PhPencil } from "@phosphor-icons/vue";
 import TeamList from '@user_teams/components/teamList/view.vue';
 import TeamCreateForm from '@user_teams/components/form/teamCreate.vue';
 import TeamEditForm from '@user_teams/components/form/teamEdit.vue';
@@ -22,35 +22,35 @@ const userStore = UserStore();
 const refreshKey = ref(0);
 
 const props = defineProps({
-   teams: {
-       type: Array,
-       required: true
-   },
-   orgId: {
-       type: Number,
-       required: true
-   },
-   orgSlug: {
-       type: String,
-       required: true
-   },
-   orgUsers: {
-       type: Array,
-       default: () => []
-   },
-   currentUserId: {
-       type: Number,
-       required: true
-   },
-   reloadData: {
-       type: Function,
-       default: null
-   },
-   isRootLevel: {
-       type: Boolean,
-       default: true
-   },
-   canCreateSubTeams: {
+    teams: {
+        type: Array,
+        required: true
+    },
+    orgId: {
+        type: Number,
+        required: true
+    },
+    orgSlug: {
+        type: String,
+        required: true
+    },
+    orgUsers: {
+        type: Array,
+        default: () => []
+    },
+    currentUserId: {
+        type: Number,
+        required: true
+    },
+    reloadData: {
+        type: Function,
+        default: null
+    },
+    isRootLevel: {
+        type: Boolean,
+        default: true
+    },
+    canCreateSubTeams: {
         type: Boolean,
         default: true
     },
@@ -62,11 +62,11 @@ const props = defineProps({
 
 // Check if user is organization admin
 const isOrgAdmin = computed(() => {
-   const orgs = userStore.getOrganizations();
-   const currentOrg = orgs.find(org => 
-       (org.entity?.id || org.id) === props.orgId
-   );
-   return currentOrg && currentOrg.role === 'admin';
+    const orgs = userStore.getOrganizations();
+    const currentOrg = orgs.find(org => 
+        (org.entity?.id || org.id) === props.orgId
+    );
+    return currentOrg && currentOrg.role === 'admin';
 });
 
 // Try to inject the reload function from a parent component
@@ -74,583 +74,608 @@ const injectedReload = inject(RELOAD_KEY, null);
 
 // Create a function to call the appropriate reload method
 function triggerReload() {
-   // Increment the refresh key to force this component to re-render
-   refreshKey.value++;
-   
-   // First try to use the prop-based reload function
-   if (props.reloadData) {
-       props.reloadData();
-   } 
-   // If no prop-based reload, try to use the injected one
-   else if (injectedReload) {
-       injectedReload();
-   }
+    // Increment the refresh key to force this component to re-render
+    refreshKey.value++;
+    
+    // First try to use the prop-based reload function
+    if (props.reloadData) {
+        props.reloadData();
+    } 
+    // If no prop-based reload, try to use the injected one
+    else if (injectedReload) {
+        injectedReload();
+    }
 }
 
 function getTeamUrl(team) {
-   if (!team || !team.slug) return '#';
-   return `https://skedi.com/${props.orgSlug}/team/${team.slug}`;
+    if (!team || !team.slug) return '#';
+    return `https://skedi.com/${props.orgSlug}/team/${team.slug}`;
 }
 
 // Get subteam count text
 function getSubteamCountText(team) {
-   if (!hasSubteams(team)) return '';
-   const count = team.teams.length;
-   return `${count} sub-team${count > 1 ? 's' : ''}`;
+    if (!hasSubteams(team)) return '';
+    const count = team.teams.length;
+    return `${count} sub-team${count > 1 ? 's' : ''}`;
+}
+
+// Get team color with fallback
+function getTeamColor(team) {
+    return team.color || '#FFDE0E'; // Default yellow color
 }
 
 // Open team details in popup
 function openTeamDetails(team) {
-   popup.open(
-       `team-details-${team.id}`,
-       null,
-       TeamDetailsPopup,
-       {
-           team: team,
-           teamId: team.id,
-           orgSlug: props.orgSlug,
-           orgUsers: props.orgUsers,
-           orgId: props.orgId,
-           currentUserId: props.currentUserId,
-           reloadData: triggerReload
-       },
-       {
-           position: 'center',
-           class: 'team-details-modal'
-       }
-   );
+    popup.open(
+        `team-details-${team.id}`,
+        null,
+        TeamDetailsPopup,
+        {
+            team: team,
+            teamId: team.id,
+            orgSlug: props.orgSlug,
+            orgUsers: props.orgUsers,
+            orgId: props.orgId,
+            currentUserId: props.currentUserId,
+            reloadData: triggerReload
+        },
+        {
+            position: 'center',
+            class: 'team-details-modal'
+        }
+    );
+}
+
+// Edit team function
+function editTeam(team) {
+    popup.open(
+        'edit-team',
+        null,
+        TeamEditForm,
+        {
+            endpoint: `organizations/${props.orgId}/teams/${team.id}`,
+            type: 'PUT',
+            // Provide the values function that returns current team data
+            values: () => {
+                return {
+                    name: team.name,
+                    slug: team.slug,
+                    color: team.color || '#FFDE0E'
+                };
+            },
+            callback: (event, data, response, success) => {
+                if (success) {
+                    popup.close();
+                    triggerReload();
+                }
+            },
+            class: 'h-auto'
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Delete team
 function deleteTeam(team) {
-   
-   let warningMessage = `Are you sure you want to delete "${team.name}"?`;
-   
-   if (hasSubteams(team)) {
-       warningMessage += ` This will also delete all ${team.teams.length} sub-team(s) and all associated events.`;
-   } else if (team.events && team.events.length > 0) {
-       warningMessage += ` This will also delete ${team.events.length} event(s) associated with this team.`;
-   }
-   
-   popup.open(
-       'delete-team-confirm',
-       null,
-       ConfirmComponent,
-       {
-           as: 'red',
-           description: warningMessage,
-           callback: async () => {
-               try {
-                   const result = await api.delete(`organizations/${props.orgId}/teams/${team.id}`);
-                   
-                   if (result && result.success) {
-                       common.notification('Team deleted successfully', true);
-                       popup.close();
-                       triggerReload();
-                   } else {
-                       common.notification(result?.message || 'Failed to delete team', false);
-                   }
-               } catch (error) {
-                   console.error('Error deleting team:', error);
-                   common.notification('Failed to delete team', false);
-               }
-           }
-       },
-       {
-           position: 'center'
-       }
-   );
+    
+    let warningMessage = `Are you sure you want to delete "${team.name}"?`;
+    
+    if (hasSubteams(team)) {
+        warningMessage += ` This will also delete all ${team.teams.length} sub-team(s) and all associated events.`;
+    } else if (team.events && team.events.length > 0) {
+        warningMessage += ` This will also delete ${team.events.length} event(s) associated with this team.`;
+    }
+    
+    popup.open(
+        'delete-team-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: warningMessage,
+            callback: async () => {
+                try {
+                    const result = await api.delete(`organizations/${props.orgId}/teams/${team.id}`);
+                    
+                    if (result && result.success) {
+                        common.notification('Team deleted successfully', true);
+                        popup.close();
+                        triggerReload();
+                    } else {
+                        common.notification(result?.message || 'Failed to delete team', false);
+                    }
+                } catch (error) {
+                    console.error('Error deleting team:', error);
+                    common.notification('Failed to delete team', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Leave team function
 async function leaveTeam(team) {
-   popup.open(
-       'leave-team-confirm',
-       null,
-       ConfirmComponent,
-       {
-           as: 'red',
-           description: `Are you sure you want to leave "${team.name}"?`,
-           callback: async () => {
-               try {
-                   const response = await api.post(`organizations/${props.orgId}/teams/${team.id}/members/leave`);
-                   
-                   if (response.success) {
-                       common.notification('Successfully left the team', true);
-                       popup.close();
-                       triggerReload();
-                   } else {
-                       common.notification(response.message || 'Failed to leave team', false);
-                   }
-               } catch (error) {
-                   console.error('Failed to leave team:', error);
-                   common.notification('Failed to leave team', false);
-               }
-           }
-       },
-       {
-           position: 'center'
-       }
-   );
+    popup.open(
+        'leave-team-confirm',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to leave "${team.name}"?`,
+            callback: async () => {
+                try {
+                    const response = await api.post(`organizations/${props.orgId}/teams/${team.id}/members/leave`);
+                    
+                    if (response.success) {
+                        common.notification('Successfully left the team', true);
+                        popup.close();
+                        triggerReload();
+                    } else {
+                        common.notification(response.message || 'Failed to leave team', false);
+                    }
+                } catch (error) {
+                    console.error('Failed to leave team:', error);
+                    common.notification('Failed to leave team', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Add member
 function addMember(team) {
-   popup.open(
-       'team-members',
-       null,
-       MemberModal,
-       {
-           type: 'team',
-           entityId: team.id,
-           entityName: team.name,
-           organizationId: props.orgId,
-           callback: triggerReload
-       },
-       {
-           position: 'center'
-       }
-   );
+    popup.open(
+        'team-members',
+        null,
+        MemberModal,
+        {
+            type: 'team',
+            entityId: team.id,
+            entityName: team.name,
+            organizationId: props.orgId,
+            callback: triggerReload
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Check if user can perform admin actions on a team
 function canPerformAdminActions(team) {
-   // User can perform admin actions if they are:
-   // 1. Organization admin (can do anything)
-   // 2. Team admin (hasAdminAccess returns true)
-   return isOrgAdmin.value || hasAdminAccess(team);
+    // User can perform admin actions if they are:
+    // 1. Organization admin (can do anything)
+    // 2. Team admin (hasAdminAccess returns true)
+    return isOrgAdmin.value || hasAdminAccess(team);
 }
 
 // Get menu options for team based on role
 function getTeamMenuOptions(team) {
-   const options = [];
-   const canAdmin = canPerformAdminActions(team);
-   
-   // Everyone can leave team
-   options.push({
-       label: 'Leave Team',
-       iconComponent: PhSignOut,
-       weight: 'bold',
-       onClick: () => leaveTeam(team)
-   });
-   
-   // Admin options
-   if (canAdmin) {
-       options.push({
-           label: 'Add Member',
-           iconComponent: PhUserPlus,
-           weight: 'bold',
-           onClick: () => addMember(team)
-       });
-       
-       options.push({
-           label: 'Delete Team',
-           iconComponent: PhTrash,
-           weight: 'bold',
-           onClick: () => deleteTeam(team)
-       });
-   }
-   
-   return options;
+    const options = [];
+    const canAdmin = canPerformAdminActions(team);
+    
+    // Everyone can leave team
+    options.push({
+        label: 'Leave Team',
+        iconComponent: PhSignOut,
+        weight: 'bold',
+        onClick: () => leaveTeam(team)
+    });
+    
+    // Admin options
+    if (canAdmin) {
+        options.push({
+            label: 'Edit Team',
+            iconComponent: PhPencil,
+            weight: 'bold',
+            onClick: () => editTeam(team)
+        });
+        
+        options.push({
+            label: 'Add Member',
+            iconComponent: PhUserPlus,
+            weight: 'bold',
+            onClick: () => addMember(team)
+        });
+        
+        options.push({
+            label: 'Delete Team',
+            iconComponent: PhTrash,
+            weight: 'bold',
+            onClick: () => deleteTeam(team)
+        });
+    }
+    
+    return options;
 }
 </script>
 
 <template>
-   <div class="teams-container" :class="{ 'root-level': isRootLevel }" :key="refreshKey">
-       <!-- Grid layout for root teams -->
-       <div v-if="isRootLevel" class="teams-grid">
-           <div v-for="team in teams" :key="team.id" class="team-card">
-               <div class="team-card-content">
-                   <div>
-                       <div class="team-header">
-                           <h3 @click="openTeamDetails(team)" class="team-name">{{ team.name }}</h3>
-                           <div v-if="getTeamMenuOptions(team).length > 0" class="team-actions">
-                               <ButtonComponent
-                                   v-dropdown="{
-                                       component: MenusComponent,
-                                       properties: {
-                                           menus: getTeamMenuOptions(team)
-                                       }
-                                   }"
-                                   as="c-button tertiary icon"
-                                   :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
-                               />
-                           </div>
-                       </div>
-                       
-                       <a :href="getTeamUrl(team)" class="team-url" target="_blank">
-                           {{ getTeamUrl(team) }}
-                       </a>
-                       
-                       <div class="team-info">
-                           <div class="info-item">
-                               <PhUsers size="16" />
-                               <span>{{ getUserCount(team) }} members</span>
-                           </div>
-                       </div>
-                       
-                       <div v-if="hasSubteams(team)" 
-                           class="subteam-indicator"
-                           @click="openTeamDetails(team)">
-                           <PhCaretRight size="16" />
-                           <span>{{ getSubteamCountText(team) }}</span>
-                       </div>
-                   </div>
-                   
-                   <div v-if="canPerformAdminActions(team) && canCreateSubTeams" class="team-footer">
-                       <ButtonComponent
-                           v-popup="{
-                               component: TeamCreateForm,
-                               overlay: { position: 'center' },
-                               properties: {
-                                   endpoint: `organizations/${orgId}/teams?parent_team_id=${team.id}`,
-                                   type: 'POST',
-                                   callback: async (event, data, response, success) => {
-                                   if (success) {
-                                       popup.close();
-                                       
-                                       // Always call reloadData if available
-                                       if (props.reloadData) {
-                                           await props.reloadData();
-                                       } else {
-                                           triggerReload();
-                                       }
-                                   }
-                               },
-                                   class: 'h-auto',
-                                   title: `Create new subteam of ${team.name}`,
-                               }
-                           }"
-                           v-tooltip="{ content: 'Create subteam' }"
-                           as="tertiary small full-width"
-                           :iconLeft="{ component: PhPlus, weight: 'bold' }"
-                           label="Add subteam"
-                       />
-                   </div>
-               </div>
-           </div>
-       </div>
-       
-       <!-- List layout for nested teams (in popup) -->
-       <ul v-else class="teams-list">
-           <li v-for="team in teams" :key="team.id" class="team-item">
-               <div class="team">
-                   <div class="top">
-                       <h2>{{ team.name }}</h2>
-                       <a :href="getTeamUrl(team)" class="team-url">
-                           {{ getTeamUrl(team) }}
-                       </a>
+    <div class="teams-container" :class="{ 'root-level': isRootLevel }" :key="refreshKey">
+        <!-- Grid layout for root teams -->
+        <div v-if="isRootLevel" class="teams-grid">
+            <div v-for="team in teams" :key="team.id" class="team-card">
+                <div class="team-card-content">
+                    <div>
+                        <!-- Team color marker -->
+                        <div class="team-color-marker" :style="{ backgroundColor: getTeamColor(team) }"></div>
+                        
+                        <div class="team-header">
+                            <h3 @click="openTeamDetails(team)" class="team-name">{{ team.name }}</h3>
+                            <div v-if="getTeamMenuOptions(team).length > 0" class="team-actions">
+                                <ButtonComponent
+                                    v-dropdown="{
+                                        component: MenusComponent,
+                                        properties: {
+                                            menus: getTeamMenuOptions(team)
+                                        }
+                                    }"
+                                    as="c-button tertiary icon"
+                                    :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
+                                />
+                            </div>
+                        </div>
+                        
+                        <a :href="getTeamUrl(team)" class="team-url" target="_blank">
+                            {{ getTeamUrl(team) }}
+                        </a>
+                        
 
-                       <div class="info">
-                           <div class="item">
-                               <div class="icon">
-                                   <PhUsers weight="bold" />
-                               </div>
-                               <span>{{ getUserCount(team) }}</span>
-                           </div>
-                       </div>
+                        
+                        <div v-if="hasSubteams(team)" 
+                            class="subteam-indicator"
+                            @click="openTeamDetails(team)">
+                            <PhCaretRight size="16" />
+                            <span>{{ getSubteamCountText(team) }}</span>
+                        </div>
+                    </div>
+                    
+                    <div v-if="canPerformAdminActions(team) && canCreateSubTeams" class="team-footer">
+                        <ButtonComponent
+                            v-popup="{
+                                component: TeamCreateForm,
+                                overlay: { position: 'center' },
+                                properties: {
+                                    endpoint: `organizations/${orgId}/teams?parent_team_id=${team.id}`,
+                                    type: 'POST',
+                                    callback: async (event, data, response, success) => {
+                                    if (success) {
+                                        popup.close();
+                                        
+                                        // Always call reloadData if available
+                                        if (props.reloadData) {
+                                            await props.reloadData();
+                                        } else {
+                                                triggerReload();
+                                            }
+                                        }
+                                    },
+                                    class: 'h-auto',
+                                    title: `Create new subteam of ${team.name}`,
+                                }
+                            }"
+                            v-tooltip="{ content: 'Create subteam' }"
+                            as="tertiary small full-width"
+                            :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                            label="Add subteam"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- List layout for nested teams (in popup) -->
+        <ul v-else class="teams-list">
+            <li v-for="team in teams" :key="team.id" class="team-item">
+                <div class="team">
+                    <div class="top">
+                        <!-- Team color marker for list view -->
+                        <div class="team-color-marker" :style="{ backgroundColor: getTeamColor(team) }"></div>
+                        
+                        <h2>{{ team.name }}</h2>
+                        <a :href="getTeamUrl(team)" class="team-url">
+                            {{ getTeamUrl(team) }}
+                        </a>
 
-                       <!-- Display list of users if available -->
-                       <div class="list-of-users" v-if="team.users && team.users.length">
-                           <div class="user-item" 
+                        <div class="info">
+                            <div class="item">
+                                <div class="icon">
+                                    <PhUsers weight="bold" />
+                                </div>
+                                <span>{{ getUserCount(team) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Display list of users if available -->
+                        <div class="list-of-users" v-if="team.users && team.users.length">
+                            <div class="user-item" 
                                 v-for="user in team.users" 
                                 :key="user.id"
-                                :class="user.effective_role ? `role-${user.effective_role}` : ''">
-                               {{ user.name }} 
-                               <span class="user-role" v-if="user.effective_role">
-                                   ({{ user.effective_role }})
-                               </span>
-                           </div>
-                       </div>
-                   </div>
+                                :class="user.effective_role ? 'role-' + user.effective_role : ''">
+                                {{ user.name }} <span v-if="user.effective_role">({{ user.effective_role }})</span>
+                            </div>
+                        </div>
+                    </div>
 
-                   <div class="bottom">
-                       <div class="left">
-                           <div class="links">
-                               <ButtonComponent 
-                                   v-tooltip="{ content: 'Copy URL' }"
-                                   as="secondary icon"
-                                   :iconLeft="{ component: PhLink, weight: 'bold' }"
-                               />
-                               <ButtonComponent 
-                                   v-tooltip="{ content: 'Embed on a website' }"
-                                   as="secondary icon"
-                                   :iconLeft="{ component: PhCode, weight: 'bold' }"
-                               />
-                           </div>
-                       </div>
+                    <div class="bottom">
+                        <div class="left">
+                            <div class="links">
+                                <ButtonComponent
+                                    v-if="canPerformAdminActions(team)"
+                                    @click="editTeam(team)"
+                                    v-tooltip="{ content: 'Edit Team' }"
+                                    as="tertiary icon"
+                                    :iconLeft="{ component: PhPencil, weight: 'bold' }"
+                                />
+                                <ButtonComponent
+                                    v-if="canPerformAdminActions(team)"
+                                    @click="addMember(team)"
+                                    v-tooltip="{ content: 'Add Member' }"
+                                    as="tertiary icon"
+                                    :iconLeft="{ component: PhUserPlus, weight: 'bold' }"
+                                />
+                                <ButtonComponent
+                                    v-if="canPerformAdminActions(team)"
+                                    @click="deleteTeam(team)"
+                                    v-tooltip="{ content: 'Delete Team' }"
+                                    as="tertiary icon"
+                                    :iconLeft="{ component: PhTrash, weight: 'bold' }"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                       <div class="right">
-                           <div class="actions">
-                               <ButtonComponent
-                                   v-if="canPerformAdminActions(team) && canCreateSubTeams"
-                                   v-popup="{
-                                       component: TeamCreateForm,
-                                       overlay: { position: 'center' },
-                                       properties: {
-                                           endpoint: `organizations/${orgId}/teams?parent_team_id=${team.id}`,
-                                           type: 'POST',
-                                           callback: (event, data, response, success) => {
-                                               popup.close();
-                                               triggerReload();
-                                           },
-                                           class: 'h-auto',
-                                           title: `Create new subteam of ${team.name}`,
-                                       }
-                                   }"
-                                   v-tooltip="{ content: 'Create subteam' }"
-                                   as="secondary icon"
-                                   :iconLeft="{ component: PhPlus, weight: 'bold' }"
-                               />
-                               
-                               <ButtonComponent
-                                   v-if="getTeamMenuOptions(team).length > 0"
-                                   v-dropdown="{
-                                       component: MenusComponent,
-                                       properties: {
-                                           menus: getTeamMenuOptions(team)
-                                       }
-                                   }"
-                                   as="secondary icon"
-                                   :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
-                               />
-                           </div>
-                       </div>
-                   </div>
-               </div>
-
-               <!-- Recursive rendering of subteams -->
-               <div v-if="hasSubteams(team)" class="subteam-wrapper">
-                   <TeamList
-                       :teams="team.teams"
-                       :orgSlug="orgSlug"
-                       :orgUsers="orgUsers"
-                       :orgId="orgId"
-                       :currentUserId="currentUserId"
-                       :reloadData="triggerReload"
-                       :isRootLevel="false"
-                   />
-               </div>
-           </li>
-       </ul>
-   </div>
+                <!-- Nested subteams -->
+                <div v-if="hasSubteams(team)" class="subteam-wrapper">
+                    <TeamList
+                        :teams="team.teams"
+                        :orgSlug="orgSlug"
+                        :orgId="orgId"
+                        :orgUsers="orgUsers"
+                        :currentUserId="currentUserId"
+                        :reloadData="triggerReload"
+                        :isRootLevel="false"
+                    />
+                </div>
+            </li>
+        </ul>
+    </div>
 </template>
 
 <style scoped>
 /* Grid layout styles */
 .teams-container.root-level {
-   width: 100%;
+    width: 100%;
 }
 
 .teams-grid {
-   display: grid;
-   grid-template-columns: repeat(3, 1fr);
-   gap: 16px;
-   margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 20px;
 }
 
 /* Responsive grid */
 @media (max-width: 1200px) {
-   .teams-grid {
-       grid-template-columns: repeat(2, 1fr);
-   }
+    .teams-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 @media (max-width: 768px) {
-   .teams-grid {
-       grid-template-columns: 1fr;
-   }
+    .teams-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Team card styles */
 .team-card {
-   background: var(--background-0);
-   border: 1px solid var(--border);
-   border-radius: 10px;
-   transition: all 0.3s ease;
+    background: var(--background-0);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: all 0.3s ease;
 }
 
 .team-card-content {
-   padding: 20px;
-   display: flex;
-   flex-direction: column;
-   justify-content: space-between;
-   height: 100%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+
+/* Team color marker */
+.team-color-marker {
+    width: 40px;
+    height: 10px;
+    border-radius: 100px;
+    margin-bottom: 8px;
 }
 
 .team-header {
-   display: flex;
-   justify-content: space-between;
-   align-items: flex-start;
-   margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
 }
 
 .team-name {
-   margin: 0;
-   font-size: 16px;
-   font-weight: 600;
-   cursor: pointer;
-   transition: color 0.2s;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s;
 }
 
 .team-name:hover {
-   color: var(--brand-primary);
+    color: var(--brand-primary);
 }
 
 .team-actions {
-   opacity: 0;
-   transition: opacity 0.2s;
+    opacity: 0;
+    transition: opacity 0.2s;
+    position: relative;
+    top:-15px;
 }
 
 .team-card:hover .team-actions {
-   opacity: 1;
+    opacity: 1;
 }
 
 .team-url {
-   color: var(--text-secondary);
-   font-size: 13px;
-   text-decoration: none;
-   display: block;
-   margin-bottom: 12px;
-   white-space: nowrap;
-   overflow: hidden;
-   text-overflow: ellipsis;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-decoration: none;
+    display: block;
+    margin-bottom: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .team-url:hover {
-   text-decoration: underline;
+    text-decoration: underline;
 }
 
 .team-info {
-   margin-bottom: 12px;
+    margin-bottom: 12px;
 }
 
 .info-item {
-   display: flex;
-   align-items: center;
-   gap: 6px;
-   color: var(--text-secondary);
-   font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
 }
 
 .subteam-indicator {
-   display: flex;
-   align-items: center;
-   gap: 4px;
-   color: var(--text-primary);
-   font-size: 13px;
-   font-weight: 500;
-   cursor: pointer;
-   padding: 6px 0;
-   transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 0;
+    transition: color 0.2s;
 }
 
 .subteam-indicator:hover {
-   color: var(--brand-primary);
+    color: var(--brand-primary);
 }
 
 .team-footer {
-   margin-top: 12px;
-   padding-top: 12px;
-   border-top: 1px solid var(--border);
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
 }
 
 /* Existing styles for list view */
 .teams-list {
-   list-style-type: none;
-   margin-top: 0.5em;
-   margin-bottom: 0.5em;
+    list-style-type: none;
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
 }
 
 .team-item {
-   margin-bottom: 15px;
+    margin-bottom: 15px;
 }
 
 .team {
-   padding: 20px;
-   background-color: var(--background-0);
-   border: 1px solid var(--border);
-   border-radius: 10px;
+    padding: 20px;
+    background-color: var(--background-0);
+    border: 1px solid var(--border);
+    border-radius: 10px;
 }
 
 .team h2 {
-   font-size: 16px;
-   font-weight: 600;
-   margin: 0 0 5px 0;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 5px 0;
 }
 
 .info {
-   margin: 10px 0;
+    margin: 10px 0;
 }
 
 .info .item {
-   display: inline-flex;
-   align-items: center;
-   gap: 5px;
-   color: var(--text-secondary);
-   font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+    font-size: 14px;
 }
 
 .info .icon {
-   display: flex;
-   align-items: center;
+    display: flex;
+    align-items: center;
 }
 
 .list-of-users {
-   display: flex;
-   flex-wrap: wrap;
-   gap: 8px;
-   margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
 }
 
 .user-item {
-   padding: 4px 12px;
-   background: var(--background-1);
-   border: 1px solid var(--border);
-   border-radius: 6px;
-   font-size: 13px;
+    padding: 4px 12px;
+    background: var(--background-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
 }
 
 .user-item.role-admin {
-   background: rgba(59, 130, 246, 0.1);
-   border-color: rgba(59, 130, 246, 0.3);
-   color: rgb(59, 130, 246);
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: rgb(59, 130, 246);
 }
 
 .user-role {
-   font-size: 12px;
-   color: var(--text-secondary);
+    font-size: 12px;
+    color: var(--text-secondary);
 }
 
 .bottom {
-   display: flex;
-   justify-content: space-between;
-   align-items: center;
-   margin-top: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
 }
 
 .bottom .left .links {
-   display: flex;
-   gap: 8px;
+    display: flex;
+    gap: 8px;
 }
 
 .bottom .right .actions {
-   display: flex;
-   gap: 8px;
+    display: flex;
+    gap: 8px;
 }
 
 .subteam-wrapper {
-   margin-top: 15px;
-   margin-left: 20px;
-   padding-left: 20px;
-   border-left: 2px solid var(--border);
+    margin-top: 15px;
+    margin-left: 20px;
+    padding-left: 20px;
+    border-left: 2px solid var(--border);
 }
 </style>
 
 <!-- Global styles for the popup -->
 <style>
 .team-details-modal .l-popup {
-   max-width: 800px;
-   width: 90vw;
+    max-width: 800px;
+    width: 90vw;
 }
 </style>

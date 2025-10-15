@@ -1,7 +1,4 @@
 <script setup>
-    
-    // Styles and utility imports
-    
     import '@user_shared/utils/styles/organization-dropdowns.css';
     import '@user_shared/utils/styles/event-card.css';
     import './style.css';
@@ -29,34 +26,27 @@
     import ConfirmComponent from '@floated/confirm/view.vue';
     import EventManageTeam from '@user_events/components/form/eventManageTeam.vue';
 
-
     // Icon imports
     import { 
         PhGearSix, PhPlus, PhCode, PhLink, PhUsers, PhDotsThree,
         PhArrowSquareOut, PhClock, PhCalendar, PhMapPin, PhCopy, 
         PhFlowArrow, PhTable, PhTrash, PhCaretDown, PhCaretUp,
-        PhVideoCameraSlash, PhGlobe, PhBuildings
+        PhVideoCameraSlash, PhGlobe, PhBuildings,
+        PhHourglass, PhBell  
     } from "@phosphor-icons/vue";
-
     
     import { UserStore } from '@stores/user';
 
     // State management
     const userStore = UserStore();
+    const billingStore = BillingStore();
     const organizations = ref([]);
     const eventsItems = ref(0);
-    
-    // New state for filters and accordion
     const selectedTeams = ref({});
     const expandedOrgs = ref({});
 
-
-    const billingStore = BillingStore();
-
-   function getPlanBadge(orgId) {
-        // Check if billing data is loaded for this org
+    function getPlanBadge(orgId) {
         if (!billingStore.subscriptions[orgId]) {
-            // Trigger loading in background if not loaded
             billingStore.loadSubscription(orgId);
             return 'Loading...';
         }
@@ -70,7 +60,7 @@
         const planLevel = billingStore.getPlanLevel(orgId);
         const colors = ['#6b7280', '#3b82f6', '#8b5cf6', '#10b981'];
         return colors[planLevel - 1] || '#6b7280';
-    }
+    }   
 
     function handlePlanClick(org) {
         popup.open(
@@ -88,44 +78,74 @@
         );
     }
 
-
-    // Reload data from API
+    // Reload all data including full event details with assignees and location
     async function reloadData() {
         try {
             const response = await api.get('account/user');
+            
             if (response.success && response.data) {
                 userStore.setData(response.data);
                 organizations.value = mergeOrganizationsAndTeams();
                 
-                console.log('Organizations:', organizations.value.map(org => ({ id: org.id, name: org.name })));
+                // Fetch full event details for each event
+                for (const org of organizations.value) {
+                    if (org.events && Array.isArray(org.events)) {
+                        for (let i = 0; i < org.events.length; i++) {
+                            const event = org.events[i];
+                            try {
+                                const eventDetail = await api.get(`events/${event.id}?organization_id=${org.id}`);
+                                if (eventDetail.success && eventDetail.data) {
+                                    org.events[i] = { ...event, ...eventDetail.data };
+                                }
+                            } catch (err) {
+                                console.error(`Failed to fetch event ${event.id}:`, err);
+                            }
+                        }
+                    }
+                    
+                    // Fetch details for team events
+                    if (org.teams && Array.isArray(org.teams)) {
+                        for (const team of org.teams) {
+                            if (team.events && Array.isArray(team.events)) {
+                                for (let i = 0; i < team.events.length; i++) {
+                                    const event = team.events[i];
+                                    try {
+                                        const eventDetail = await api.get(`events/${event.id}?organization_id=${org.id}`);
+                                        if (eventDetail.success && eventDetail.data) {
+                                            team.events[i] = { ...event, ...eventDetail.data };
+                                        }
+                                    } catch (err) {
+                                        console.error(`Failed to fetch team event ${event.id}:`, err);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 
-                // Load billing data for all organizations and WAIT for it
+                organizations.value.forEach(org => {
+                    expandedOrgs.value[org.id] = true;
+                });
+                
                 await billingStore.loadAllOrganizationSubscriptions(organizations.value);
-                
-                console.log('After loading billing data:', billingStore.subscriptions);
-                
-                // Force reactivity update after billing data is loaded
                 eventsItems.value++;
             }
         } catch (error) {
-            console.error("Failed to reload user data:", error);
+            console.error("Failed to reload data:", error);
         }
     }
 
-    // Get top-level teams from organization
     function getTopLevelTeams(org) {
         if (!org.teams || !Array.isArray(org.teams)) return [];
         return org.teams.filter(team => !team.parent_team_id);
     }
 
-    // Get all events from an organization and its teams
     function getAllEvents(org) {
         const events = [];
         
-        // Add organization-level events (excluding deleted ones)
         if (org.events && Array.isArray(org.events)) {
             const orgEvents = org.events
-                .filter(event => !event.deleted) // Filter out deleted events
+                .filter(event => !event.deleted)
                 .map(event => ({
                     ...event,
                     teamColor: 'black', 
@@ -137,12 +157,11 @@
             events.push(...orgEvents);
         }
         
-        // Add team-level events (excluding deleted ones)
         if (org.teams && Array.isArray(org.teams)) {
             org.teams.forEach(team => {
                 if (team.events && Array.isArray(team.events)) {
                     const teamEvents = team.events
-                        .filter(event => !event.deleted) // Filter out deleted events
+                        .filter(event => !event.deleted)
                         .map(event => ({
                             ...event,
                             teamColor: team.color || '#6c5ce7', 
@@ -159,34 +178,27 @@
         return events;
     }
 
-    // NEW: Filter events based on selected teams
     function getFilteredEvents(org) {
         const allEvents = getAllEvents(org);
         const orgSelectedTeams = selectedTeams.value[org.id];
         
-        // If no teams selected, show all events
         if (!orgSelectedTeams || orgSelectedTeams.length === 0) {
             return allEvents;
         }
         
-        // Filter events based on selected teams
         return allEvents.filter(event => {
-            // Always show all events if "All" is selected
             if (orgSelectedTeams.includes('all')) {
                 return true;
             }
             
-            // Show org-level events if org is selected
             if (event.isOrgEvent && orgSelectedTeams.includes('org')) {
                 return true;
             }
             
-            // Show team events if team is selected
             return event.teamId && orgSelectedTeams.includes(event.teamId);
         });
     }
 
-    // NEW: Toggle team selection
     function toggleTeamFilter(orgId, teamId) {
         if (!selectedTeams.value[orgId]) {
             selectedTeams.value[orgId] = [];
@@ -200,32 +212,26 @@
         }
     }
 
-    // NEW: Check if team is selected
     function isTeamSelected(orgId, teamId) {
         return selectedTeams.value[orgId]?.includes(teamId) || false;
     }
 
-    // NEW: Toggle organization expansion
     function toggleOrgExpansion(orgId) {
         expandedOrgs.value[orgId] = !expandedOrgs.value[orgId];
     }
 
-    // NEW: Check if organization is expanded
     function isOrgExpanded(orgId) {
         return expandedOrgs.value[orgId] !== false;
     }
 
-    // NEW: Get visible teams (first 3)
     function getVisibleTeams(teams) {
-        return teams.slice(0, 3);
+        return teams.slice(0, 6);
     }
 
-    // NEW: Get overflow teams (after first 3)
     function getOverflowTeams(teams) {
-        return teams.slice(3);
+        return teams.slice(6);
     }
 
-    // Menu items for event actions
     const eventActionMenus = markRaw([
         { label: 'Preview', icon: null, iconComponent: PhArrowSquareOut, weight: 'regular' },
         { label: 'View all settings', icon: null, iconComponent: PhGearSix, weight: 'regular' },
@@ -241,7 +247,6 @@
         { label: 'Remove', icon: null, iconComponent: PhTrash, weight: 'regular' }
     ]);
 
-
     function getHostsTooltip(event) {
         const hostCount = event.assignees?.length || 0;
         if (hostCount === 0) {
@@ -251,23 +256,71 @@
     }
 
     function getLocationTooltip(event) {
-        if (!event.location) {
+        if (!event.location || !Array.isArray(event.location) || event.location.length === 0) {
             return 'No location set';
         }
         
-        const locationType = event.location.type || event.location;
+        const location = event.location[0];
+        
+        if (!location || !location.type) {
+            return 'No location set';
+        }
+        
+        const locationType = location.type;
         const locationMap = {
             'google_meet': 'Location: Google Meet',
             'web_conferencing': 'Location: Web conferencing link',
-            'in_person': event.location.address ? 
-                `Location: In person\nAddress: ${event.location.address}` : 
+            'in_person': location.address ? 
+                `Location: In person\nAddress: ${location.address}` : 
                 'Location: In person meeting',
-            'custom': event.location.custom ? 
-                `Location: ${event.location.custom}` : 
+            'custom': location.custom ? 
+                `Location: ${location.custom}` : 
                 'Location: Custom location'
         };
         
         return locationMap[locationType] || 'Location set';
+    }
+
+    function getBufferTooltip(event) {
+        const bufferTime = event.buffer_time || event.bufferTime || 0;
+        if (bufferTime === 0) {
+            return 'No buffer time set';
+        }
+        return `Buffer time: ${bufferTime} minutes`;
+    }
+
+    function getAdvanceNoticeTooltip(event) {
+        const advanceNotice = event.advance_notice_minutes || event.advanceNotice || 0;
+        if (advanceNotice === 0) {
+            return 'No advance notice set';
+        }
+        
+        if (advanceNotice < 60) {
+            return `Advance notice: ${advanceNotice} minutes`;
+        }
+        
+        const hours = Math.floor(advanceNotice / 60);
+        const minutes = advanceNotice % 60;
+        return minutes > 0 ? 
+            `Advance notice: ${hours}h ${minutes}m` : 
+            `Advance notice: ${hours} hour${hours !== 1 ? 's' : ''}`;
+    }
+
+    function getAvailabilityTooltip(event) {
+        if (!event.schedule || Object.keys(event.schedule).length === 0) {
+            return 'No availability set';
+        }
+        
+        const schedule = event.schedule;
+        const enabledDays = Object.keys(schedule).filter(day => 
+            schedule[day] && schedule[day].enabled
+        );
+        
+        if (enabledDays.length === 0) {
+            return 'No available days';
+        }
+        
+        return `Available ${enabledDays.length} day${enabledDays.length !== 1 ? 's' : ''} per week`;
     }
 
     function getDurationTooltip(event) {
@@ -279,18 +332,71 @@
         return `${durationCount} duration options available`;
     }
 
+    // Check if location is Google Meet to show custom image
+    function isGoogleMeetLocation(location) {
+        if (!location || !Array.isArray(location) || location.length === 0) {
+            return false;
+        }
+        return location[0]?.type === 'google_meet';
+    }
+
     function getLocationIcon(location) {
-        if (!location) return PhMapPin;
+        if (!location || !Array.isArray(location) || location.length === 0) {
+            return PhMapPin;
+        }
         
-        const locationType = location.type || location;
+        const loc = location[0];
+        const locationType = loc?.type;
+        
         const iconMap = {
-            'google_meet': PhVideoCameraSlash, // You can replace with custom Google Meet SVG
             'web_conferencing': PhGlobe,
             'in_person': PhBuildings,
-            'custom': PhMapPin
+            'custom': PhMapPin,
+            'google_meet': PhGlobe // Fallback icon if image doesn't load
         };
         
         return iconMap[locationType] || PhMapPin;
+    }
+
+    function openEditAvailability(event) {
+        popup.open(
+            'edit-event-schedule',
+            null,
+            EventEditSchedule,
+            {
+                eventId: event.id,
+                organizationId: event.organization_id,
+                callback: (event, data, response, success) => {
+                    if (success) {
+                        reloadData();
+                    }
+                },
+            },
+            {
+                position: 'center'
+            }
+        );
+    }
+
+    function openManageTeam(event) {
+        popup.open(
+            'manage-event-team',
+            null,
+            EventManageTeam,
+            {
+                eventId: event.id,
+                organizationId: event.organization_id,
+                values: () => event, 
+                callback: (e, data, response, success) => {
+                    if (success) {
+                        reloadData();
+                    }
+                }
+            },
+            {
+                position: 'center'
+            }
+        );
     }
 
     function openEditHosts(event) {
@@ -365,8 +471,6 @@
         );
     }
 
-
-    // Handle menu action clicks
     const handleMenuAction = (clickEvent, menu, eventData) => {
         if (!eventData) {
             console.error('No event data provided to handleMenuAction');
@@ -375,7 +479,6 @@
 
         const selectedEventId = eventData.id;
         const orgId = eventData.organization_id;
-
 
         switch(menu.label) {
             case 'Preview':
@@ -393,7 +496,6 @@
                             if (success) {
                                 reloadData();
                                 popup.close();
-                                console.log('Event duration updated', response);
                             }
                         },
                         values: () => {
@@ -410,9 +512,9 @@
                 );
                 break;
             
-        case 'View all settings':
-            router.push(`/events/${selectedEventId}`);
-            break;
+            case 'View all settings':
+                router.push(`/events/${selectedEventId}`);
+                break;
 
             case 'Manage team':
                 popup.open(
@@ -434,7 +536,6 @@
                     }
                 );
                 break;
-
 
             case 'Edit availability':
                 popup.open(
@@ -543,7 +644,6 @@
                             if (success) {
                                 reloadData();
                                 popup.close();
-                                console.log('Event removed (soft delete)', response);
                             }
                         }
                     },
@@ -557,27 +657,20 @@
         }
     };
 
-    // Initialize data on component mount
     onMounted(async () => {
-
         await reloadData();
-
 
         organizations.value = mergeOrganizationsAndTeams();
         
-        // Initialize all orgs as expanded
         organizations.value.forEach(org => {
             expandedOrgs.value[org.id] = true;
         });
         
-        // Fallback for empty organizations
         if (organizations.value.length === 0) {
             const rawTeams = toRaw(userStore.getTeams());
             const rawOrgs = toRaw(userStore.getOrganizations());
             
             if ((rawTeams && rawTeams.length) || (rawOrgs && rawOrgs.length)) {
-                console.log("No organizations processed but store has data.");
-                
                 if (rawOrgs && rawOrgs.length) {
                     organizations.value = rawOrgs.map(org => {
                         const entity = org.entity || {};
@@ -597,13 +690,10 @@
 
 <template>
     <div class="teams-c-items" :key="eventsItems">
-        <!-- Organization cards -->
         <div v-for="org in organizations" :key="org.id" class="teams-c-item">
-            <!-- Organization header -->
             <div class="head">
                 <div class="left">
                     <div class="org-name">
-                        <!-- NEW: Toggle button -->
                         <button 
                             @click="toggleOrgExpansion(org.id)"
                             class="org-toggle"
@@ -633,11 +723,7 @@
                         </p>
                     </div>
 
-                    <!-- NEW: Team filters instead of just showing teams -->
                     <div class="team-filters" v-if="getTopLevelTeams(org).length > 0">
-
-                        
-                        <!-- Organization level filter -->
                         <button 
                             class="team-filter-item"
                             :class="{ active: isTeamSelected(org.id, 'org') }"
@@ -646,7 +732,6 @@
                             {{ org.name }}
                         </button>
                         
-                        <!-- Visible teams -->
                         <button 
                             v-for="team in getVisibleTeams(getTopLevelTeams(org))" 
                             :key="team.id"
@@ -657,7 +742,6 @@
                             {{ team.name }}
                         </button>
                         
-                        <!-- Overflow teams dropdown -->
                         <ButtonComponent 
                             v-if="getOverflowTeams(getTopLevelTeams(org)).length > 0"
                             v-dropdown="{
@@ -681,16 +765,15 @@
 
                 <div class="right">
                     <a target="_BLANK" :href="'https://skedi.com/' + org.slug" class="blue-link">
-                        {{ 'https://skedi.com/' + org.slug }} test
+                        {{ 'https://skedi.com/' + org.slug }}
                     </a> 
                     <div class="separator"></div>
                     <div class="actions">
-                        <button-component  v-tooltip="{ content: 'Copy URL' }" as="tertiary icon" 
+                        <button-component v-tooltip="{ content: 'Copy URL' }" as="tertiary icon" 
                             :iconLeft="{ component: PhLink, weight: 'bold' }" />
                         <button-component v-tooltip="{ content: 'Embed on a website' }" as="tertiary icon"
                             :iconLeft="{ component: PhCode, weight: 'bold' }" />
                         <button-component 
-                            
                             v-popup="{
                                 component: OrganizationEditForm,
                                 overlay: { position: 'center' },
@@ -698,7 +781,6 @@
                                     endpoint: `organizations/${org.id}`,
                                     type: 'PUT',
                                     callback: (event, data, response, success) => {
-                                        console.log('org edited', response);
                                         popup.close();
                                         reloadData();
                                     },
@@ -710,42 +792,38 @@
                             v-tooltip="{ content: 'Settings' }" as="tertiary icon"
                             :iconLeft="{ component: PhGearSix, weight: 'bold' }" />
 
-                            <button-component 
-                                
-                                as="tertiary icon" 
-                                :iconLeft="{ component: PhPlus, weight: 'bold' }" 
-                                v-tooltip="{ content: 'New event type' }" 
-                                v-popup="{
-                                    component: EventCreateForm,
-                                    overlay: { position: 'center' },
-                                    properties: {
-                                        title: 'New event type',
-                                        preselectedOrganizationId: org.id,
-                                        callback: (event, data, response, success) => {
-                                            if (success) {
-                                                reloadData();
-                                                console.log('Event created', response);
-                                            }
-                                        },
+                        <button-component 
+                            as="tertiary icon" 
+                            :iconLeft="{ component: PhPlus, weight: 'bold' }" 
+                            v-tooltip="{ content: 'New event type' }" 
+                            v-popup="{
+                                component: EventCreateForm,
+                                overlay: { position: 'center' },
+                                properties: {
+                                    title: 'New event type',
+                                    preselectedOrganizationId: org.id,
+                                    callback: (event, data, response, success) => {
+                                        if (success) {
+                                            reloadData();
+                                        }
                                     },
-                                    
-                                }"
-                            />
+                                },
+                                
+                            }"
+                        />
                     </div>
                 </div>
             </div>
 
-            <!-- Events grid - NEW: with v-show for smooth toggle -->
             <div class="events-grid" v-if="getFilteredEvents(org).length > 0" v-show="isOrgExpanded(org.id)">
                 <div class="events-container">
-                    <!-- Event cards -->
                     <div v-for="event in getFilteredEvents(org)" :key="event.id" class="event-card">
                         <div class="top">
-                            <!-- UPDATED: Add tooltip to color marker -->
                             <div 
-                                class="event-color-marker" 
+                                class="event-color-marker clickable" 
                                 :style="{ backgroundColor: event.teamColor }"
-                                v-tooltip="{ content: event.teamName }"
+                                @click="openManageTeam(event)"
+                                v-tooltip="{ content: 'Click to manage team' }"
                             ></div>
                             <p class="event-name">{{ event.name || 'Unnamed Event' }}</p>
                             <a target="_BLANK" :href="'https://skedi.com/' + org.slug + '/schedule/' + event.slug" class="blue-link">
@@ -753,7 +831,27 @@
                             </a>
 
                             <div class="info">
-                                <!-- Hosts Info -->
+
+                                <!-- Availability -->
+                                <div 
+                                    class="info-item clickable"
+                                    @click="openEditAvailability(event)"
+                                    v-tooltip="{
+                                        content: getAvailabilityTooltip(event),
+                                        placement: 'top'
+                                    }"
+                                >
+                                    <div class="icon">
+                                        <PhCalendar :weight="'bold'" />
+                                    </div>
+                                    <span class="value">{{ Object.keys(event.schedule || {}).filter(day => event.schedule[day]?.enabled).length || 0 }}</span>
+                                </div>
+
+
+                                
+
+
+                                <!-- Hosts -->
                                 <div 
                                     class="info-item clickable" 
                                     :class="{ 'no-hosts': !event.assignees || event.assignees.length === 0 }"
@@ -771,21 +869,9 @@
                                     </span>
                                 </div>
                                 
-                                <!-- Location Info -->
-                                <div 
-                                    class="info-item clickable"
-                                    @click="openEditLocation(event)"
-                                    v-tooltip="{
-                                        content: getLocationTooltip(event),
-                                        placement: 'top'
-                                    }"
-                                >
-                                    <div class="icon">
-                                        <component :is="getLocationIcon(event.location)" :weight="'bold'" />
-                                    </div>
-                                </div>
+                               
                                 
-                                <!-- Duration Info -->
+                                <!-- Duration -->
                                 <div 
                                     class="info-item clickable"
                                     @click="openEditDuration(event)"
@@ -799,9 +885,65 @@
                                     </div>
                                     <span class="value">{{ event.duration?.length || 1 }}</span>
                                 </div>
+
+
+                                 <!-- Location -->
+                                <div 
+                                    class="clickable"
+                                    @click="openEditLocation(event)"
+                                    v-tooltip="{
+                                        content: getLocationTooltip(event),
+                                        placement: 'top'
+                                    }"
+                                >
+                                    <div class="">
+                                        <img 
+                                            v-if="isGoogleMeetLocation(event.location)" 
+                                            src="https://global.divhunt.com/6dea696e910d70e2925a5c3e453a69ff_644.svg" 
+                                            style="width: 14px; height: 14px;" 
+                                        />
+                                        <component 
+                                            v-else 
+                                            :is="getLocationIcon(event.location)" 
+                                            :weight="'bold'" 
+                                        />
+                                    </div>
+                                </div>
+
+                                
+                                
+                                <div class="buffer-and-pretime">
+
+                                    <div 
+                                        class="clickable"
+                                        @click="openEditAvailability(event)"
+                                        v-tooltip="{
+                                            content: getBufferTooltip(event),
+                                            placement: 'top'
+                                        }"
+                                    >
+                                        <div class="">
+                                            <PhHourglass :weight="'bold'" />
+                                        </div>
+                                        <span class="value">{{ event.buffer_time || event.bufferTime || 0 }}</span>
+                                    </div>
+
+                                    <!-- Advance Notice -->
+                                    <div 
+                                        class="clickable"
+                                        @click="openEditAvailability(event)"
+                                        v-tooltip="{
+                                            content: getAdvanceNoticeTooltip(event),
+                                            placement: 'top'
+                                        }"
+                                    >
+                                        <div class="">
+                                            <PhBell :weight="'bold'" />
+                                        </div>
+                                        <span class="value">{{ event.advance_notice_minutes || event.advanceNotice || 0 }}</span>
+                                    </div>
+                                </div>
                             </div>
-
-
                         </div>
 
                         <div class="bottom">
@@ -821,7 +963,6 @@
                                         :iconLeft="{ component: PhCode, weight: 'bold' }"
                                     />
 
-                                    <!-- Event actions dropdown -->
                                     <ButtonComponent 
                                         v-dropdown="{ 
                                             component: MenusComponent, 
@@ -840,7 +981,6 @@
                 </div>
             </div>
             
-            <!-- NEW: Empty state when no events -->
             <div class="events-empty-state" v-else v-show="isOrgExpanded(org.id)">
                 <div class="empty-state-box">
                     <p>Nothing here yet</p>
@@ -857,7 +997,6 @@
                                 callback: (event, data, response, success) => {
                                     if (success) {
                                         reloadData();
-                                        console.log('Event created', response);
                                     }
                                 },
                             },
@@ -867,7 +1006,6 @@
             </div>
         </div>
         
-        <!-- NEW: Create organization button at bottom -->
         <div class="create-org-section">
             <ButtonComponent 
                 v-popup="{
@@ -877,7 +1015,6 @@
                         endpoint: 'organizations',
                         type: 'POST',
                         callback: (event, data, response, success) => {
-                            console.log('org created', response);
                             popup.close();
                             reloadData();
                         },
@@ -896,9 +1033,10 @@
 <style scoped>
     .teams-c-item .head .left {
         flex: 1;
+        flex-direction: column;
+        align-items: flex-start;
     }
 
-    /* NEW: Toggle button styling */
     .org-toggle {
         background: none;
         border: none;
@@ -914,12 +1052,12 @@
         background-color: var(--background-2);
     }
 
-    /* NEW: Team filter styling */
     .team-filters {
         display: flex;
         align-items: center;
         gap: 6px;
-        margin-left: 10px;
+        margin-top: 10px;
+        flex-wrap: wrap;
     }
 
     .team-filter-item {
@@ -945,25 +1083,6 @@
         border:1px solid black;
     }
 
-    /* Keep original team list hidden but in DOM for backward compatibility */
-    .teams-list {
-        display: none;
-    }
-
-    .team-item {
-        background-color: #f0f0f0;
-        padding: 0 5px;
-        height: 26px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        font-size: 14px;
-        background: white;
-        border: 1px solid var(--border);
-    }
-
-    /* Event grid layout */
     .events-grid {
         margin-top: 20px;
         transition: all 0.3s ease;
@@ -975,7 +1094,6 @@
         gap: 15px;
     }
 
-    /* Event card styling */
     .event-card {
         background-color: white;
         border: 1px solid var(--border);
@@ -996,6 +1114,15 @@
         height: 10px;
         border-radius: 100px;
         margin-bottom: 8px;
+    }
+
+    .event-card .event-color-marker.clickable {
+        cursor: pointer;
+        transition: transform 0.2s ease;
+    }
+
+    .event-card .event-color-marker.clickable:hover {
+        transform: scale(1.1);
     }
 
     .event-card .event-name {
@@ -1032,14 +1159,11 @@
         gap: 5px;
     }
 
-    /* NEW: Create organization section */
     .create-org-section {
         margin-top: 30px;
         text-align: center;
     }
 
-
-    /* NEW: Empty state styling */
     .events-empty-state {
         margin-top: 20px;
         transition: all 0.3s ease;
@@ -1058,5 +1182,30 @@
         font-size: 14px;
         margin-bottom: 20px;
     }
-    
+
+    .event-card {
+        position:relative;
+    }
+
+    .event-card .buffer-and-pretime {
+        position:absolute;
+        top:10px;
+        right:10px;
+        display:flex;
+        align-items: center;
+    }
+
+    .event-card .buffer-and-pretime > div {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-weight: 500;
+        padding: 3px 5px;
+        background: var(--background-1);
+        border: 1px solid var(--background-2);
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
 </style>

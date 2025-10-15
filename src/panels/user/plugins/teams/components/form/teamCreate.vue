@@ -27,7 +27,8 @@
                     width: 6,
                     name: 'color',
                     properties: {
-                        placeholder: 'Team color'
+                        placeholder: 'Team color',
+                        value: '#000000'
                     }
                 }
             ]

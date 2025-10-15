@@ -220,26 +220,7 @@ function deleteOrganization(org) {
     );
 }
 
-// Create team function with per-organization billing check
-function createTeam(organizationId) {
-    if (!canCreateTeams(organizationId)) {
-        popup.open(
-            'billing-upgrade',
-            null,
-            BillingUpgradeModal,
-            {
-                organizationId: organizationId,
-                message: 'Teams feature requires a Professional plan or higher.',
-                recommendedPlan: 'professional'
-            }
-        );
-        return;
-    }
-    
-    // If billing check passes, the popup will handle the actual team creation
-}
-
-// Handle team creation button click
+// Handle team creation button click - opens popup programmatically
 function handleCreateTeamClick(org) {
     // First check if they can create teams
     if (!canCreateTeams(org.id)) {
@@ -253,8 +234,59 @@ function handleCreateTeamClick(org) {
                 recommendedPlan: 'professional'
             }
         );
+    } else {
+        // Open the create team form popup
+        popup.open(
+            'create-team',
+            null,
+            TeamCreateForm,
+            {
+                endpoint: `organizations/${org.id}/teams`,
+                type: 'POST',
+                callback: (event, data, response, success) => {
+                    if (success) {
+                        popup.close();
+                        reloadData();
+                    }
+                },
+                class: 'h-auto',
+                title: `Create new team in ${org.name}`,
+            },
+            {
+                position: 'center'
+            }
+        );
     }
-    // If they can, the v-popup directive will handle opening the create form
+}
+
+// Open organization settings - this function provides the values to the form
+function openOrganizationSettings(org) {
+    popup.open(
+        'org-settings',
+        null,
+        OrganizationEditForm,
+        {
+            endpoint: `organizations/${org.id}`,
+            type: 'PUT',
+            // Provide the values function that returns current org data
+            values: () => {
+                return {
+                    name: org.name,
+                    slug: org.slug
+                };
+            },
+            callback: (event, data, response, success) => {
+                if (success) {
+                    popup.close();
+                    reloadData();
+                }
+            },
+            class: 'h-auto'
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
 // Get plan badge for organization
@@ -322,19 +354,7 @@ onMounted(async () => {
                         <!-- Organization settings button - only for admins -->
                         <ButtonComponent
                             v-if="isOrgAdmin(org)"
-                            v-popup="{
-                                component: OrganizationEditForm,
-                                overlay: { position: 'center' },
-                                properties: {
-                                    endpoint: `organizations/${org.id}`,
-                                    type: 'PUT',
-                                    callback: (event, data, response, success) => {
-                                        popup.close();
-                                        reloadData();
-                                    },
-                                    class: 'h-auto'
-                                }
-                            }"
+                            @click="openOrganizationSettings(org)"
                             v-tooltip="{ content: 'Organization settings' }" 
                             as="tertiary icon"
                             :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
@@ -343,20 +363,6 @@ onMounted(async () => {
                         <!-- Create team button - ALWAYS visible for admins -->
                         <ButtonComponent
                             v-if="isOrgAdmin(org)"
-                            v-popup="canCreateTeams(org.id) ? {
-                                component: TeamCreateForm,
-                                overlay: { position: 'center' },
-                                properties: {
-                                    endpoint: `organizations/${org.id}/teams`,
-                                    type: 'POST',
-                                    callback: (event, data, response, success) => {
-                                        popup.close();
-                                        reloadData();
-                                    },
-                                    class: 'h-auto',
-                                    title: `Create new team in ${org.name}`,
-                                }
-                            } : null"
                             v-tooltip="{ content: 'Create new team' }" 
                             as="tertiary icon"
                             :iconLeft="{ component: PhPlus, weight: 'bold' }" 
@@ -383,7 +389,7 @@ onMounted(async () => {
             <div class="org-users" v-if="org.users && org.users.length > 0">
                 <div style="display: flex; align-items: center; gap:10px; font-weight: 500;">
                     <PhUsers weight="bold" />
-                    <span>{{ org.users.length }} Members</span>
+                    <span>{{ org.users.length }} Member{{ org.users.length !== 1 ? 's' : '' }}</span>
                 </div>
 
                 <ul>
@@ -404,20 +410,7 @@ onMounted(async () => {
                     label="Create your first team"
                     as="primary"
                     :iconLeft="{ component: PhPlus, weight: 'bold' }"
-                    v-popup="{
-                        component: TeamCreateForm,
-                        overlay: { position: 'center' },
-                        properties: {
-                            endpoint: `organizations/${org.id}/teams`,
-                            type: 'POST',
-                            callback: (event, data, response, success) => {
-                                popup.close();
-                                reloadData();
-                            },
-                            class: 'h-auto',
-                            title: `Create new team in ${org.name}`,
-                        }
-                    }"
+                    @click="handleCreateTeamClick(org)"
                 />
                 <ButtonComponent
                     v-else

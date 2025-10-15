@@ -29,8 +29,17 @@
 .event-card .info {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     margin-top: 15px;
+}
+
+.event-card .info > div {
+    display: flex
+;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-weight: 500;
 }
 
 .event-card .info .icon {
