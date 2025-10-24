@@ -35,10 +35,18 @@
         PhHourglass, PhBell  
     } from "@phosphor-icons/vue";
     
+    const props = defineProps({
+        currentOrgId: {
+            type: Number,
+            default: null
+        }
+    });
+
     import { UserStore } from '@stores/user';
 
     // State management
     const userStore = UserStore();
+
     const billingStore = BillingStore();
     const organizations = ref([]);
     const eventsItems = ref(0);
@@ -706,7 +714,7 @@
 
 <template>
     <div class="teams-c-items" :key="eventsItems">
-        <div v-for="org in organizations" :key="org.id" class="teams-c-item">
+        <div v-for="org in organizations" :key="org.id" :class="['teams-c-item', { 'current-org': currentOrgId && org.id === currentOrgId }]">
             <div class="head">
                 <div class="left">
                     <div class="org-name">
@@ -1022,6 +1030,28 @@
                 </div>
             </div>
         </div>
+
+        <!-- Create Event Button for single org view -->
+        <div class="create-event-section" v-if="currentOrgId && organizations.length > 0">
+            <button-component 
+                v-popup="{
+                    component: EventCreateForm,
+                    overlay: { position: 'center' },
+                    properties: {
+                        title: 'New event type',
+                        preselectedOrganizationId: currentOrgId,
+                        callback: (event, data, response, success) => {
+                            if (success) {
+                                reloadData();
+                            }
+                        },
+                    },
+                }"
+                as="primary"
+                :iconLeft="{ component: PhPlus, weight: 'bold' }"
+                label="Create Event"
+            />
+        </div>
         
         <div class="create-org-section">
             <ButtonComponent 
@@ -1223,6 +1253,22 @@
         border-radius: 5px;
         font-size: 12px;
         font-weight: 600;
+    }
+
+    /* When viewing single org, hide all other orgs and create button */
+    .teams-c-items:has(.current-org) .teams-c-item:not(.current-org) {
+        display: none;
+    }
+
+    .teams-c-items:has(.current-org) .create-org-section {
+        display: none;
+    }
+
+
+    .teams-c-item.current-org .org-name,
+    .teams-c-item.current-org .head .right
+    {
+        display:none
     }
 
 </style>
