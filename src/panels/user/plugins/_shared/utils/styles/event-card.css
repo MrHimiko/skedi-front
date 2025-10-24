@@ -95,3 +95,117 @@
     font-weight: 700;
     margin-bottom: 5px;
 }
+
+.event-card {
+        background-color: white;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+    }
+
+    .event-card .top {
+        margin-bottom: 15px;
+    }
+
+    .event-card .event-color-marker {
+        width: 40px;
+        height: 10px;
+        border-radius: 100px;
+        margin-bottom: 8px;
+    }
+
+    .event-card .event-color-marker.clickable {
+        cursor: pointer;
+        transition: transform 0.2s ease;
+    }
+
+    .event-card .event-color-marker.clickable:hover {
+        transform: scale(1.1);
+    }
+
+    .event-card .event-name {
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
+
+    .event-card .blue-link {
+        font-size: 12px;
+        color: var(--brand-blue);
+        display: block;
+        margin-bottom: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .event-card .bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+    }
+
+    .event-card .bottom .left p {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .event-card .bottom .actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .create-org-section {
+        margin-top: 30px;
+        text-align: center;
+    }
+
+    .events-empty-state {
+        margin-top: 20px;
+        transition: all 0.3s ease;
+    }
+
+    .empty-state-box {
+        background-color: var(--background-0);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 40px;
+        text-align: center;
+    }
+
+    .empty-state-box p {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+
+    .event-card {
+        position:relative;
+    }
+
+    .event-card .buffer-and-pretime {
+        position:absolute;
+        top:10px;
+        right:10px;
+        display:flex;
+        align-items: center;
+    }
+
+    .event-card .buffer-and-pretime > div {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-weight: 500;
+        padding: 3px 5px;
+        background: var(--background-1);
+        border: 1px solid var(--background-2);
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
