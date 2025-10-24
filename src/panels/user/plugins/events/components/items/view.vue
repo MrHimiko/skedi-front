@@ -797,24 +797,15 @@
                             :iconLeft="{ component: PhLink, weight: 'bold' }" />
                         <button-component v-tooltip="{ content: 'Embed on a website' }" as="tertiary icon"
                             :iconLeft="{ component: PhCode, weight: 'bold' }" />
-                        <button-component 
-                            v-popup="{
-                                component: OrganizationEditForm,
-                                overlay: { position: 'center' },
-                                properties: {
-                                    endpoint: `organizations/${org.id}`,
-                                    type: 'PUT',
-                                    callback: (event, data, response, success) => {
-                                        popup.close();
-                                        reloadData();
-                                    },
-                                    class: 'h-auto',
-                                    title: `Edit ${org.name}`,
-                                    values: () => {return {name: org.name, slug: org.slug} }
-                                }
-                            }"
-                            v-tooltip="{ content: 'Settings' }" as="tertiary icon"
-                            :iconLeft="{ component: PhGearSix, weight: 'bold' }" />
+
+
+                       <router-link :to="`/organization/${org.id}`">
+                            <button-component 
+                                v-tooltip="{ content: 'Organization Settings' }" 
+                                as="tertiary icon"
+                                :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
+                            />
+                        </router-link>
 
                         <button-component 
                             as="tertiary icon" 

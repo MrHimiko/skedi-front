@@ -1,15 +1,15 @@
 <!-- src/panels/user/plugins/organizations/components/bookings/view.vue -->
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
-import { BookingsService } from '@user_bookings/services/bookings';
+import { UserStore } from '@stores/user';
 
 import BookingsList from '@user_bookings/components/list/view.vue';
 import TabsComponent from '@global/tabs/view.vue';
 import InputComponent from '@form/input/view.vue';
 
-import { PhMagnifyingGlass, PhCaretDown, PhCaretUp } from "@phosphor-icons/vue";
+import { PhMagnifyingGlass } from "@phosphor-icons/vue";
 
 const props = defineProps({
     organization: {
@@ -26,10 +26,10 @@ const props = defineProps({
     }
 });
 
+const userStore = UserStore();
+
 // State
-const events = ref([]);
-const bookingsByEvent = ref({});
-const expandedEvents = ref(new Set());
+const bookings = ref([]);
 const isLoading = ref(true);
 const currentTab = ref('upcoming');
 const searchQuery = ref('');
@@ -42,102 +42,175 @@ const tabs = [
     { key: 'canceled', title: 'Canceled' }
 ];
 
-// Statistics by event
-const eventStats = computed(() => {
-    const stats = {};
-    
-    events.value.forEach(event => {
-        const bookings = bookingsByEvent.value[event.id] || [];
-        const now = new Date();
-        
-        stats[event.id] = {
-            upcoming: 0,
-            past: 0,
-            pending: 0,
-            canceled: 0,
-            all: bookings.length
-        };
-        
-        bookings.forEach(booking => {
-            if (booking.type === 'header') return;
-            
-            const status = booking.status?.toLowerCase();
-            const bookingTime = new Date(booking.start_time);
-            
-            if (status === 'canceled') {
-                stats[event.id].canceled++;
-            } else if (status === 'pending') {
-                stats[event.id].pending++;
-            } else if (status === 'confirmed') {
-                if (bookingTime > now) {
-                    stats[event.id].upcoming++;
-                } else {
-                    stats[event.id].past++;
-                }
-            }
-        });
-    });
-    
-    return stats;
-});
+// Current user ID
+const userId = computed(() => userStore.getId());
 
-// Get count for current tab
-function getEventCount(eventId) {
-    const stats = eventStats.value[eventId];
-    if (!stats) return 0;
-    
-    return stats[currentTab.value] || 0;
-}
-
-// Filter events by search
-const filteredEvents = computed(() => {
-    if (!searchQuery.value) return events.value;
+// Filter bookings by search query
+const filteredBookings = computed(() => {
+    if (!searchQuery.value) return bookings.value;
     
     const query = searchQuery.value.toLowerCase();
-    return events.value.filter(event => 
-        event.name.toLowerCase().includes(query)
-    );
+    
+    return bookings.value.filter(booking => {
+        if (booking.type === 'header') return true;
+        
+        const searchableFields = [
+            booking.event_name,
+            booking.title,
+            booking.customer_email,
+            booking.customer_name,
+            booking.notes
+        ];
+        
+        return searchableFields.some(field => 
+            field && field.toLowerCase().includes(query)
+        );
+    });
 });
 
-// Toggle event expansion
-function toggleEvent(eventId) {
-    if (expandedEvents.value.has(eventId)) {
-        expandedEvents.value.delete(eventId);
-    } else {
-        expandedEvents.value.add(eventId);
-        // Load bookings for this event if not already loaded
-        if (!bookingsByEvent.value[eventId]) {
-            loadEventBookings(eventId);
+// Statistics
+const stats = computed(() => {
+    const result = {
+        upcoming: 0,
+        past: 0,
+        pending: 0,
+        canceled: 0,
+        all: 0
+    };
+    
+    bookings.value.forEach(booking => {
+        if (booking.type === 'header') return;
+        
+        result.all++;
+        const status = booking.status?.toLowerCase() || 'confirmed';
+        
+        if (status === 'pending') {
+            result.pending++;
+        } else if (status === 'canceled' || status === 'cancelled') {
+            result.canceled++;
+        } else {
+            const now = new Date();
+            const startTime = new Date(booking.start_time);
+            
+            if (startTime > now) {
+                result.upcoming++;
+            } else {
+                result.past++;
+            }
         }
+    });
+    
+    return result;
+});
+
+// Process bookings to add required fields
+function processBookings(rawBookings) {
+    if (!Array.isArray(rawBookings) || rawBookings.length === 0) {
+        return [];
     }
+    
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const processedBookings = [];
+    const groupedByDate = {};
+    
+    rawBookings.forEach(booking => {
+        try {
+            // Parse server time as UTC
+            const [datePart, timePart] = booking.start_time.split(' ');
+            const [endDatePart, endTimePart] = booking.end_time.split(' ');
+            
+            const serverDate = new Date(`${datePart}T${timePart}Z`);
+            const serverEndDate = new Date(`${endDatePart}T${endTimePart}Z`);
+            
+            // Format time in user's timezone
+            const userTimeFormatter = new Intl.DateTimeFormat('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: userTimezone
+            });
+            
+            const userDateFormatter = new Intl.DateTimeFormat('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                timeZone: userTimezone
+            });
+            
+            const formattedStart = userTimeFormatter.format(serverDate);
+            const formattedEnd = userTimeFormatter.format(serverEndDate);
+            const dateKey = userDateFormatter.format(serverDate);
+            
+            // Create normalized booking with required properties
+            const normalizedBooking = {
+                ...booking,
+                type: 'booking', // REQUIRED by BookingsList component
+                dateKey: dateKey,
+                booking_id: booking.booking_id || booking.id,
+                id: booking.id || booking.booking_id,
+                event_id: booking.event_id,
+                start_time: booking.start_time,
+                end_time: booking.end_time,
+                formattedStart: formattedStart,
+                formattedEnd: formattedEnd,
+                title: booking.title || booking.event_name || 'Untitled Booking',
+                status: booking.status || 'confirmed',
+                guests: booking.guests || [],
+                hosts: booking.hosts || [],
+                location: booking.location || [],
+                meeting_link: booking.meeting_link || null,
+                color: '#FFDE0E',
+                originalStartTime: booking.start_time,
+                originalEndTime: booking.end_time
+            };
+            
+            // Group by date
+            if (!groupedByDate[dateKey]) {
+                groupedByDate[dateKey] = [];
+            }
+            groupedByDate[dateKey].push(normalizedBooking);
+            
+        } catch (error) {
+            console.error('Error normalizing booking:', error, booking);
+        }
+    });
+    
+    // Sort dates
+    const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+        return new Date(a) - new Date(b);
+    });
+    
+    // Build result with headers
+    sortedDates.forEach(dateKey => {
+        // Add date header
+        processedBookings.push({
+            type: 'header',
+            date: new Date(dateKey),
+            formattedDate: dateKey
+        });
+        
+        // Sort bookings within this date by start time
+        const sortedBookings = groupedByDate[dateKey].sort((a, b) => {
+            return new Date(a.start_time) - new Date(b.start_time);
+        });
+        
+        processedBookings.push(...sortedBookings);
+    });
+    
+    return processedBookings;
 }
 
-// Check if event is expanded
-function isEventExpanded(eventId) {
-    return expandedEvents.value.has(eventId);
-}
-
-// Load all events for this organization
-async function loadEvents() {
+// Load bookings for the organization
+async function loadBookings() {
     try {
         isLoading.value = true;
         
-        const response = await api.get(`organizations/${props.organizationId}/events`);
-        
-        if (response.success && response.data) {
-            events.value = response.data.filter(event => !event.deleted);
+        if (!userId.value) {
+            console.error('No user ID available');
+            return;
         }
-    } catch (error) {
-        console.error('Failed to load events:', error);
-        common.notification('Failed to load events', false);
-    } finally {
-        isLoading.value = false;
-    }
-}
-
-// Load bookings for a specific event
-async function loadEventBookings(eventId) {
-    try {
+        
+        // Calculate date range based on current tab
         const now = new Date();
         const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
         
@@ -157,62 +230,69 @@ async function loadEventBookings(eventId) {
             endTime = new Date(now.getTime() + THREE_MONTHS_MS).toISOString();
         }
         
-        const response = await api.get(
-            `organizations/${props.organizationId}/events/${eventId}/bookings`,
-            {
-                status: currentTab.value,
-                start_time: startTime,
-                end_time: endTime
-            }
-        );
+        // Build query parameters similar to /bookings page
+        const params = new URLSearchParams({
+            start_time: startTime,
+            end_time: endTime,
+            status: currentTab.value,
+            organization_id: props.organizationId.toString(),
+            page: '1',
+            page_size: '100'
+        });
         
-        if (response.success && response.data) {
-            bookingsByEvent.value[eventId] = response.data;
+        const apiUrl = `user/${userId.value}/bookings?${params.toString()}`;
+        console.log('🔗 Organization Bookings API URL:', apiUrl);
+        
+        const response = await api.get(apiUrl);
+        console.log('📦 Organization Bookings API response:', response);
+        
+        if (response && response.success) {
+            const rawBookings = response.data?.bookings || [];
+            console.log('📦 Raw bookings count:', rawBookings.length);
+            console.log('📦 Sample raw booking:', rawBookings[0]);
+            
+            // Process bookings with timezone conversion and proper structure
+            bookings.value = processBookings(rawBookings);
+            console.log('✅ Processed bookings count:', bookings.value.length);
+            console.log('✅ Sample processed booking:', bookings.value.find(b => b.type === 'booking'));
+        } else {
+            bookings.value = [];
+            common.notification('Failed to load bookings', false);
         }
     } catch (error) {
-        console.error(`Failed to load bookings for event ${eventId}:`, error);
-        bookingsByEvent.value[eventId] = [];
+        console.error('Failed to load bookings:', error);
+        bookings.value = [];
+        common.notification('Failed to load bookings', false);
+    } finally {
+        isLoading.value = false;
     }
 }
 
-// Load bookings for all expanded events
-async function loadAllExpandedBookings() {
-    const promises = Array.from(expandedEvents.value).map(eventId => 
-        loadEventBookings(eventId)
-    );
-    
-    await Promise.all(promises);
-}
-
 // Handle tab change
-function handleTabChange(event, tab) {
-    currentTab.value = tab.title.toLowerCase();
-    // Reload bookings for all expanded events with new tab filter
-    loadAllExpandedBookings();
+function handleTabChange(event, tab, index) {
+    currentTab.value = tabs[index].key;
+    loadBookings();
 }
 
+// Refresh bookings
+function refreshBookings() {
+    loadBookings();
+}
+
+// Watch for organization ID changes
+watch(() => props.organizationId, () => {
+    loadBookings();
+});
+
+// Initialize
 onMounted(() => {
-    loadEvents();
+    loadBookings();
 });
 </script>
 
 <template>
-    <div class="org-bookings-tab">
-        <div class="bookings-header">
-            <div class="header-info">
-                <h3>Bookings</h3>
-                <p>All bookings organized by event</p>
-            </div>
-            <div class="header-actions">
-                <div class="search-box">
-                    <InputComponent
-                        v-model="searchQuery"
-                        placeholder="Search events..."
-                        :iconLeft="{ component: PhMagnifyingGlass }"
-                    />
-                </div>
-            </div>
-        </div>
+    <div class="organization-bookings">
+       
         
         <!-- Tabs -->
         <div class="bookings-tabs">
@@ -223,56 +303,28 @@ onMounted(() => {
             />
         </div>
         
-        <div v-if="isLoading" class="loading-state">
-            <p>Loading events...</p>
-        </div>
-        
-        <div v-else-if="filteredEvents.length === 0" class="empty-state">
-            <p>{{ searchQuery ? 'No events found' : 'No events with bookings' }}</p>
-        </div>
-        
-        <div v-else class="events-list">
-            <div 
-                v-for="event in filteredEvents" 
-                :key="event.id"
-                class="event-section"
-            >
-                <div 
-                    class="event-header"
-                    @click="toggleEvent(event.id)"
-                >
-                    <div class="event-info">
-                        <h4 class="event-name">{{ event.name }}</h4>
-                        <span class="booking-count">
-                            {{ getEventCount(event.id) }} {{ currentTab }} {{ getEventCount(event.id) === 1 ? 'booking' : 'bookings' }}
-                        </span>
-                    </div>
-                    <div class="expand-icon">
-                        <PhCaretDown v-if="!isEventExpanded(event.id)" :size="20" weight="bold" />
-                        <PhCaretUp v-else :size="20" weight="bold" />
-                    </div>
-                </div>
-                
-                <div v-if="isEventExpanded(event.id)" class="event-bookings">
-                    <div v-if="!bookingsByEvent[event.id]" class="loading-bookings">
-                        <p>Loading bookings...</p>
-                    </div>
-                    <div v-else-if="bookingsByEvent[event.id].length === 0" class="no-bookings">
-                        <p>No {{ currentTab }} bookings for this event</p>
-                    </div>
-                    <BookingsList
-                        v-else
-                        :bookings="bookingsByEvent[event.id]"
-                        :currentTab="currentTab"
-                    />
-                </div>
+        <!-- Bookings List -->
+        <div class="bookings-content">
+            <div v-if="isLoading" class="loading-state">
+                <p>Loading bookings...</p>
             </div>
+            
+            <div v-else-if="filteredBookings.length === 0" class="empty-state">
+                <p>No {{ currentTab }} bookings found{{ searchQuery ? ' matching your search' : '' }}</p>
+            </div>
+            
+            <BookingsList
+                v-else
+                :bookings="filteredBookings"
+                :isLoading="isLoading"
+                @refresh="refreshBookings"
+            />
         </div>
     </div>
 </template>
 
 <style scoped>
-.org-bookings-tab {
+.organization-bookings {
     display: flex;
     flex-direction: column;
     gap: 24px;
@@ -280,139 +332,75 @@ onMounted(() => {
 
 .bookings-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 20px;
+    flex-direction: column;
+    gap: 16px;
 }
 
-.header-info h3 {
-    margin: 0 0 8px 0;
-    font-size: 20px;
-    font-weight: 600;
+.stats-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
 }
 
-.header-info p {
-    margin: 0;
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px;
+    background: var(--background-1);
+    border-radius: 8px;
+    min-width: 100px;
+}
+
+.stat-label {
+    font-size: 13px;
     color: var(--text-secondary);
-    font-size: 14px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .header-actions {
     display: flex;
     gap: 12px;
-    align-items: center;
 }
 
 .search-box {
-    width: 250px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    background: var(--background-1);
+    border-radius: 8px;
+    border: 1px solid var(--border);
 }
 
-.bookings-tabs {
-    margin-top: -8px;
+.search-box svg {
+    color: var(--text-secondary);
+}
+
+
+
+.bookings-content {
+    min-height: 200px;
 }
 
 .loading-state,
 .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     padding: 60px 20px;
     text-align: center;
 }
 
+.loading-state p,
 .empty-state p {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 16px;
-}
-
-.events-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.event-section {
-    background: var(--background-1);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.event-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.event-header:hover {
-    background: var(--background-2);
-}
-
-.event-info {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.event-name {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-.booking-count {
-    font-size: 13px;
-    color: var(--text-secondary);
-    padding: 4px 12px;
-    background: var(--background-2);
-    border-radius: 12px;
-}
-
-.expand-icon {
-    color: var(--text-secondary);
-    transition: transform 0.2s;
-}
-
-.event-bookings {
-    border-top: 1px solid var(--border);
-    background: var(--background-0);
-}
-
-.loading-bookings,
-.no-bookings {
-    padding: 40px 20px;
-    text-align: center;
-}
-
-.loading-bookings p,
-.no-bookings p {
     margin: 0;
     color: var(--text-secondary);
     font-size: 14px;
 }
 
-@media (max-width: 768px) {
-    .bookings-header {
-        flex-direction: column;
-    }
-    
-    .header-actions {
-        width: 100%;
-    }
-    
-    .search-box {
-        width: 100%;
-    }
-    
-    .event-info {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-}
+
 </style>

@@ -352,13 +352,14 @@ onMounted(async () => {
                         />
 
                         <!-- Organization settings button - only for admins -->
-                        <ButtonComponent
-                            v-if="isOrgAdmin(org)"
-                            @click="openOrganizationSettings(org)"
-                            v-tooltip="{ content: 'Organization settings' }" 
-                            as="tertiary icon"
-                            :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
-                        />
+                        <router-link :to="`/organization/${org.id}`">
+                            <ButtonComponent
+                                v-if="isOrgAdmin(org)"
+                                v-tooltip="{ content: 'Organization settings' }" 
+                                as="tertiary icon"
+                                :iconLeft="{ component: PhGearSix, weight: 'bold' }" 
+                            />
+                        </router-link>
                         
                         <!-- Create team button - ALWAYS visible for admins -->
                         <ButtonComponent
