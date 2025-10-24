@@ -115,17 +115,7 @@ const deleteForm = (form) => {
     );
 };
 
-// Duplicate a form
-const duplicateForm = async (form) => {
-    try {
-        await FormsService.duplicateForm(form.id);
-        common.notification('Form duplicated successfully', true);
-        await loadForms();
-    } catch (error) {
-        console.error('Failed to duplicate form:', error);
-        common.notification('Failed to duplicate form', false);
-    }
-};
+
 
 // Get form menus
 function getFormMenus(form) {
@@ -136,12 +126,7 @@ function getFormMenus(form) {
             weight: 'regular',
             onClick: () => editForm(form)
         },
-        {
-            label: 'Duplicate',
-            iconComponent: PhCopy,
-            weight: 'regular',
-            onClick: () => duplicateForm(form)
-        },
+
         {
             label: 'Delete',
             iconComponent: PhTrash,

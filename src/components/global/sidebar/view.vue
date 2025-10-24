@@ -68,6 +68,18 @@
     }
 
 
+    const currentTimezone = computed(() => {
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const offset = new Date().getTimezoneOffset();
+        const hours = Math.abs(Math.floor(offset / 60));
+        const minutes = Math.abs(offset % 60);
+        const sign = offset < 0 ? '+' : '-';
+        const utcOffset = `UTC${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        
+        return `${browserTz} (${utcOffset})`;
+    });
+
+
     // Get invitation count
     const invitationCount = computed(() => {
         const userData = userStore.getData();
@@ -216,9 +228,60 @@
                 </div>
 
                 <div class="sidebar-footer">
-                    <timezone-selector />
+                    <div class="timezone-display">
+                        <div class="timezone-label">Timezone</div>
+                        <div class="timezone-value-wrapper">
+                            <div class="timezone-value">{{ currentTimezone }}</div>
+                            <PhInfo 
+                                :size="16" 
+                                class="info-icon"
+                                v-tooltip="{ content: 'Timezone is automatically taken from your PC', options: { placement: 'top' }}"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>   
     </div>
 </template>
+
+<style>
+
+
+.timezone-display {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.timezone-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.timezone-value-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.timezone-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.info-icon {
+    color: var(--text-secondary);
+    cursor: help;
+    flex-shrink: 0;
+}
+
+.info-icon:hover {
+    color: var(--text-primary);
+}
+</style>

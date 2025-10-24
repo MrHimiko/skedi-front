@@ -72,20 +72,6 @@ function editWorkflow(workflow) {
     router.push(`/workflows/${workflow.id}`);
 }
 
-// Duplicate workflow
-async function duplicateWorkflow(workflow) {
-    try {
-        const response = await WorkflowService.duplicateWorkflow(workflow.id);
-        
-        if (response && response.success) {
-            common.notification('Workflow duplicated successfully', true);
-            loadWorkflows();
-        }
-    } catch (error) {
-        common.notification('Failed to duplicate workflow', false);
-    }
-}
-
 // Toggle workflow status
 async function toggleWorkflowStatus(workflow) {
     const newStatus = workflow.status === 'active' ? 'inactive' : 'active';
@@ -140,11 +126,7 @@ function getWorkflowMenus(workflow) {
             iconComponent: PhPencil,
             onClick: () => editWorkflow(workflow)
         },
-        {
-            label: 'Duplicate',
-            iconComponent: PhCopy,
-            onClick: () => duplicateWorkflow(workflow)
-        },
+
         {
             label: workflow.status === 'active' ? 'Deactivate' : 'Activate',
             iconComponent: workflow.status === 'active' ? PhPause : PhPlay,

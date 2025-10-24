@@ -1,15 +1,13 @@
+<!-- src/panels/user/plugins/organizations/components/settings/view.vue -->
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
-import { popup } from '@utils/popup';
 
 import ButtonComponent from '@form/button/view.vue';
 import InputComponent from '@form/input/view.vue';
-import TextareaComponent from '@form/textarea/view.vue';
-import ConfirmComponent from '@floated/confirm/view.vue';
 
-import { PhFloppyDisk, PhTrash } from "@phosphor-icons/vue";
+import { PhFloppyDisk } from "@phosphor-icons/vue";
 
 const props = defineProps({
     organization: {
@@ -31,7 +29,7 @@ const emit = defineEmits(['refresh']);
 // Form data
 const formData = ref({
     name: '',
-    description: ''
+    slug: ''
 });
 
 const isSaving = ref(false);
@@ -41,10 +39,18 @@ const hasChanges = ref(false);
 function initializeForm() {
     formData.value = {
         name: props.organization.name || '',
-        description: props.organization.description || ''
+        slug: props.organization.slug || ''
     };
     hasChanges.value = false;
 }
+
+// Watch for organization prop changes and re-initialize form
+watch(() => props.organization, (newOrg) => {
+    if (newOrg && newOrg.name) {
+        console.log('Organization prop changed, re-initializing form:', newOrg);
+        initializeForm();
+    }
+}, { immediate: true, deep: true });
 
 // Watch for changes
 function onFormChange() {
@@ -75,41 +81,6 @@ async function saveSettings() {
     }
 }
 
-// Delete organization
-function deleteOrganization() {
-    popup.open(
-        'delete-org-confirm',
-        null,
-        ConfirmComponent,
-        {
-            as: 'red',
-            title: 'Delete Organization',
-            description: `Are you sure you want to delete "${props.organization.name}"? This will permanently delete all teams, events, and data within this organization. This action cannot be undone.`,
-            confirmLabel: 'Delete Organization',
-            callback: async () => {
-                try {
-                    const response = await api.delete(`organizations/${props.organizationId}`);
-                    
-                    if (response.success) {
-                        common.notification('Organization deleted successfully', true);
-                        popup.close();
-                        // Redirect to teams page
-                        window.location.href = '/teams';
-                    } else {
-                        common.notification(response.message || 'Failed to delete organization', false);
-                    }
-                } catch (error) {
-                    console.error('Failed to delete organization:', error);
-                    common.notification('Failed to delete organization', false);
-                }
-            }
-        },
-        {
-            position: 'center'
-        }
-    );
-}
-
 onMounted(() => {
     initializeForm();
 });
@@ -123,32 +94,32 @@ onMounted(() => {
             <form @submit.prevent="saveSettings">
                 <div class="form-group">
                     <InputComponent
-                        v-model="formData.name"
+                        :value="formData.name"
                         label="Organization Name"
                         placeholder="Enter organization name"
                         :required="true"
                         :disabled="!isAdmin"
-                        @input="onFormChange"
+                        @onInput="(event, value) => { formData.name = value; onFormChange(); }"
                     />
                 </div>
                 
                 <div class="form-group">
-                    <TextareaComponent
-                        v-model="formData.description"
-                        label="Description"
-                        placeholder="Brief description of your organization"
-                        :rows="4"
-                        :disabled="!isAdmin"
-                        @input="onFormChange"
-                    />
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Organization URL</label>
-                    <div class="url-display">
-                        https://skedi.com/{{ organization.slug }}
+                    <div class="flex-between">
+                        <label>Organization Link</label>
+                        <span class="text-xs text-secondary">Required</span>
                     </div>
-                    <p class="form-help">This URL cannot be changed</p>
+                    <div class="slug-input-wrapper">
+                        <span class="slug-prefix">skedi.com/</span>
+                        <input 
+                            type="text"
+                            :value="formData.slug"
+                            placeholder="your-organization"
+                            :required="true"
+                            :disabled="!isAdmin"
+                            class="slug-input"
+                            @input="(e) => { formData.slug = e.target.value; onFormChange(); }"
+                        />
+                    </div>
                 </div>
                 
                 <div v-if="isAdmin" class="form-actions">
@@ -161,23 +132,6 @@ onMounted(() => {
                     />
                 </div>
             </form>
-        </div>
-        
-        <!-- Danger Zone -->
-        <div v-if="isAdmin" class="danger-zone">
-            <h3>Danger Zone</h3>
-            <div class="danger-content">
-                <div class="danger-info">
-                    <h4>Delete this organization</h4>
-                    <p>Once you delete an organization, there is no going back. Please be certain.</p>
-                </div>
-                <ButtonComponent
-                    as="red"
-                    :iconLeft="{ component: PhTrash, weight: 'bold' }"
-                    label="Delete Organization"
-                    @click="deleteOrganization"
-                />
-            </div>
         </div>
     </div>
 </template>
@@ -201,72 +155,73 @@ onMounted(() => {
     margin-bottom: 20px;
 }
 
-.form-label {
-    display: block;
+.flex-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 8px;
+}
+
+.flex-between label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.text-xs {
+    font-size: 12px;
+}
+
+.text-secondary {
+    color: var(--text-secondary);
+}
+
+.slug-input-wrapper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--background-0);
+}
+
+.slug-prefix {
+    padding: 7px 12px;
+    background: var(--background-2);
+    color: var(--text-secondary);
     font-size: 14px;
     font-weight: 500;
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.slug-input {
+    flex: 1;
+    padding: 7px 12px;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    background: transparent;
     color: var(--text-primary);
 }
 
-.url-display {
-    padding: 12px 16px;
-    background: var(--background-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-family: monospace;
-    font-size: 14px;
-    color: var(--text-secondary);
+.slug-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
-.form-help {
-    margin: 8px 0 0 0;
-    font-size: 13px;
+.slug-input::placeholder {
     color: var(--text-secondary);
+    opacity: 0.6;
 }
 
 .form-actions {
     margin-top: 24px;
 }
 
-/* Danger Zone */
-.danger-zone {
-    padding: 24px;
-    background: rgba(239, 68, 68, 0.05);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    border-radius: 8px;
-}
-
-.danger-zone h3 {
-    margin: 0 0 16px 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: rgb(239, 68, 68);
-}
-
-.danger-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-}
-
-.danger-info h4 {
-    margin: 0 0 8px 0;
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.danger-info p {
-    margin: 0;
-    font-size: 14px;
-    color: var(--text-secondary);
-}
-
 @media (max-width: 640px) {
-    .danger-content {
-        flex-direction: column;
-        align-items: flex-start;
+    .org-settings {
+        max-width: 100%;
     }
 }
 </style>

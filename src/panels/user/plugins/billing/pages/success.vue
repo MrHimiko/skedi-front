@@ -70,7 +70,7 @@ onMounted(async () => {
 .success-icon {
     width: 80px;
     height: 80px;
-    background: var(--success);
+    background: var(--green-default);
     color: white;
     border-radius: 50%;
     display: flex;
@@ -78,6 +78,8 @@ onMounted(async () => {
     justify-content: center;
     font-size: 48px;
     margin: 0 auto 24px;
+    padding-bottom: 10px;
+    padding-left: 5px;
 }
 
 h1 {

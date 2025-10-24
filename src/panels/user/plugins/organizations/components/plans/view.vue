@@ -1,19 +1,19 @@
 <!-- src/panels/user/plugins/organizations/components/teams/view.vue -->
 <script setup>
-import { ref, computed, onMounted, provide } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
 import { UserStore } from '@stores/user';
 import { BillingStore } from '@stores/billing';
-import { mergeOrganizationsAndTeams } from '@user_shared/utils/js/organization-structure.js';
 
 import TeamList from '@user_teams/components/teamList/view.vue';
 import TeamCreateForm from '@user_teams/components/form/teamCreate.vue';
+import MemberModal from '@user_shared/components/memberModal/view.vue';
 import ButtonComponent from '@form/button/view.vue';
 import BillingUpgradeModal from '@user_billing/components/upgrade-modal.vue';
 
-import { PhPlus } from "@phosphor-icons/vue";
+import { PhPlus, PhUserPlus } from "@phosphor-icons/vue";
 
 const props = defineProps({
     organization: {
@@ -37,42 +37,21 @@ const billingStore = BillingStore();
 const teams = ref([]);
 const isLoading = ref(true);
 
-// Create a unique symbol for the reload function
-const RELOAD_KEY = Symbol('reloadTeams');
-
 // Get current user ID
 const currentUserId = computed(() => userStore.getId());
 
-// Get organization users/members
-const orgUsers = computed(() => {
-    const orgs = userStore.getOrganizations();
-    const currentOrg = orgs.find(org => (org.entity?.id || org.id) === props.organizationId);
-    return currentOrg?.users || [];
-});
+// Get organization users
+const orgUsers = computed(() => props.organization.users || []);
 
 // Load teams
 async function loadTeams() {
     try {
         isLoading.value = true;
         
-        // Get fresh user data from API to update the store
-        const response = await api.get('account/user');
+        const response = await api.get(`organizations/${props.organizationId}/teams`);
+        
         if (response.success && response.data) {
-            userStore.setData(response.data);
-            
-            // Get merged organizations and teams with proper hierarchy
-            const organizations = mergeOrganizationsAndTeams();
-            
-            // Find current organization's teams
-            const currentOrg = organizations.find(org => org.id === props.organizationId);
-            
-            if (currentOrg && currentOrg.teams) {
-                // Get only top-level teams (sub-teams are nested inside)
-                teams.value = currentOrg.teams.filter(team => !team.parent_team_id);
-                console.log('Loaded teams with hierarchy:', teams.value);
-            } else {
-                teams.value = [];
-            }
+            teams.value = response.data;
         }
     } catch (error) {
         console.error('Failed to load teams:', error);
@@ -82,62 +61,93 @@ async function loadTeams() {
     }
 }
 
-// Reload data function that also emits refresh
-async function reloadData() {
-    await loadTeams();
-    emit('refresh');
-}
-
-// Provide the reload function to all descendant components
-provide(RELOAD_KEY, reloadData);
-
-// Create new team - copied from teams page
-function handleCreateTeamClick(org) {
-    if (!billingStore.isProfessional(org.id)) {
+// Create new team
+function createTeam() {
+    const canCreateTeam = billingStore.canAddTeam(props.organizationId);
+    
+    if (!canCreateTeam) {
         popup.open(
             'billing-upgrade',
             null,
             BillingUpgradeModal,
             {
-                organizationId: org.id,
-                message: 'Upgrade to Professional plan to create teams',
+                organizationId: props.organizationId,
+                message: 'Upgrade your plan to create more teams',
                 recommendedPlan: 'professional'
             },
             {
                 position: 'center'
             }
         );
-    } else {
-        // Open the create team form popup
+        return;
+    }
+    
+    popup.open(
+        'create-team',
+        null,
+        TeamCreateForm,
+        {
+            endpoint: `organizations/${props.organizationId}/teams`,
+            type: 'POST',
+            callback: (event, data, response, success) => {
+                if (success) {
+                    popup.close();
+                    loadTeams();
+                    emit('refresh');
+                }
+            },
+            class: 'h-auto',
+            title: `Create new team in ${props.organization.name}`,
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+// Invite member
+function inviteMember() {
+    const canAddMember = billingStore.canAddMember(props.organizationId);
+    
+    if (!canAddMember) {
         popup.open(
-            'create-team',
+            'billing-upgrade',
             null,
-            TeamCreateForm,
+            BillingUpgradeModal,
             {
-                endpoint: `organizations/${org.id}/teams`,
-                type: 'POST',
-                callback: (event, data, response, success) => {
-                    if (success) {
-                        popup.close();
-                        reloadData();
-                    }
-                },
-                class: 'h-auto',
-                title: `Create new team in ${org.name}`,
+                organizationId: props.organizationId,
+                message: 'Upgrade your plan to invite more members',
+                recommendedPlan: 'business'
             },
             {
                 position: 'center'
             }
         );
+        return;
     }
+    
+    popup.open(
+        'invite-member',
+        null,
+        MemberModal,
+        {
+            organizationId: props.organizationId,
+            organizationSlug: props.organization.slug,
+            callback: () => {
+                loadTeams();
+                emit('refresh');
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
 }
 
-// Wrapper to call with props
-function createTeam() {
-    handleCreateTeamClick({
-        id: props.organizationId,
-        name: props.organization.name
-    });
+// Handle team reload
+function handleTeamReload() {
+    loadTeams();
+    emit('refresh');
 }
 
 onMounted(() => {
@@ -149,10 +159,16 @@ onMounted(() => {
     <div class="org-teams-tab">
         <div class="teams-header">
             <div class="header-info">
-                <h3>Teams</h3>
-                <p>Organize your members into teams with specific permissions</p>
+                <h3>Teams & Members</h3>
+                <p>Organize your members into teams with specific permissions and access</p>
             </div>
             <div v-if="isAdmin" class="header-actions">
+                <ButtonComponent
+                    @click="inviteMember"
+                    as="tertiary"
+                    :iconLeft="{ component: PhUserPlus, weight: 'bold' }"
+                    label="Invite Member"
+                />
                 <ButtonComponent
                     @click="createTeam"
                     as="primary"
@@ -177,15 +193,16 @@ onMounted(() => {
             />
         </div>
         
-        <div v-else class="teams-content">
+        <div v-else class="teams-list">
             <TeamList
-                :teams="teams"
+                v-for="team in teams"
+                :key="team.id"
+                :team="team"
                 :orgSlug="organization.slug"
                 :orgUsers="orgUsers"
                 :orgId="organizationId"
                 :currentUserId="currentUserId"
-                :reloadData="reloadData"
-                :isRootLevel="true"
+                :reloadData="handleTeamReload"
             />
         </div>
     </div>
@@ -238,8 +255,10 @@ onMounted(() => {
     font-size: 16px;
 }
 
-.teams-content {
-    /* TeamList component will handle its own styling */
+.teams-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 @media (max-width: 768px) {
@@ -249,6 +268,7 @@ onMounted(() => {
     
     .header-actions {
         width: 100%;
+        flex-direction: column;
     }
 }
 </style>

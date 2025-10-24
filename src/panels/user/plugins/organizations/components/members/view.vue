@@ -1,961 +1,743 @@
-<template>
-    <div class="members-container">
-        <!-- Seat Usage Header -->
-        <div class="seat-info-card">
-            <div class="seat-info-header">
-                <h3>Organization Seats</h3>
-                <div class="seat-usage">
-                    <span class="seat-count">{{ seats.used }}/{{ seats.total }}</span>
-                    <span class="seat-label">seats used</span>
-                </div>
-            </div>
-            
-            <div class="seat-details">
-                <div class="seat-breakdown">
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Current members:</span>
-                        <span class="breakdown-value">{{ seats.current_members }}</span>
-                    </div>
-                    <div class="breakdown-item" v-if="seats.pending_invitations > 0">
-                        <span class="breakdown-label">Pending invitations:</span>
-                        <span class="breakdown-value">{{ seats.pending_invitations }}</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Available seats:</span>
-                        <span class="breakdown-value" :class="{ 'text-red': seats.available === 0 }">
-                            {{ seats.available }}
-                        </span>
-                    </div>
-                </div>
-                
-                <div class="seat-actions" v-if="userRole === 'admin'">
-                    <button 
-                        v-if="seats.needs_seats || seats.available === 0"
-                        @click="openPurchaseSeats"
-                        class="btn btn-primary"
-                    >
-                        <i class="fas fa-plus"></i> Buy More Seats
-                    </button>
-                </div>
-            </div>
-            
-            <div v-if="!compliance.is_compliant" class="compliance-warning">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span>Your organization has {{ compliance.overage_count }} more members than available seats. 
-                      Please purchase {{ compliance.required_additional_seats }} additional seats to remain compliant.</span>
-            </div>
-        </div>
-
-        <!-- Members List Header -->
-        <div class="members-header">
-            <h2>Organization Members</h2>
-            <div class="header-actions">
-                <div v-if="showNoSeatsMessage && userRole === 'admin'" class="no-seats-alert">
-                    <div class="alert-content">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span>Your organization has reached its seat limit ({{ seats.total }} seats).</span>
-                    </div>
-                    <button @click="openPurchaseSeats" class="btn btn-primary btn-sm">
-                        <i class="fas fa-plus"></i> Buy More Seats
-                    </button>
-                </div>
-                
-                <div v-else-if="userRole === 'admin'" class="invite-form">
-                    <input
-                        v-model="inviteEmail"
-                        type="email"
-                        placeholder="Enter email to invite"
-                        class="invite-input"
-                        @keyup.enter="inviteMember"
-                    />
-                    <button 
-                        @click="inviteMember"
-                        class="btn btn-primary"
-                        :disabled="!inviteEmail || isInviting"
-                    >
-                        <span v-if="isInviting">
-                            <i class="fas fa-spinner fa-spin"></i> Inviting...
-                        </span>
-                        <span v-else>
-                            <i class="fas fa-paper-plane"></i> Send Invite
-                        </span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Members List -->
-        <div class="members-list">
-            <div v-if="loading" class="loading-state">
-                <i class="fas fa-spinner fa-spin"></i> Loading members...
-            </div>
-            
-            <div v-else-if="members.length === 0" class="empty-state">
-                <i class="fas fa-users"></i>
-                <p>No members yet. Start by inviting team members!</p>
-            </div>
-            
-            <div v-else class="members-grid">
-                <div v-for="member in members" :key="member.id" class="member-card">
-                    <div class="member-info">
-                        <div class="member-avatar">
-                            {{ getInitials(member.user.name) }}
-                        </div>
-                        <div class="member-details">
-                            <h4>{{ member.user.name }}</h4>
-                            <p>{{ member.user.email }}</p>
-                            <span class="member-joined">Joined {{ formatDate(member.joined) }}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="member-actions">
-                        <div class="member-role">
-                            <span v-if="member.is_creator" class="role-badge creator">
-                                <i class="fas fa-crown"></i> Creator
-                            </span>
-                            <select 
-                                v-else-if="userRole === 'admin' && !member.is_creator"
-                                v-model="member.role"
-                                @change="updateMemberRole(member, $event.target.value)"
-                                class="role-select"
-                            >
-                                <option value="member">Member</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                            <span v-else class="role-badge" :class="member.role">
-                                {{ member.role === 'admin' ? 'Admin' : 'Member' }}
-                            </span>
-                        </div>
-                        
-                        <button 
-                            v-if="userRole === 'admin' && !member.is_creator && member.user.id !== currentUserId"
-                            @click="removeMember(member)"
-                            class="btn btn-danger btn-sm"
-                            title="Remove member"
-                        >
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Purchase Seats Modal -->
-        <teleport to="body">
-            <div v-if="showPurchaseModal" class="modal-overlay" @click="closePurchaseModal">
-                <div class="modal-content" @click.stop>
-                    <div class="modal-header">
-                        <h3>Purchase Additional Seats</h3>
-                        <button @click="closePurchaseModal" class="modal-close">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    
-                    <div class="modal-body">
-                        <div class="purchase-info">
-                            <p>Add more seats to your organization to invite additional team members.</p>
-                            <div class="price-info">
-                                <i class="fas fa-tag"></i>
-                                <span>$9 per seat / month</span>
-                            </div>
-                        </div>
-                        
-                        <div class="seat-selector">
-                            <label>Number of seats to add:</label>
-                            <div class="seat-controls">
-                                <button @click="decrementSeats" :disabled="seatsToAdd <= 1" class="btn btn-sm">
-                                    <i class="fas fa-minus"></i>
-                                </button>
-                                <input 
-                                    v-model.number="seatsToAdd" 
-                                    type="number" 
-                                    min="1" 
-                                    max="100"
-                                    class="seat-input"
-                                />
-                                <button @click="incrementSeats" :disabled="seatsToAdd >= 100" class="btn btn-sm">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div class="purchase-summary">
-                            <div class="summary-item">
-                                <span>Additional seats:</span>
-                                <span>{{ seatsToAdd }}</span>
-                            </div>
-                            <div class="summary-item">
-                                <span>Price per seat:</span>
-                                <span>$9/month</span>
-                            </div>
-                            <div class="summary-divider"></div>
-                            <div class="summary-item total">
-                                <span>Total additional cost:</span>
-                                <span>${{ seatsToAdd * 9 }}/month</span>
-                            </div>
-                        </div>
-                        
-                        <div class="modal-actions">
-                            <button @click="closePurchaseModal" class="btn btn-secondary">
-                                Cancel
-                            </button>
-                            <button 
-                                @click="purchaseSeats" 
-                                class="btn btn-primary"
-                                :disabled="isPurchasing"
-                            >
-                                <span v-if="isPurchasing">
-                                    <i class="fas fa-spinner fa-spin"></i> Processing...
-                                </span>
-                                <span v-else>
-                                    <i class="fas fa-credit-card"></i> Purchase Seats
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </teleport>
-    </div>
-</template>
-
-<script>
-import { ref, computed, onMounted } from 'vue';
+<!-- src/panels/user/plugins/organizations/components/members/view.vue -->
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue';
 import { api } from '@utils/api';
 import { common } from '@utils/common';
 import { popup } from '@utils/popup';
-import ConfirmComponent from '@floated/confirm/view.vue';
+import { UserStore } from '@stores/user';
+import { BillingStore } from '@stores/billing';
 
-export default {
-    props: {
-        organizationId: {
-            type: Number,
-            required: true
-        },
-        userRole: {
-            type: String,
-            default: 'member'
-        },
-        currentUserId: {
-            type: Number,
-            required: true
-        }
+import InputComponent from '@form/input/view.vue';
+import SelectComponent from '@form/select/view.vue';
+import ButtonComponent from '@form/button/view.vue';
+import ConfirmComponent from '@floated/confirm/view.vue';
+import MenusComponent from '@global/menus/view.vue';
+import PurchaseSeatsModal from '@user_shared/components/purchaseSeatsModal/view.vue';
+import BillingUpgradeModal from '@user_billing/components/upgrade-modal.vue';
+
+import { 
+    PhPaperPlaneTilt,
+    PhClock,
+    PhX,
+    PhArrowsClockwise,
+    PhDotsThree,
+    PhTrash,
+    PhCrown,
+    PhUser,
+    PhWarning,
+    PhShoppingCart
+} from "@phosphor-icons/vue";
+
+const props = defineProps({
+    organization: {
+        type: Object,
+        required: true
     },
+    organizationId: {
+        type: Number,
+        required: true
+    },
+    isAdmin: {
+        type: Boolean,
+        default: false
+    }
+});
+
+const emit = defineEmits(['refresh']);
+
+const userStore = UserStore();
+const billingStore = BillingStore();
+
+// State
+const members = ref([]);
+const invitations = ref([]);
+const searchQuery = ref('');
+const currentUserId = computed(() => userStore.getId());
+const isLoading = ref(false);
+
+// Invitation form state
+const inviteEmail = ref('');
+const inviteRole = ref('member');
+const showNoSeatsMessage = ref(false);
+const seatInfo = ref({
+    total: 1,
+    used: 0,
+    current_members: 0,
+    pending_invitations: 0,
+    available: 1
+});
+
+// Role options
+const roleOptions = [
+    { label: 'Member', value: 'member' },
+    { label: 'Admin', value: 'admin' }
+];
+
+// Filtered items
+const filteredItems = computed(() => {
+    const query = searchQuery.value.toLowerCase();
     
-    setup(props) {
-        // State
-        const members = ref([]);
-        const loading = ref(false);
-        const inviteEmail = ref('');
-        const isInviting = ref(false);
-        const showNoSeatsMessage = ref(false);
-        const seats = ref({
-            total: 1,
-            used: 0,
-            current_members: 0,
-            pending_invitations: 0,
-            available: 1,
-            needs_seats: false,
-            has_subscription: false
-        });
-        const compliance = ref({
-            is_compliant: true,
-            overage_count: 0,
-            required_additional_seats: 0
+    const filteredMembers = members.value.filter(member =>
+        member.user.name.toLowerCase().includes(query) ||
+        member.user.email.toLowerCase().includes(query)
+    );
+    
+    const filteredInvitations = invitations.value.filter(inv =>
+        inv.email.toLowerCase().includes(query)
+    );
+    
+    return {
+        members: filteredMembers,
+        invitations: filteredInvitations
+    };
+});
+
+// Check if there are other admins
+const hasOtherAdmins = computed(() => {
+    const otherAdmins = members.value.filter(
+        member => member.role === 'admin' && member.user.id !== currentUserId.value
+    );
+    
+    return otherAdmins.length > 0;
+});
+
+// Get user initials
+function getUserInitials(name) {
+    if (!name) return 'U';
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+        return parts[0][0].toUpperCase() + parts[1][0].toUpperCase();
+    }
+    return name[0].toUpperCase();
+}
+
+// Load members and invitations
+async function loadData() {
+    try {
+        isLoading.value = true;
+        
+        const promises = [
+            api.get(`organizations/${props.organizationId}/members`),
+            api.get(`invitations/sent?organization_id=${props.organizationId}`)
+        ];
+        
+        const [membersResponse, invitationsResponse] = await Promise.all(promises);
+        
+        if (membersResponse.success) {
+            members.value = membersResponse.data || [];
+        }
+        
+        if (invitationsResponse.success) {
+            invitations.value = invitationsResponse.data || [];
+        }
+        
+        // Load seat information
+        await loadSeatInfo();
+    } catch (error) {
+        console.error('Failed to load data:', error);
+    } finally {
+        isLoading.value = false;
+    }
+}
+
+// Load seat information
+async function loadSeatInfo() {
+    try {
+        const response = await api.get(`billing/organizations/${props.organizationId}/seats`);
+        if (response.success && response.data) {
+            seatInfo.value = response.data;
+            showNoSeatsMessage.value = seatInfo.value.available <= 0;
+        }
+    } catch (error) {
+        console.error('Failed to load seat info:', error);
+    }
+}
+
+// Send invitation
+async function sendInvitation() {
+    if (!inviteEmail.value) {
+        common.notification('Please enter an email address', false);
+        return;
+    }
+    
+    // Check if seats are available
+    if (seatInfo.value.available <= 0) {
+        showNoSeatsMessage.value = true;
+        return;
+    }
+    
+    try {
+        isLoading.value = true;
+        
+        const response = await api.post('invitations', {
+            email: inviteEmail.value,
+            role: inviteRole.value,
+            organization_id: props.organizationId
         });
         
-        // Purchase modal state
-        const showPurchaseModal = ref(false);
-        const seatsToAdd = ref(1);
-        const isPurchasing = ref(false);
-
-        // Load members and seat info
-        async function loadMembers() {
-            try {
-                loading.value = true;
-                
-                // Get members with seat info
-                const response = await api.get(`organizations/${props.organizationId}/members`);
-                
-                if (response.success) {
-                    members.value = response.data.members || [];
-                    if (response.data.seats) {
-                        seats.value = response.data.seats;
-                    }
-                }
-                
-                // Get compliance info
-                const seatResponse = await api.get(`organizations/${props.organizationId}/seats`);
-                if (seatResponse.success) {
-                    compliance.value = seatResponse.data.compliance || compliance.value;
-                }
-            } catch (error) {
-                console.error('Failed to load members:', error);
-                common.notification('Failed to load members', false);
-            } finally {
-                loading.value = false;
-            }
+        if (response.success) {
+            common.notification('Invitation sent successfully', true);
+            inviteEmail.value = '';
+            inviteRole.value = 'member';
+            await loadData();
+            emit('refresh');
+        } else {
+            common.notification(response.message || 'Failed to send invitation', false);
         }
-
-        // Invite member
-        async function inviteMember() {
-            if (!inviteEmail.value) {
-                common.notification('Please enter an email address', false);
-                return;
-            }
-            
-            // Check seats availability first
-            if (seats.value.available === 0) {
-                showNoSeatsMessage.value = true;
-                common.notification(`No seats available. Your organization is using all ${seats.value.total} seats.`, false);
-                return;
-            }
-            
-            try {
-                isInviting.value = true;
-                
-                const response = await api.post(`organizations/${props.organizationId}/members/invite`, {
-                    email: inviteEmail.value,
-                    role: 'member' // Default role
-                });
-                
-                if (response.success) {
-                    common.notification('Invitation sent successfully', true);
-                    inviteEmail.value = '';
-                    showNoSeatsMessage.value = false;
-                    loadMembers();
-                } else {
-                    if (response.data?.requires_purchase) {
-                        // No seats available - show purchase UI
-                        showNoSeatsMessage.value = true;
-                        common.notification(response.message || 'No seats available', false);
-                    } else {
-                        common.notification(response.message || 'Failed to send invitation', false);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to invite member:', error);
-                common.notification('Failed to send invitation', false);
-            } finally {
-                isInviting.value = false;
-            }
-        }
-
-        // Purchase seats
-        function openPurchaseSeats() {
-            // Calculate recommended seats
-            if (compliance.value.required_additional_seats > 0) {
-                seatsToAdd.value = compliance.value.required_additional_seats;
-            } else {
-                seatsToAdd.value = 1;
-            }
-            showPurchaseModal.value = true;
-        }
-
-        function closePurchaseModal() {
-            showPurchaseModal.value = false;
-            seatsToAdd.value = 1;
-            // Reset the no seats message when closing modal
-            showNoSeatsMessage.value = false;
-        }
-
-        function incrementSeats() {
-            if (seatsToAdd.value < 100) {
-                seatsToAdd.value++;
-            }
-        }
-
-        function decrementSeats() {
-            if (seatsToAdd.value > 1) {
-                seatsToAdd.value--;
-            }
-        }
-
-        async function purchaseSeats() {
-            try {
-                isPurchasing.value = true;
-                
-                const response = await api.post(`organizations/${props.organizationId}/seats`, {
-                    seats: seatsToAdd.value
-                });
-                
-                if (response.success) {
-                    if (response.data.checkout_url) {
-                        // Redirect to Stripe checkout
-                        window.location.href = response.data.checkout_url;
-                    } else {
-                        // Seats added successfully
-                        common.notification(`Successfully added ${seatsToAdd.value} seats`, true);
-                        closePurchaseModal();
-                        loadMembers();
-                    }
-                } else {
-                    common.notification(response.message || 'Failed to purchase seats', false);
-                }
-            } catch (error) {
-                console.error('Failed to purchase seats:', error);
-                common.notification('Failed to purchase seats', false);
-            } finally {
-                isPurchasing.value = false;
-            }
-        }
-
-        // Update member role
-        async function updateMemberRole(member, newRole) {
-            try {
-                const response = await api.put(`organizations/${props.organizationId}/members/${member.id}`, {
-                    role: newRole
-                });
-                
-                if (response.success) {
-                    common.notification('Role updated successfully', true);
-                    loadMembers();
-                } else {
-                    common.notification('Failed to update role', false);
-                    // Revert the change
-                    loadMembers();
-                }
-            } catch (error) {
-                console.error('Failed to update role:', error);
-                common.notification('Failed to update role', false);
-                loadMembers();
-            }
-        }
-
-        // Remove member
-        function removeMember(member) {
-            popup.open(
-                'remove-member-confirm',
-                null,
-                ConfirmComponent,
-                {
-                    as: 'red',
-                    description: `Are you sure you want to remove ${member.user.name} from the organization?`,
-                    action: 'Remove',
-                    callback: async () => {
-                        try {
-                            const response = await api.delete(
-                                `organizations/${props.organizationId}/members/${member.id}`
-                            );
-                            
-                            if (response.success) {
-                                common.notification('Member removed successfully', true);
-                                loadMembers();
-                            } else {
-                                common.notification('Failed to remove member', false);
-                            }
-                        } catch (error) {
-                            console.error('Failed to remove member:', error);
-                            common.notification('Failed to remove member', false);
-                        }
-                    }
-                }
-            );
-        }
-
-        // Utility functions
-        function getInitials(name) {
-            return name
-                .split(' ')
-                .map(part => part[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2);
-        }
-
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            const now = new Date();
-            const diff = now - date;
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            
-            if (days === 0) return 'today';
-            if (days === 1) return 'yesterday';
-            if (days < 30) return `${days} days ago`;
-            if (days < 365) return `${Math.floor(days / 30)} months ago`;
-            return `${Math.floor(days / 365)} years ago`;
-        }
-
-        onMounted(() => {
-            loadMembers();
-        });
-
-        return {
-            // State
-            members,
-            loading,
-            inviteEmail,
-            isInviting,
-            showNoSeatsMessage,
-            seats,
-            compliance,
-            showPurchaseModal,
-            seatsToAdd,
-            isPurchasing,
-            
-            // Methods
-            loadMembers,
-            inviteMember,
-            updateMemberRole,
-            removeMember,
-            openPurchaseSeats,
-            closePurchaseModal,
-            incrementSeats,
-            decrementSeats,
-            purchaseSeats,
-            getInitials,
-            formatDate
-        };
+    } catch (error) {
+        console.error('Failed to send invitation:', error);
+        common.notification('Failed to send invitation', false);
+    } finally {
+        isLoading.value = false;
     }
-};
+}
+
+// Resend invitation
+async function resendInvitation(invitation) {
+    try {
+        const response = await api.post(`invitations/${invitation.id}/resend`);
+        
+        if (response.success) {
+            common.notification('Invitation resent successfully', true);
+        } else {
+            common.notification(response.message || 'Failed to resend invitation', false);
+        }
+    } catch (error) {
+        console.error('Failed to resend invitation:', error);
+        common.notification('Failed to resend invitation', false);
+    }
+}
+
+// Cancel invitation
+async function cancelInvitation(invitation) {
+    popup.open(
+        'cancel-invitation',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to cancel the invitation for ${invitation.email}?`,
+            callback: async () => {
+                try {
+                    const response = await api.delete(`invitations/${invitation.id}`);
+                    
+                    if (response.success) {
+                        common.notification('Invitation cancelled', true);
+                        popup.close();
+                        await loadData();
+                    } else {
+                        common.notification(response.message || 'Failed to cancel invitation', false);
+                    }
+                } catch (error) {
+                    console.error('Failed to cancel invitation:', error);
+                    common.notification('Failed to cancel invitation', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+// Update member role
+async function updateMemberRole(member, newRole) {
+    // Prevent last admin from demoting themselves
+    if (member.role === 'admin' && member.user.id === currentUserId.value && !hasOtherAdmins.value) {
+        common.notification('Cannot demote the last admin', false);
+        return;
+    }
+    
+    try {
+        const response = await api.put(`organizations/${props.organizationId}/members/${member.id}`, {
+            role: newRole
+        });
+        
+        if (response.success) {
+            common.notification('Member role updated', true);
+            await loadData();
+            emit('refresh');
+        } else {
+            common.notification(response.message || 'Failed to update role', false);
+        }
+    } catch (error) {
+        console.error('Failed to update role:', error);
+        common.notification('Failed to update role', false);
+    }
+}
+
+// Remove member
+async function removeMember(member) {
+    popup.open(
+        'remove-member',
+        null,
+        ConfirmComponent,
+        {
+            as: 'red',
+            description: `Are you sure you want to remove ${member.user.name} from this organization?`,
+            callback: async () => {
+                try {
+                    const response = await api.delete(`organizations/${props.organizationId}/members/${member.id}`);
+                    
+                    if (response.success) {
+                        common.notification('Member removed', true);
+                        popup.close();
+                        await loadData();
+                        emit('refresh');
+                    } else {
+                        common.notification(response.message || 'Failed to remove member', false);
+                    }
+                } catch (error) {
+                    console.error('Failed to remove member:', error);
+                    common.notification('Failed to remove member', false);
+                }
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+// Purchase more seats
+function purchaseSeats() {
+    popup.open(
+        'purchase-seats',
+        null,
+        PurchaseSeatsModal,
+        {
+            organizationId: props.organizationId,
+            callback: async () => {
+                await loadData();
+            }
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+// Upgrade plan
+function upgradePlan() {
+    popup.open(
+        'billing-upgrade',
+        null,
+        BillingUpgradeModal,
+        {
+            organizationId: props.organizationId,
+            message: 'Upgrade your plan to add more members',
+            recommendedPlan: 'business'
+        },
+        {
+            position: 'center'
+        }
+    );
+}
+
+onMounted(() => {
+    loadData();
+});
 </script>
 
+<template>
+    <div class="org-members-tab">
+        <div class="members-header">
+            <div class="header-info">
+                <h3>Members</h3>
+                <p>Manage members and invitations for this organization</p>
+            </div>
+        </div>
+        
+        <!-- No Seats Alert -->
+        <div v-if="showNoSeatsMessage && isAdmin" class="no-seats-alert">
+            <PhWarning :size="24" weight="bold" />
+            <div class="alert-content">
+                <h4>No Available Seats</h4>
+                <p>You've used all available seats in your plan.</p>
+                <p class="seat-breakdown">
+                    {{ seatInfo.current_members }} members + {{ seatInfo.pending_invitations }} pending = {{ seatInfo.used }}/{{ seatInfo.total }} seats used
+                </p>
+            </div>
+            <div class="alert-actions">
+                <ButtonComponent
+                    as="secondary"
+                    label="Purchase More Seats"
+                    :iconLeft="{ component: PhShoppingCart, weight: 'bold' }"
+                    @click="purchaseSeats"
+                />
+            </div>
+        </div>
+        
+        <!-- Invite Form -->
+        <div v-if="isAdmin" class="invite-section">
+            <h4 class="section-title">INVITE NEW MEMBER</h4>
+            <div class="invite-form">
+                <InputComponent
+                    :value="inviteEmail"
+                    type="email"
+                    placeholder="Enter email address"
+                    @onInput="(e, value) => inviteEmail = value"
+                />
+                <div class="select-group">
+                    <SelectComponent
+                        :value="inviteRole"
+                        :options="roleOptions"
+                        @onChange="(value) => inviteRole = value"
+                    />
+                </div>
+                <ButtonComponent
+                    as="primary"
+                    :iconLeft="{ component: PhPaperPlaneTilt, weight: 'bold' }"
+                    label="Send Invite"
+                    @click="sendInvitation"
+                    :disabled="!inviteEmail || isLoading"
+                />
+            </div>
+        </div>
+        
+        <!-- Search -->
+        <div class="search-section">
+            <InputComponent
+                :value="searchQuery"
+                placeholder="Search members..."
+                @onInput="(e, value) => searchQuery = value"
+            />
+        </div>
+        
+        <!-- Members List -->
+        <div v-if="filteredItems.members.length > 0" class="section">
+            <h4 class="section-title">MEMBERS ({{ filteredItems.members.length }})</h4>
+            <div class="member-list">
+                <div 
+                    v-for="member in filteredItems.members" 
+                    :key="member.id"
+                    class="member-item"
+                >
+                    <div class="member-info">
+                        <div class="member-avatar">
+                            {{ getUserInitials(member.user.name) }}
+                        </div>
+                        <div class="member-details">
+                            <h5>
+                                {{ member.user.name }}
+                                <span v-if="member.user.id === currentUserId" class="creator-badge">(You)</span>
+                            </h5>
+                            <p>{{ member.user.email }}</p>
+                        </div>
+                    </div>
+                    <div class="member-actions">
+                        <span class="role-badge" :class="member.role">
+                            {{ member.role }}
+                        </span>
+                        <ButtonComponent
+                            v-if="isAdmin && member.user.id !== currentUserId"
+                            v-dropdown="{
+                                component: MenusComponent,
+                                properties: {
+                                    menus: [
+                                        {
+                                            label: member.role === 'admin' ? 'Make Member' : 'Make Admin',
+                                            iconComponent: member.role === 'admin' ? PhUser : PhCrown,
+                                            weight: 'bold',
+                                            onClick: () => updateMemberRole(member, member.role === 'admin' ? 'member' : 'admin')
+                                        },
+                                        {
+                                            label: 'Remove from organization',
+                                            iconComponent: PhTrash,
+                                            weight: 'bold',
+                                            onClick: () => removeMember(member)
+                                        }
+                                    ]
+                                }
+                            }"
+                            as="tertiary icon"
+                            :iconLeft="{ component: PhDotsThree, weight: 'bold' }"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pending Invitations -->
+        <div v-if="filteredItems.invitations.length > 0" class="section">
+            <h4 class="section-title">PENDING INVITATIONS ({{ filteredItems.invitations.length }})</h4>
+            <div class="member-list">
+                <div 
+                    v-for="invitation in filteredItems.invitations" 
+                    :key="invitation.id"
+                    class="member-item invitation-item"
+                >
+                    <div class="member-info">
+                        <div class="member-avatar pending">
+                            <PhClock :size="20" weight="bold" />
+                        </div>
+                        <div class="member-details">
+                            <h5>{{ invitation.email }}</h5>
+                            <p class="invitation-status">Invitation pending</p>
+                        </div>
+                    </div>
+                    <div class="member-actions">
+                        <span class="role-badge" :class="invitation.role">
+                            {{ invitation.role }}
+                        </span>
+                        <ButtonComponent
+                            v-if="isAdmin"
+                            as="tertiary icon"
+                            :iconLeft="{ component: PhArrowsClockwise, weight: 'bold' }"
+                            @click="resendInvitation(invitation)"
+                            v-tooltip="{ content: 'Resend invitation' }"
+                        />
+                        <ButtonComponent
+                            v-if="isAdmin"
+                            as="tertiary icon"
+                            :iconLeft="{ component: PhX, weight: 'bold' }"
+                            @click="cancelInvitation(invitation)"
+                            v-tooltip="{ content: 'Cancel invitation' }"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="!isLoading && filteredItems.members.length === 0 && filteredItems.invitations.length === 0" class="empty-state">
+            <p v-if="searchQuery">No members or invitations found matching "{{ searchQuery }}"</p>
+            <p v-else>No members yet</p>
+        </div>
+    </div>
+</template>
+
 <style scoped>
-.members-container {
-    padding: 20px;
+.org-members-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
 }
 
-/* Seat Info Card */
-.seat-info-card {
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
+.members-header {
+    margin-bottom: 8px;
+}
+
+.header-info h3 {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.header-info p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* No Seats Alert */
+.no-seats-alert {
+    background: var(--brand-yellow);
     border-radius: 8px;
     padding: 20px;
-    margin-bottom: 30px;
-}
-
-.seat-info-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    gap: 16px;
 }
 
-.seat-info-header h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.seat-usage {
-    text-align: right;
-}
-
-.seat-count {
-    font-size: 24px;
-    font-weight: 700;
-    color: #2c3e50;
-}
-
-.seat-label {
-    display: block;
-    font-size: 12px;
-    color: #6c757d;
-    margin-top: 4px;
-}
-
-.seat-details {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.seat-breakdown {
-    display: flex;
-    gap: 30px;
-}
-
-.breakdown-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.breakdown-label {
-    font-size: 12px;
-    color: #6c757d;
-    margin-bottom: 4px;
-}
-
-.breakdown-value {
+.alert-content h4 {
+    margin: 0 0 8px 0;
     font-size: 16px;
-    font-weight: 600;
-    color: #2c3e50;
 }
 
-.breakdown-value.text-red {
-    color: #dc3545;
+.alert-content p {
+    margin: 0 0 4px 0;
+    font-size: 13px;
 }
 
-.compliance-warning {
-    background: #fff3cd;
-    border: 1px solid #ffeeba;
-    color: #856404;
-    padding: 12px;
-    border-radius: 4px;
-    margin-top: 15px;
+.alert-content .seat-breakdown {
+    font-weight: 500;
+}
+
+.alert-actions {
     display: flex;
-    align-items: center;
     gap: 10px;
+    margin-left: auto;
 }
 
-.compliance-warning i {
-    color: #f0ad4e;
+/* Invite Section */
+.invite-section {
+    background: var(--background-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
 }
 
-/* Members Header */
-.members-header {
-    margin-bottom: 25px;
-}
-
-.members-header h2 {
-    margin: 0 0 20px 0;
-    font-size: 24px;
+.section-title {
+    margin: 0 0 16px 0;
+    font-size: 12px;
     font-weight: 600;
-}
-
-.header-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .invite-form {
     display: flex;
-    gap: 10px;
+    gap: 12px;
+    align-items: flex-end;
 }
 
-.invite-input {
-    flex: 1;
-    padding: 10px 15px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 14px;
+.select-group {
+    width: 160px;
 }
 
-.invite-input:disabled {
-    background-color: #e9ecef;
-    cursor: not-allowed;
+/* Search Section */
+.search-section {
+    max-width: 400px;
 }
 
-.no-seats-alert {
-    background: #fff3cd;
-    border: 1px solid #ffeeba;
-    border-radius: 4px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 15px;
-    width: 100%;
-}
-
-.no-seats-alert .alert-content {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #856404;
-}
-
-.no-seats-alert .alert-content i {
-    color: #f0ad4e;
-    font-size: 16px;
-}
-
-.no-seats-message {
-    background: #f8d7da;
-    color: #721c24;
-    padding: 10px 15px;
-    border-radius: 4px;
-    font-size: 14px;
-}
-
-.no-seats-message a {
-    color: #721c24;
-    font-weight: 600;
-}
-
-/* Members List */
-.members-grid {
-    display: grid;
-    gap: 15px;
-}
-
-.member-card {
-    background: white;
-    border: 1px solid #e9ecef;
+/* Section */
+.section {
+    background: var(--background-1);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 20px;
+}
+
+/* Member List */
+.member-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.member-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 12px;
+    background: var(--background-0);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.member-item.invitation-item {
+    background: var(--background-1);
 }
 
 .member-info {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
+    flex: 1;
 }
 
 .member-avatar {
-    width: 48px;
-    height: 48px;
-    background: #007bff;
-    color: white;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    background: var(--brand-gradient);
+    color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 18px;
+    font-size: 14px;
+    flex-shrink: 0;
 }
 
-.member-details h4 {
+.member-avatar.pending {
+    background: var(--background-3);
+    color: var(--text-secondary);
+}
+
+.member-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.member-details h5 {
     margin: 0 0 4px 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .member-details p {
-    margin: 0 0 4px 0;
-    color: #6c757d;
-    font-size: 14px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.member-joined {
-    font-size: 12px;
-    color: #adb5bd;
+.invitation-status {
+    font-style: italic;
+}
+
+.creator-badge {
+    font-size: 11px;
+    opacity: 0.7;
+    font-weight: 400;
 }
 
 .member-actions {
     display: flex;
     align-items: center;
-    gap: 15px;
-}
-
-.role-badge {
-    padding: 4px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.role-badge.creator {
-    background: #ffeaa7;
-    color: #d63031;
-}
-
-.role-badge.admin {
-    background: #e3f2fd;
-    color: #1976d2;
-}
-
-.role-badge.member {
-    background: #f5f5f5;
-    color: #616161;
-}
-
-.role-select {
-    padding: 6px 12px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-/* Modal Styles */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.modal-header {
-    padding: 20px;
-    border-bottom: 1px solid #e9ecef;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    color: #6c757d;
-    cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-body {
-    padding: 20px;
-}
-
-.purchase-info {
-    margin-bottom: 25px;
-}
-
-.purchase-info p {
-    margin: 0 0 15px 0;
-    color: #495057;
-}
-
-.price-info {
-    background: #e7f3ff;
-    padding: 12px 16px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #0066cc;
-    font-weight: 500;
-}
-
-.seat-selector {
-    margin-bottom: 25px;
-}
-
-.seat-selector label {
-    display: block;
-    margin-bottom: 10px;
-    font-weight: 500;
-}
-
-.seat-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.seat-input {
-    width: 80px;
-    padding: 8px;
-    text-align: center;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 16px;
-}
-
-.purchase-summary {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 4px;
-    margin-bottom: 25px;
-}
-
-.summary-item {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 14px;
-}
-
-.summary-divider {
-    height: 1px;
-    background: #dee2e6;
-    margin: 12px 0;
-}
-
-.summary-item.total {
-    font-weight: 600;
-    font-size: 16px;
-    margin-bottom: 0;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-}
-
-/* Button Styles */
-.btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
     gap: 8px;
 }
 
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.btn-primary {
-    background: #007bff;
-    color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: #0056b3;
-}
-
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-    background: #545b62;
-}
-
-.btn-danger {
-    background: #dc3545;
-    color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-    background: #c82333;
-}
-
-.btn-sm {
-    padding: 6px 12px;
+.role-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 16px;
     font-size: 12px;
+    font-weight: 500;
+    text-transform: capitalize;
 }
 
-/* Loading and Empty States */
-.loading-state,
+.role-badge.admin {
+    background: var(--warning-light);
+    color: var(--warning);
+}
+
+.role-badge.member {
+    background: var(--background-2);
+    color: var(--text-secondary);
+}
+
+/* Empty State */
 .empty-state {
     text-align: center;
-    padding: 60px 20px;
-    color: #6c757d;
+    padding: 40px 20px;
+    color: var(--text-secondary);
 }
 
-.empty-state i,
-.loading-state i {
-    font-size: 48px;
-    margin-bottom: 20px;
-    display: block;
+.empty-state p {
+    margin: 0;
+    font-size: 16px;
+}
+
+@media (max-width: 768px) {
+    .invite-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .select-group {
+        width: 100%;
+    }
+    
+    .member-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .member-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
 }
 </style>

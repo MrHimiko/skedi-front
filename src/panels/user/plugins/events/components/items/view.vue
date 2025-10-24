@@ -9,7 +9,7 @@
     import { useRouter } from 'vue-router';
     import { BillingStore } from '@stores/billing';
     import BillingUpgradeModal from '@user_billing/components/upgrade-modal.vue';
-
+    import { common } from '@utils/common';
     const router = useRouter();
 
     // Component imports
@@ -241,9 +241,6 @@
         { label: 'Edit hosts', icon: null, iconComponent: PhUsers, weight: 'regular' },
         { label: 'Manage team', icon: null, iconComponent: PhUsers, weight: 'regular' },
         { label: 'Form Settings', icon: null, iconComponent: PhTable, weight: 'regular' },
-        { label: 'Add workflow', icon: null, iconComponent: PhFlowArrow, weight: 'regular' },
-        { label: 'Add routing form', icon: null, iconComponent: PhTable, weight: 'regular' },
-        { label: 'Duplicate', icon: null, iconComponent: PhCopy, weight: 'regular' },
         { label: 'Remove', icon: null, iconComponent: PhTrash, weight: 'regular' }
     ]);
 
@@ -471,6 +468,8 @@
         );
     }
 
+    
+
     const handleMenuAction = (clickEvent, menu, eventData) => {
         if (!eventData) {
             console.error('No event data provided to handleMenuAction');
@@ -479,10 +478,14 @@
 
         const selectedEventId = eventData.id;
         const orgId = eventData.organization_id;
+        
+ 
+        const org = organizations.value.find(o => o.id === orgId);
 
         switch(menu.label) {
             case 'Preview':
-                window.open(`https://skedi.com/your-org/${selectedEventId}`, '_blank');
+                console.log("AAA", eventData);
+                window.open(`https://skedi.com/${org.slug}/schedule/${eventData.slug}`, '_blank');
                 break;
             case 'Edit duration':
                 popup.open(
@@ -657,8 +660,21 @@
         }
     };
 
+    async function copyEventUrl(event, org) {
+        const url = `https://skedi.com/${org.slug}/schedule/${event.slug}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            common.notification('URL copied to clipboard', true);
+        } catch (error) {
+            console.error('Failed to copy URL:', error);
+            common.notification('Failed to copy URL', false);
+        }
+    }
+
     onMounted(async () => {
         await reloadData();
+
+        
 
         organizations.value = mergeOrganizationsAndTeams();
         
@@ -956,6 +972,7 @@
                                         v-tooltip="{ content: 'Copy URL' }"
                                         as="secondary icon"
                                         :iconLeft="{ component: PhLink, weight: 'bold' }"
+                                        @click="copyEventUrl(event, org)"
                                     />
                                     <ButtonComponent 
                                         v-tooltip="{ content: 'Embed on a website' }"
