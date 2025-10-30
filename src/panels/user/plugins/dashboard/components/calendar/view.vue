@@ -8,6 +8,7 @@ import BookingDetailView from '@user_bookings/components/detail/view.vue';
 import ExternalEventPopup from '@user_dashboard/components/externalEventPopup/view.vue';
 import TodayEventsPopup from '@user_dashboard/components/todayEventsPopup/view.vue';
 import { PhCalendarBlank, PhCaretLeft, PhCaretRight } from "@phosphor-icons/vue";
+import TaskForm from '@user_shared/components/taskForm/view.vue';
 
 // State management
 const currentView = ref('week');
@@ -318,7 +319,101 @@ async function fetchCalendarEvents() {
     }
 }
 
-// FIXED: Update events with proper month view handling
+
+// Update day view events with absolute positioning and overlap detection
+function updateDayViewEvents(events) {
+    console.log('📍 updateDayViewEvents called with', events.length, 'events');
+    
+    // Filter events for selected date
+    const dayEvents = events.filter(event => {
+        const eventDate = new Date(event.start_time);
+        return eventDate.getDate() === selectedDate.value.getDate() &&
+               eventDate.getMonth() === selectedDate.value.getMonth() &&
+               eventDate.getFullYear() === selectedDate.value.getFullYear();
+    });
+    
+    console.log('📅 Events for selected day:', dayEvents.length);
+    
+    // Create events with position data (80px per hour like week view)
+    const eventsWithPositions = dayEvents.map(event => {
+        // Use the formatted times to extract the actual hours in user's timezone
+        let startHour, endHour;
+        
+        if (event.formattedStart && event.formattedEnd) {
+            // Extract hours from formatted time strings (format: "HH:MM")
+            const [startHours, startMinutes] = event.formattedStart.split(':').map(Number);
+            const [endHours, endMinutes] = event.formattedEnd.split(':').map(Number);
+            
+            startHour = startHours + (startMinutes / 60);
+            endHour = endHours + (endMinutes / 60);
+        } else {
+            // Fallback
+            const start = CalendarService.convertToUserTimezone(event.start_time);
+            const end = CalendarService.convertToUserTimezone(event.end_time);
+            
+            startHour = start.getHours() + (start.getMinutes() / 60);
+            endHour = end.getHours() + (end.getMinutes() / 60);
+        }
+        
+        // Calculate position and height (80px per hour)
+        const position = startHour * 80;
+        const height = Math.max((endHour - startHour) * 80, 20);
+        
+        return {
+            ...event,
+            position,
+            height,
+            startHour,
+            endHour,
+            left: 0,
+            width: 100,
+            overlapping: false,
+            overlapIndex: 0,
+            totalOverlaps: 1
+        };
+    });
+    
+    // FIXED: Detect overlapping events and adjust positioning
+    eventsWithPositions.sort((a, b) => a.position - b.position);
+    
+    for (let i = 0; i < eventsWithPositions.length; i++) {
+        const currentEvent = eventsWithPositions[i];
+        const overlappingEvents = [currentEvent];
+        
+        // Find all events that overlap with current event
+        for (let j = i + 1; j < eventsWithPositions.length; j++) {
+            const nextEvent = eventsWithPositions[j];
+            
+            // Check if events overlap
+            if (nextEvent.startHour < currentEvent.endHour) {
+                overlappingEvents.push(nextEvent);
+            } else {
+                break; // No more overlaps
+            }
+        }
+        
+        // If there are overlapping events, adjust their positions
+        if (overlappingEvents.length > 1) {
+            const columnWidth = 100 / overlappingEvents.length;
+            
+            overlappingEvents.forEach((event, index) => {
+                event.overlapping = true;
+                event.overlapIndex = index;
+                event.totalOverlaps = overlappingEvents.length;
+                event.left = columnWidth * index;
+                event.width = columnWidth - 1; // -1 for spacing
+            });
+        }
+    }
+    
+    console.log('✅ Day view events processed:', eventsWithPositions.length);
+    
+    // Store events with positions
+    calendarData.value.events = eventsWithPositions;
+}
+
+
+// Update events with proper month view handling
 function updateEvents() {
     console.log('🔄 updateEvents called');
     console.log('📦 allEvents.value:', allEvents.value.length, 'events');
@@ -335,19 +430,12 @@ function updateEvents() {
     if (currentView.value === 'week') {
         updateWeekViewEvents(filteredEvents);
     } else if (currentView.value === 'day') {
-        // For day view, filter events for the selected day
-        const dayEvents = filteredEvents.filter(event => {
-            const eventDate = new Date(event.start_time);
-            return eventDate.getDate() === selectedDate.value.getDate() &&
-                   eventDate.getMonth() === selectedDate.value.getMonth() &&
-                   eventDate.getFullYear() === selectedDate.value.getFullYear();
-        });
-        calendarData.value.events = dayEvents;
+      
+        updateDayViewEvents(filteredEvents);
     } else if (currentView.value === 'month') {
-        // FIXED: Month view - populate events for each day
+        
         calendarData.value.events = filteredEvents;
         
-        // Update each day in monthDays with its events
         const days = monthDays.value;
         days.forEach(day => {
             day.events = filteredEvents.filter(event => {
@@ -366,11 +454,10 @@ function updateEvents() {
 // Update week view events with positions and overlap detection
 function updateWeekViewEvents(events) {
     console.log('📍 updateWeekViewEvents called with', events.length, 'events');
-    const userTimezone = CalendarService.getUserTimezone();
     
     // Create events with position data
     const eventsWithPositions = events.map(event => {
-        console.log('📌 Processing event:', event.title);
+        console.log('📌 Processing event:', event.title, 'source:', event.source);
         
         // Use the formatted times to extract the actual hours in user's timezone
         let startHour, endHour;
@@ -409,16 +496,29 @@ function updateWeekViewEvents(events) {
         const position = startHour * 80; // 80px per hour
         const height = Math.max((endHour - startHour) * 80, 20); // Minimum 20px height
         
-        // Find which day this event belongs to
-        const eventDate = CalendarService.convertToUserTimezone(event.start_time);
+        // FIXED: Find which day this event belongs to using start_date_local or start_time
+        const eventDate = event.start_date_local || CalendarService.convertToUserTimezone(event.start_time);
         let dayIndex = -1;
         
         calendarData.value.days.forEach((day, index) => {
-            if (day.date.getDate() === eventDate.getDate() &&
-                day.date.getMonth() === eventDate.getMonth() &&
-                day.date.getFullYear() === eventDate.getFullYear()) {
+            const dayStart = new Date(day.date);
+            dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(day.date);
+            dayEnd.setHours(23, 59, 59, 999);
+            
+            const eventTime = eventDate.getTime();
+            
+            // Check if event falls within this day
+            if (eventTime >= dayStart.getTime() && eventTime <= dayEnd.getTime()) {
                 dayIndex = index;
             }
+        });
+        
+        console.log('🔍 Event day matching:', {
+            eventTitle: event.title,
+            eventDate: eventDate.toDateString(),
+            dayIndex,
+            found: dayIndex !== -1
         });
         
         return {
@@ -426,15 +526,69 @@ function updateWeekViewEvents(events) {
             position,
             height,
             dayIndex,
+            startHour,
+            endHour,
             left: 0,
             width: 100,
-            overlapping: false
+            overlapping: false,
+            overlapIndex: 0,
+            totalOverlaps: 1
         };
     });
     
+    // Filter out events that don't match any day (dayIndex === -1)
+    const validEvents = eventsWithPositions.filter(e => e.dayIndex !== -1);
+    
+    console.log('✅ Valid events for week view:', validEvents.length, 'out of', eventsWithPositions.length);
+    
+    // FIXED: Detect and handle overlapping events for each day
+    for (let dayIdx = 0; dayIdx < calendarData.value.days.length; dayIdx++) {
+        // Get all events for this day
+        const dayEvents = validEvents.filter(e => e.dayIndex === dayIdx);
+        
+        if (dayEvents.length === 0) continue;
+        
+        // Sort events by start time
+        dayEvents.sort((a, b) => a.position - b.position);
+        
+        // Detect overlaps for this day
+        for (let i = 0; i < dayEvents.length; i++) {
+            const currentEvent = dayEvents[i];
+            const overlappingEvents = [currentEvent];
+            
+            // Find all events that overlap with current event
+            for (let j = i + 1; j < dayEvents.length; j++) {
+                const nextEvent = dayEvents[j];
+                
+                // Check if events overlap (next event starts before current event ends)
+                if (nextEvent.startHour < currentEvent.endHour) {
+                    overlappingEvents.push(nextEvent);
+                } else {
+                    break; // No more overlaps
+                }
+            }
+            
+            // If there are overlapping events, adjust their positions
+            if (overlappingEvents.length > 1) {
+                const columnWidth = 100 / overlappingEvents.length;
+                
+                overlappingEvents.forEach((event, index) => {
+                    event.overlapping = true;
+                    event.overlapIndex = index;
+                    event.totalOverlaps = overlappingEvents.length;
+                    event.left = columnWidth * index;
+                    event.width = columnWidth - 2; // -2 for spacing between columns
+                });
+            }
+        }
+    }
+    
+    console.log('✅ Week view events with overlap detection:', validEvents.length);
+    
     // Store events with positions
-    calendarData.value.events = eventsWithPositions;
+    calendarData.value.events = validEvents;
 }
+
 
 // Format event time for display
 function formatEventTime(event) {
@@ -491,6 +645,25 @@ function handleEventClick(event) {
                 position: 'center'
             }
         );
+    } else if (event.source === 'custom_task') {
+        // Open task edit popup
+        popup.open(
+            'edit-task',
+            null,
+            TaskForm,
+            {
+                entry: event.raw || event,
+                callback: (error, data, response, success) => {
+                    if (success) {
+                        // Refresh calendar to show updated task
+                        fetchCalendarEvents();
+                    }
+                }
+            },
+            {
+                position: 'center'
+            }
+        );
     } else if (event.type === 'booking' || event.type === 'internal' || event.source === 'internal') {
         // FIXED: Show internal booking details with proper data structure
         const bookingData = event.raw || {
@@ -522,9 +695,6 @@ function handleEventClick(event) {
                 position: 'center'
             }
         );
-    } else if (event.type === 'availability') {
-        // Show availability event info (you might want to create a dedicated popup for this)
-        common.notification(`${event.title}: ${event.description || 'No details'}`, true);
     }
 }
 
@@ -724,29 +894,41 @@ watch(currentWeekStart, () => {
                 </h3>
             </div>
             
-            <div class="day-hours">
-                <div v-for="hour in calendarData.hours" :key="hour" class="day-hour-slot">
-                    <div class="hour-label">{{ hour }}</div>
-                    <div class="hour-content">
-                        <div 
-                            v-for="event in getEventsForHour(hour)"
-                            :key="event.id"
-                            :class="[
-                                'day-event',
-                                event.type,
-                                getAvailabilityClasses(event),
-                                { 'is-canceled': event.status === 'canceled' }
-                            ]"
-                            v-bind="getEventDataAttributes(event)"
-                            @click="handleEventClick(event)"
-                        >
-
-                            
-                            <div class="event-content">
-                                <div class="event-title">{{ event.title }}</div>
-                                <div class="event-time">{{ formatEventTime(event) }}</div>
-                                <div v-if="event.description && event.type === 'availability'" class="event-description">
-                                    {{ event.description }}
+            <div class="day-hours-container">
+                <div class="day-hours">
+                    <div v-for="(hour, hourIndex) in calendarData.hours" :key="hour" class="day-hour-slot">
+                        <div class="hour-label">{{ hour }}</div>
+                        <div class="hour-content-wrapper">
+                            <!-- Absolute positioned container for events (only in first hour) -->
+                            <div v-if="hourIndex === 0" class="day-events-container">
+                                <div
+                                    v-for="event in calendarData.events"
+                                    :key="event.id"
+                                    :class="[
+                                        'day-event-absolute',
+                                        event.type,
+                                        getAvailabilityClasses(event),
+                                        { 
+                                            'is-canceled': event.status === 'canceled',
+                                            'overlapping': event.overlapping
+                                        }
+                                    ]"
+                                    v-bind="getEventDataAttributes(event)"
+                                    :style="{
+                                        top: `${event.position}px`,
+                                        height: `${event.height}px`,
+                                        left: `${event.left}%`,
+                                        width: `${event.width}%`
+                                    }"
+                                    @click="handleEventClick(event)"
+                                >
+                                    <div class="event-content">
+                                        <div class="event-title">{{ event.title }}</div>
+                                        <div class="event-time">{{ formatEventTime(event) }}</div>
+                                        <div v-if="event.description && event.type === 'availability'" class="event-description">
+                                            {{ event.description }}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

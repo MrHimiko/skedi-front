@@ -737,3 +737,194 @@
     background: var(--brand-pink-light, #fce7f3);
     border-color: var(--brand-pink, #ec4899);
 }
+
+
+/* Custom Task events - Different color from vacation */
+.dashboard-c-calendar .calendar-item.custom-task,
+.dashboard-c-calendar .calendar-item[data-source="custom_task"] {
+    background: var(--brand-cyan-light, #cffafe);
+    border-color: var(--brand-cyan, #06b6d4);
+    border-style: solid;
+}
+
+/* Month view custom tasks */
+.month-event.custom-task,
+.month-event[data-source="custom_task"] {
+    background: var(--brand-cyan-light, #cffafe);
+    border: 1px solid var(--brand-cyan, #06b6d4);
+}
+
+/* Day view custom tasks */
+.day-event.custom-task,
+.day-event[data-source="custom_task"] {
+    background: var(--brand-cyan-light, #cffafe);
+    border: 1px solid var(--brand-cyan, #06b6d4);
+}
+
+
+.day-view {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.day-view-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--background-0);
+}
+
+.day-date {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.day-hours-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+
+.day-hours {
+    display: flex;
+    flex-direction: column;
+}
+
+.day-hour-slot {
+    display: flex;
+    min-height: 80px;
+    border-bottom: 1px solid var(--border);
+}
+
+.hour-label {
+    width: 80px;
+    padding: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.hour-content-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+/* Container for absolutely positioned events */
+.day-events-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: calc(80px * 24); /* 24 hours * 80px per hour */
+    pointer-events: none; /* Allow clicks to pass through container */
+}
+
+/* Absolutely positioned day events */
+.day-event-absolute {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    background: var(--brand-blue-light);
+    border: 1px solid var(--brand-blue);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    pointer-events: auto; /* Re-enable clicks on events */
+    overflow: hidden;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+.day-event-absolute:hover {
+    transform: translateX(2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+}
+
+/* Event type styles for day view */
+.day-event-absolute.internal,
+.day-event-absolute[data-type="booking"] {
+    background: var(--brand-blue-light, #dbeafe);
+    border-color: var(--brand-blue, #3b82f6);
+}
+
+.day-event-absolute.external,
+.day-event-absolute[data-type="external"] {
+    background: var(--brand-orange-light, #fed7aa);
+    border-color: var(--brand-orange, #ea580c);
+}
+
+.day-event-absolute.availability,
+.day-event-absolute[data-type="availability"] {
+    background: var(--brand-purple-light, #e9d5ff);
+    border-color: var(--brand-purple, #9333ea);
+    border-style: dashed;
+}
+
+/* Custom task styling for day view */
+.day-event-absolute[data-source="custom_task"] {
+    background: var(--brand-cyan-light, #cffafe);
+    border-color: var(--brand-cyan, #06b6d4);
+    border-style: solid;
+}
+
+.day-event-absolute.is-canceled {
+    opacity: 0.5;
+}
+
+.day-event-absolute.is-canceled .event-title {
+    text-decoration: line-through;
+}
+
+/* Overlapping events styling */
+.day-event-absolute.overlapping {
+    border-width: 2px;
+}
+
+.day-event-absolute .event-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.day-event-absolute .event-title {
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.day-event-absolute .event-time {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.2;
+}
+
+.day-event-absolute .event-description {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+/* Hide text content for very short events */
+.day-event-absolute[style*="height: 2"] .event-time,
+.day-event-absolute[style*="height: 3"] .event-time,
+.day-event-absolute[style*="height: 2"] .event-description,
+.day-event-absolute[style*="height: 3"] .event-description {
+    display: none;
+}

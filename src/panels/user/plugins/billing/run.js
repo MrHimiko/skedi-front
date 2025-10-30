@@ -10,5 +10,13 @@ export default class {
             name: 'BillingSuccess',
             component: () => import('./pages/success.vue')
         });
+
+
+         router.addRoute({
+            path: '/billing',
+            name: 'Billing',
+            component: () => import('./pages/home.vue')
+        });
+
     }
 }

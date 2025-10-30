@@ -278,26 +278,13 @@ function getSourceIcon(source) {
     return icons[source] || '/assets/icons/default-calendar.svg';
 }
 
-// Refresh events periodically (every minute to update "starts in" times)
-let refreshInterval = null;
 
 onMounted(() => {
     loadTodayEvents();
-    
-    // Update slides per view on resize
     window.addEventListener('resize', updateSlidesPerView);
-    
-    // Refresh every minute to update timing
-    refreshInterval = setInterval(() => {
-        loadTodayEvents();
-    }, 60000); // 60 seconds
 });
 
-onUnmounted(() => {
-    if (refreshInterval) {
-        clearInterval(refreshInterval);
-    }
-    
+onUnmounted(() => { 
     window.removeEventListener('resize', updateSlidesPerView);
 });
 </script>

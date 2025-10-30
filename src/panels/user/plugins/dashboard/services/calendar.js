@@ -252,42 +252,53 @@ export class CalendarService {
     }
 
     /**
-     * FIXED: Fetch availability events with caching (only refresh on page load)
+     * Fetch availability events (out of office + custom tasks)
      */
     static async fetchAvailabilityEvents() {
         try {
-            // Check cache first
             const now = Date.now();
+            
+            // Return cached data if still valid
             if (
-                this.availabilityCache.data &&
-                this.availabilityCache.timestamp &&
+                this.availabilityCache.data && 
+                this.availabilityCache.timestamp && 
                 (now - this.availabilityCache.timestamp) < this.availabilityCache.expires
             ) {
-                console.log('📦 Using cached availability events');
+                console.log('💾 Using cached availability data');
                 return this.availabilityCache.data;
             }
 
-            const apiUrl = 'user/out-of-office';
-            console.log('🔗 Availability API URL:', apiUrl);
+            // Fetch out of office entries
+            const outOfOfficeUrl = 'user/out-of-office?source=out_of_office';
+            console.log('🔗 Out of Office API URL:', outOfOfficeUrl);
             
-            const response = await api.get(apiUrl);
-            console.log('📦 Availability API response:', response);
+            const outOfOfficeResponse = await api.get(outOfOfficeUrl);
+            console.log('📦 Out of Office API response:', outOfOfficeResponse);
             
-            if (!response || !response.success) {
-                console.log('❌ Availability API call failed');
-                return [];
-            }
-
-            const data = response.data || [];
+            // Fetch custom tasks
+            const customTasksUrl = 'user/out-of-office?source=custom_task';
+            console.log('🔗 Custom Tasks API URL:', customTasksUrl);
+            
+            const customTasksResponse = await api.get(customTasksUrl);
+            console.log('📦 Custom Tasks API response:', customTasksResponse);
+            
+            // Combine both results
+            const outOfOfficeData = (outOfOfficeResponse && outOfOfficeResponse.success) ? (outOfOfficeResponse.data || []) : [];
+            const customTasksData = (customTasksResponse && customTasksResponse.success) ? (customTasksResponse.data || []) : [];
+            
+            const combinedData = [...outOfOfficeData, ...customTasksData];
             
             // Cache the results
             this.availabilityCache = {
-                data: data,
+                data: combinedData,
                 timestamp: now
             };
             
-            console.log('💾 Cached availability events:', data.length);
-            return data;
+            console.log('💾 Cached availability events:', combinedData.length);
+            console.log('  - Out of Office:', outOfOfficeData.length);
+            console.log('  - Custom Tasks:', customTasksData.length);
+            
+            return combinedData;
         } catch (error) {
             console.error('💥 Error fetching availability events:', error);
             return [];
@@ -529,9 +540,17 @@ export class CalendarService {
      * FIXED: Transform availability entry to calendar event with custom date range
      */
     static transformAvailabilityToEvent(availability, customStartDate = null, customEndDate = null) {
+
+        console.log('🔧 transformAvailabilityToEvent called:', {
+            title: availability.title,
+            source: availability.source,
+            description: availability.description
+        });
+
+
         const userTimezone = this.getUserTimezone();
         
-        // Use custom dates if provided (for multi-day events), otherwise use original dates
+        // Parse times
         const startDateTime = customStartDate || new Date(availability.start_time + (availability.start_time.endsWith('Z') ? '' : 'Z'));
         const endDateTime = customEndDate || new Date(availability.end_time + (availability.end_time.endsWith('Z') ? '' : 'Z'));
         
@@ -551,26 +570,36 @@ export class CalendarService {
             timeZone: userTimezone
         });
 
-        // Extract reason from description for better display
+        // Handle different sources differently
         let displayTitle = availability.title || 'Unavailable';
         let reasonIcon = '';
 
-        if (availability.description) {
-            const description = availability.description;
-            
-            if (description.includes('Vacation')) {
-                reasonIcon = '🏝️ ';
-                displayTitle = 'Vacation';
-            } else if (description.includes('Travel')) {
-                reasonIcon = '✈️ ';
-                displayTitle = 'Travel';
-            } else if (description.includes('Sick leave')) {
-                reasonIcon = '🤒 ';
-                displayTitle = 'Sick Leave';
-            } else if (description.includes('Public holiday')) {
-                reasonIcon = '📅 ';
-                displayTitle = 'Public Holiday';
-            } else if (availability.source === 'out_of_office') {
+        if (availability.source === 'custom_task') {
+            // For custom tasks: use the title directly with task icon
+            reasonIcon = '✅ ';
+            displayTitle = availability.title || 'Task';
+        } else if (availability.source === 'out_of_office') {
+            // For out of office: parse the description for reason
+            if (availability.description) {
+                const description = availability.description;
+                
+                if (description.includes('Vacation')) {
+                    reasonIcon = '🏝️ ';
+                    displayTitle = 'Vacation';
+                } else if (description.includes('Travel')) {
+                    reasonIcon = '✈️ ';
+                    displayTitle = 'Travel';
+                } else if (description.includes('Sick leave')) {
+                    reasonIcon = '🤒 ';
+                    displayTitle = 'Sick Leave';
+                } else if (description.includes('Public holiday')) {
+                    reasonIcon = '📅 ';
+                    displayTitle = 'Public Holiday';
+                } else {
+                    reasonIcon = '🚫 ';
+                    displayTitle = 'Out of Office';
+                }
+            } else {
                 reasonIcon = '🚫 ';
                 displayTitle = 'Out of Office';
             }
@@ -582,19 +611,17 @@ export class CalendarService {
         return {
             id: `availability_${availability.id}_${dayKey}`,
             title: `${reasonIcon}${displayTitle}`,
-            start_time: startDateTime.toISOString().replace('Z', '').replace('T', ' '),
-            end_time: endDateTime.toISOString().replace('Z', '').replace('T', ' '),
+            description: availability.description || '',
+            start_time: startDateTime.toISOString(),
+            end_time: endDateTime.toISOString(),
             start_date_local: startDateTime,
             end_date_local: endDateTime,
             formattedStart: userTimeFormatter.format(startDateTime),
             formattedEnd: userTimeFormatter.format(endDateTime),
             dateKey: userDateFormatter.format(startDateTime),
             status: availability.status || 'confirmed',
-            location: '',
-            description: availability.description || '',
             type: 'availability',
             source: availability.source || 'out_of_office',
-            cancelled: false,
             raw: availability
         };
     }
@@ -718,26 +745,36 @@ export class CalendarService {
         const startDateTime = new Date(availability.start_time + (availability.start_time.endsWith('Z') ? '' : 'Z'));
         const endDateTime = new Date(availability.end_time + (availability.end_time.endsWith('Z') ? '' : 'Z'));
         
-        // Extract reason from description for better display
+        // Handle different sources differently
         let displayTitle = availability.title || 'Unavailable';
         let reasonIcon = '';
 
-        if (availability.description) {
-            const description = availability.description;
-            
-            if (description.includes('Vacation')) {
-                reasonIcon = '🏝️ ';
-                displayTitle = 'Vacation';
-            } else if (description.includes('Travel')) {
-                reasonIcon = '✈️ ';
-                displayTitle = 'Travel';
-            } else if (description.includes('Sick leave')) {
-                reasonIcon = '🤒 ';
-                displayTitle = 'Sick Leave';
-            } else if (description.includes('Public holiday')) {
-                reasonIcon = '📅 ';
-                displayTitle = 'Public Holiday';
-            } else if (availability.source === 'out_of_office') {
+        if (availability.source === 'custom_task') {
+            // For custom tasks: use the title directly with task icon
+            reasonIcon = '✅ ';
+            displayTitle = availability.title || 'Task';
+        } else if (availability.source === 'out_of_office') {
+            // For out of office: parse the description for reason
+            if (availability.description) {
+                const description = availability.description;
+                
+                if (description.includes('Vacation')) {
+                    reasonIcon = '🏝️ ';
+                    displayTitle = 'Vacation';
+                } else if (description.includes('Travel')) {
+                    reasonIcon = '✈️ ';
+                    displayTitle = 'Travel';
+                } else if (description.includes('Sick leave')) {
+                    reasonIcon = '🤒 ';
+                    displayTitle = 'Sick Leave';
+                } else if (description.includes('Public holiday')) {
+                    reasonIcon = '📅 ';
+                    displayTitle = 'Public Holiday';
+                } else {
+                    reasonIcon = '🚫 ';
+                    displayTitle = 'Out of Office';
+                }
+            } else {
                 reasonIcon = '🚫 ';
                 displayTitle = 'Out of Office';
             }
