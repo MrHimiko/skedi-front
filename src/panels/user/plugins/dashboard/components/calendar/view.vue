@@ -1,4 +1,3 @@
-
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { CalendarService } from '@user_dashboard/services/calendar';
@@ -251,11 +250,10 @@ function getEventsForDay(date) {
     });
 }
 
-// FIXED: Fetch calendar events with proper date ranges for each view
+// Fetch calendar events with proper date ranges for each view
 async function fetchCalendarEvents() {
     try {
         isLoading.value = true;
-        console.log('📅 Fetching calendar events for view:', currentView.value);
         
         let startDate, endDate;
         
@@ -275,7 +273,7 @@ async function fetchCalendarEvents() {
             endDate = new Date(selectedDate.value);
             endDate.setHours(23, 59, 59, 999);
         } else if (currentView.value === 'month') {
-            // FIXED: For month view, get the full month + surrounding days
+            // For month view, get the full month + surrounding days
             const year = selectedDate.value.getFullYear();
             const month = selectedDate.value.getMonth();
             
@@ -295,23 +293,13 @@ async function fetchCalendarEvents() {
             endDate.setHours(23, 59, 59, 999);
         }
         
-        console.log('📅 Fetching events for date range:', {
-            view: currentView.value,
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
-            totalDays: Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
-        });
-        
-        // FIXED: Use getEventsForDateRange for proper date range support
         const events = await CalendarService.getEventsForDateRange(startDate, endDate);
-        console.log('📦 Received events from CalendarService:', events.length, 'events');
         
         allEvents.value = events;
         
         updateEvents();
         
     } catch (error) {
-        console.error('💥 Error fetching calendar events:', error);
         common.notification('Failed to load calendar events', false);
         allEvents.value = [];
     } finally {
@@ -319,11 +307,8 @@ async function fetchCalendarEvents() {
     }
 }
 
-
 // Update day view events with absolute positioning and overlap detection
 function updateDayViewEvents(events) {
-    console.log('📍 updateDayViewEvents called with', events.length, 'events');
-    
     // Filter events for selected date
     const dayEvents = events.filter(event => {
         const eventDate = new Date(event.start_time);
@@ -331,8 +316,6 @@ function updateDayViewEvents(events) {
                eventDate.getMonth() === selectedDate.value.getMonth() &&
                eventDate.getFullYear() === selectedDate.value.getFullYear();
     });
-    
-    console.log('📅 Events for selected day:', dayEvents.length);
     
     // Create events with position data (80px per hour like week view)
     const eventsWithPositions = dayEvents.map(event => {
@@ -373,7 +356,7 @@ function updateDayViewEvents(events) {
         };
     });
     
-    // FIXED: Detect overlapping events and adjust positioning
+    // Detect overlapping events and adjust positioning
     eventsWithPositions.sort((a, b) => a.position - b.position);
     
     for (let i = 0; i < eventsWithPositions.length; i++) {
@@ -406,34 +389,22 @@ function updateDayViewEvents(events) {
         }
     }
     
-    console.log('✅ Day view events processed:', eventsWithPositions.length);
-    
     // Store events with positions
     calendarData.value.events = eventsWithPositions;
 }
 
-
 // Update events with proper month view handling
 function updateEvents() {
-    console.log('🔄 updateEvents called');
-    console.log('📦 allEvents.value:', allEvents.value.length, 'events');
-    console.log('🔍 showCanceled.value:', showCanceled.value);
-    console.log('📍 currentView:', currentView.value);
-    
     // Filter events based on showCanceled
     let filteredEvents = showCanceled.value 
         ? allEvents.value 
         : allEvents.value.filter(event => event.status !== 'canceled');
     
-    console.log('🎯 After filter, events count:', filteredEvents.length);
-    
     if (currentView.value === 'week') {
         updateWeekViewEvents(filteredEvents);
     } else if (currentView.value === 'day') {
-      
         updateDayViewEvents(filteredEvents);
     } else if (currentView.value === 'month') {
-        
         calendarData.value.events = filteredEvents;
         
         const days = monthDays.value;
@@ -445,20 +416,13 @@ function updateEvents() {
                        eventDate.getFullYear() === day.date.getFullYear();
             });
         });
-        
-        console.log('📅 Month view events populated for', days.length, 'days');
-        console.log('📅 Events per day sample:', days.slice(0, 5).map(d => ({ date: d.date.toDateString(), events: d.events.length })));
     }
 }
 
 // Update week view events with positions and overlap detection
 function updateWeekViewEvents(events) {
-    console.log('📍 updateWeekViewEvents called with', events.length, 'events');
-    
     // Create events with position data
     const eventsWithPositions = events.map(event => {
-        console.log('📌 Processing event:', event.title, 'source:', event.source);
-        
         // Use the formatted times to extract the actual hours in user's timezone
         let startHour, endHour;
         
@@ -469,13 +433,6 @@ function updateWeekViewEvents(events) {
             
             startHour = startHours + (startMinutes / 60);
             endHour = endHours + (endMinutes / 60);
-            
-            console.log('🕐 Using formatted times:', {
-                formattedStart: event.formattedStart,
-                formattedEnd: event.formattedEnd,
-                startHour,
-                endHour
-            });
         } else {
             // Fallback: format the times to get hours in user's timezone
             const start = CalendarService.convertToUserTimezone(event.start_time);
@@ -483,20 +440,13 @@ function updateWeekViewEvents(events) {
             
             startHour = start.getHours() + (start.getMinutes() / 60);
             endHour = end.getHours() + (end.getMinutes() / 60);
-            
-            console.log('🕐 Using fallback calculation:', {
-                start: start.toString(),
-                end: end.toString(),
-                startHour,
-                endHour
-            });
         }
         
         // Calculate position and height
         const position = startHour * 80; // 80px per hour
         const height = Math.max((endHour - startHour) * 80, 20); // Minimum 20px height
         
-        // FIXED: Find which day this event belongs to using start_date_local or start_time
+        // Find which day this event belongs to using start_date_local or start_time
         const eventDate = event.start_date_local || CalendarService.convertToUserTimezone(event.start_time);
         let dayIndex = -1;
         
@@ -512,13 +462,6 @@ function updateWeekViewEvents(events) {
             if (eventTime >= dayStart.getTime() && eventTime <= dayEnd.getTime()) {
                 dayIndex = index;
             }
-        });
-        
-        console.log('🔍 Event day matching:', {
-            eventTitle: event.title,
-            eventDate: eventDate.toDateString(),
-            dayIndex,
-            found: dayIndex !== -1
         });
         
         return {
@@ -539,9 +482,7 @@ function updateWeekViewEvents(events) {
     // Filter out events that don't match any day (dayIndex === -1)
     const validEvents = eventsWithPositions.filter(e => e.dayIndex !== -1);
     
-    console.log('✅ Valid events for week view:', validEvents.length, 'out of', eventsWithPositions.length);
-    
-    // FIXED: Detect and handle overlapping events for each day
+    // Detect and handle overlapping events for each day
     for (let dayIdx = 0; dayIdx < calendarData.value.days.length; dayIdx++) {
         // Get all events for this day
         const dayEvents = validEvents.filter(e => e.dayIndex === dayIdx);
@@ -583,12 +524,9 @@ function updateWeekViewEvents(events) {
         }
     }
     
-    console.log('✅ Week view events with overlap detection:', validEvents.length);
-    
     // Store events with positions
     calendarData.value.events = validEvents;
 }
-
 
 // Format event time for display
 function formatEventTime(event) {
@@ -630,10 +568,8 @@ function getEventsForHour(hour) {
     });
 }
 
-// Handle event click - FIXED: Pass correct data structure
+// Handle event click
 function handleEventClick(event) {
-    console.log('🖱️ Event clicked:', event);
-    
     if (event.type === 'external') {
         // Show external event popup
         popup.open(
@@ -665,7 +601,7 @@ function handleEventClick(event) {
             }
         );
     } else if (event.type === 'booking' || event.type === 'internal' || event.source === 'internal') {
-        // FIXED: Show internal booking details with proper data structure
+        // Show internal booking details with proper data structure
         const bookingData = event.raw || {
             id: event.booking_id || event.id,
             title: event.title,
@@ -865,8 +801,6 @@ watch(currentWeekStart, () => {
                                 }"
                                 @click="handleEventClick(event)"
                             >
-
-                                
                                 <div class="event-content">
                                     <div class="event-title">{{ event.title }}</div>
                                     <div class="event-time" v-if="event.type !== 'availability'">{{ formatEventTime(event) }}</div>

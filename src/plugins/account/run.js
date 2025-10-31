@@ -24,6 +24,17 @@ export default class
             component: () => import('./pages/recovery/view.vue'),
         });
 
+        this.router.addRoute({
+            path: '/account/reset-password',
+            name: 'Account - Reset Password',
+            component: () => import('./pages/reset-password/view.vue'),
+        });
+
+        this.router.addRoute({
+            path: '/account/verify-email',
+            name: 'Account - Verify Email',
+            component: () => import('./pages/verify-email/view.vue'),
+        });
 
         this.router.addRoute({
             path: '/account/settings',
@@ -31,7 +42,10 @@ export default class
             component: () => import('./pages/settings/view.vue'),
         });
 
-        
+
+                
+
+            
     }
 
 }

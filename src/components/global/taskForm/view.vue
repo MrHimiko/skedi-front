@@ -1,5 +1,5 @@
 <template>
-    <PopupLayout title="Create Custom Task" customClass="h-auto">
+    <PopupLayout title="Custom Task" customClass="h-auto">
         <template #content>
             <div class="task-form">
                 <div class="form-group">

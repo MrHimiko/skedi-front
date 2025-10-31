@@ -28,11 +28,17 @@ function handleSubmit(event, fields, response, success)
     // Store the token
     storage.set('token', response.data.token, true);
     
-    // Get return URL or default to homepage
-    const url =  '/survey';
+    // Check if user registered via email (needs verification)
+    const user = response.data.user;
     
-    // Navigate to the return URL or homepage
-    window.location.href = url.startsWith('/') ? url : '/';
+    if (user && !user.email_verified) 
+    {
+        // Show notification about verification
+        common.notification('Registration successful! Please check your email to verify your account.', true);
+    }
+    
+    // Always redirect to survey (no strict enforcement)
+    window.location.href = '/survey';
 }
 
 export 
