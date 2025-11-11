@@ -5,6 +5,7 @@
     import { common } from '@utils/common';
     import { storage } from '@utils/storage';
     
+    import MainLayout from '@account/layouts/main/view.vue';
     import HeaderComponent from '@account/components/header/view.vue';
     import ButtonComponent from '@form/button/view.vue';
     import { PhCheckCircle, PhXCircle } from "@phosphor-icons/vue";
@@ -26,7 +27,7 @@
         }
         
         try {
-            const response = await api.post('/api/account/verify-email', {
+            const response = await api.post('account/verify-email', {
                 token: token
             });
             
@@ -34,13 +35,8 @@
                 verified.value = true;
                 common.notification('Email verified successfully!', true);
                 
-                // Redirect to survey or dashboard after 2 seconds
                 setTimeout(() => {
-                    if (storage.get('token')) {
-                        window.location.href = '/survey';
-                    } else {
-                        router.push('/account/login');
-                    }
+                    goToDashboard();
                 }, 2000);
             } else {
                 error.value = response.data.message || 'Verification failed';
@@ -51,47 +47,89 @@
             verifying.value = false;
         }
     });
+    
+    function goToDashboard() {
+        if (storage.get('token')) {
+            window.location.href = '/survey';
+        } else {
+            router.push('/account/login');
+        }
+    }
 </script>
 
-
 <template>
-    <div class="account-c-verify-email p-4xl">
-        <div v-if="verifying" class="text-center">
-            <header-component 
-                heading="Verifying Email" 
-                description="Please wait while we verify your email address..." 
-            />
-            <div class="p-3xl"></div>
-            <div class="spinner"></div>
-        </div>
-        
-        <div v-else-if="verified" class="text-center">
-            <div class="success-icon">
-                <PhCheckCircle :size="64" color="#10b981" />
+    <main-layout>
+        <template #content>
+            <div class="account-c-verify-email p-4xl">
+                <div v-if="verifying" class="text-center">
+                    <header-component 
+                        heading="Verifying Email" 
+                        description="Please wait while we verify your email address..." 
+                    />
+                    <div class="p-3xl"></div>
+                    <div class="spinner"></div>
+                </div>
+                
+                <div v-else-if="verified" class="text-center">
+                    <div class="success-icon">
+                        <PhCheckCircle :size="64" color="#10b981" />
+                    </div>
+                    <header-component 
+                        heading="Email Verified!" 
+                        description="Your email has been successfully verified" 
+                    />
+                    <div class="p-2xl"></div>
+                    <button-component 
+                        label="Continue to Dashboard" 
+                        @click="goToDashboard"
+                    />
+                </div>
+                
+                <div v-else class="text-center">
+                    <div class="error-icon">
+                        <PhXCircle :size="64" color="#ef4444" />
+                    </div>
+                    <header-component 
+                        heading="Verification Failed" 
+                        :description="error" 
+                    />
+                    <div class="p-2xl"></div>
+                    <router-link to="/account/login" class="btn btn-primary">
+                        Go to Login
+                    </router-link>
+                </div>
             </div>
-            <header-component 
-                heading="Email Verified!" 
-                description="Your email has been successfully verified" 
-            />
-            <div class="p-2xl"></div>
-            <button-component 
-                label="Continue to Dashboard" 
-                @click="goToDashboard"
-            />
-        </div>
-        
-        <div v-else class="text-center">
-            <div class="error-icon">
-                <PhXCircle :size="64" color="#ef4444" />
-            </div>
-            <header-component 
-                heading="Verification Failed" 
-                :description="error" 
-            />
-            <div class="p-2xl"></div>
-            <router-link to="/account/login" class="btn btn-primary">
-                Go to Login
-            </router-link>
-        </div>
-    </div>
+        </template>
+    </main-layout>
 </template>
+
+<style scoped>
+.account-c-verify-email 
+{
+    max-width: 380px;
+    width: 100vw;
+}
+
+.spinner 
+{
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+.success-icon,
+.error-icon 
+{
+    margin-bottom: 20px;
+}
+
+@keyframes spin 
+{
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
