@@ -4,11 +4,24 @@ import { api } from '@utils/api';
 
 export class WorkflowService {
     /**
-     * Get all workflows for current user
+     * Get all workflows for current organization
      */
     static async getWorkflows(page = 1, limit = 50) {
         try {
-            const response = await api.get('user/workflows', { page, limit });
+            // Get organization_id from global session
+            const orgId = window.$session?.organization?.id;
+            
+            if (!orgId) {
+                console.error('No organization ID found in session');
+                return { data: [], total: 0 };
+            }
+            
+            const response = await api.get('user/workflows', { 
+                page, 
+                limit,
+                organization_id: orgId  // CRITICAL: Add this
+            });
+            
             return response.success ? response.data : { data: [], total: 0 };
         } catch (error) {
             console.error('Failed to fetch workflows:', error);
@@ -21,7 +34,17 @@ export class WorkflowService {
      */
     static async getWorkflow(id) {
         try {
-            const response = await api.get(`user/workflows/${id}`);
+            const orgId = window.$session?.organization?.id;
+            
+            if (!orgId) {
+                console.error('No organization ID found in session');
+                return null;
+            }
+            
+            const response = await api.get(`user/workflows/${id}`, {
+                organization_id: orgId
+            });
+            
             return response.success ? response.data : null;
         } catch (error) {
             console.error('Failed to fetch workflow:', error);
@@ -29,11 +52,23 @@ export class WorkflowService {
         }
     }
     
+
     /**
      * Create a new workflow
      */
     static async createWorkflow(data) {
         try {
+            // Use organization_id from data if provided, otherwise try session
+            if (!data.organization_id) {
+                const orgId = window.$session?.organization?.id;
+                
+                if (!orgId) {
+                    throw new Error('No organization ID found');
+                }
+                
+                data.organization_id = orgId;
+            }
+            
             const response = await api.post('user/workflows', data);
             return response;
         } catch (error) {
@@ -47,7 +82,16 @@ export class WorkflowService {
      */
     static async updateWorkflow(id, data) {
         try {
-            const response = await api.patch(`user/workflows/${id}`, data);
+            const orgId = window.$session?.organization?.id;
+            
+            if (!orgId) {
+                throw new Error('No organization ID found in session');
+            }
+            
+            const response = await api.patch(`user/workflows/${id}`, data, {
+                organization_id: orgId
+            });
+            
             return response;
         } catch (error) {
             console.error('Failed to update workflow:', error);
@@ -60,9 +104,18 @@ export class WorkflowService {
      */
     static async updateFlowData(id, flowData) {
         try {
+            const orgId = window.$session?.organization?.id;
+            
+            if (!orgId) {
+                throw new Error('No organization ID found in session');
+            }
+            
             const response = await api.patch(`user/workflows/${id}/flow-data`, {
                 flow_data: flowData
+            }, {
+                organization_id: orgId
             });
+            
             return response;
         } catch (error) {
             console.error('Failed to update flow data:', error);
@@ -75,7 +128,16 @@ export class WorkflowService {
      */
     static async deleteWorkflow(id) {
         try {
-            const response = await api.delete(`user/workflows/${id}`);
+            const orgId = window.$session?.organization?.id;
+            
+            if (!orgId) {
+                throw new Error('No organization ID found in session');
+            }
+            
+            const response = await api.delete(`user/workflows/${id}`, {
+                organization_id: orgId
+            });
+            
             return response;
         } catch (error) {
             console.error('Failed to delete workflow:', error);
@@ -88,7 +150,13 @@ export class WorkflowService {
      */
     static async duplicateWorkflow(id, organizationId = null) {
         try {
-            const data = organizationId ? { organization_id: organizationId } : {};
+            const orgId = organizationId || window.$session?.organization?.id;
+            
+            if (!orgId) {
+                throw new Error('No organization ID found');
+            }
+            
+            const data = { organization_id: orgId };
             const response = await api.post(`user/workflows/${id}/duplicate`, data);
             return response;
         } catch (error) {
@@ -103,10 +171,8 @@ export class WorkflowService {
     static async getAvailableTriggers() {
         try {
             const response = await api.get('user/workflows/available-triggers');
-            console.log('Triggers API response:', response);
             
             if (response.success) {
-                // The API returns data in response.data, but the actual triggers are in response.data
                 return response.data || [];
             }
             return [];
@@ -122,10 +188,8 @@ export class WorkflowService {
     static async getAvailableActions() {
         try {
             const response = await api.get('user/workflows/available-actions');
-            console.log('Actions API response:', response);
             
             if (response.success) {
-                // The API returns data in response.data, but the actual actions are in response.data
                 return response.data || [];
             }
             return [];
@@ -140,7 +204,16 @@ export class WorkflowService {
      */
     static async testWorkflow(id) {
         try {
-            const response = await api.post(`user/workflows/${id}/test`);
+            const orgId = window.$session?.organization?.id;
+            
+            if (!orgId) {
+                throw new Error('No organization ID found in session');
+            }
+            
+            const response = await api.post(`user/workflows/${id}/test`, {}, {
+                organization_id: orgId
+            });
+            
             return response;
         } catch (error) {
             console.error('Failed to test workflow:', error);

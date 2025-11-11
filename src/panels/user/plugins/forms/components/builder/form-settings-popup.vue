@@ -81,17 +81,7 @@ const updateSubmissionSetting = (key, value) => {
     };
 };
 
-const updateAdvancedSetting = (key, value) => {
-    const updatedAdvanced = {
-        ...localFormData.value.advanced,
-        [key]: value
-    };
-    
-    localFormData.value = {
-        ...localFormData.value,
-        advanced: updatedAdvanced
-    };
-};
+
 
 const saveSettings = async () => {
     try {
@@ -121,8 +111,8 @@ const saveSettings = async () => {
                         :tabs="[
                             { title: 'General', active: activeTab === 'general' },
                             { title: 'Layout', active: activeTab === 'layout' },
-                            { title: 'Submission', active: activeTab === 'submission' },
-                            { title: 'Advanced', active: activeTab === 'advanced' }
+                            { title: 'Submission', active: activeTab === 'submission' }
+                           
                         ]"
                         :onClick="handleTabChange"
                     />
@@ -138,17 +128,9 @@ const saveSettings = async () => {
                             @onInput="(e, value) => updateFormField('name', value)"
                         />
                         
-                        <Textarea
-                            label="Form Description"
-                            :value="localFormData.description || ''"
-                            @onInput="(value) => updateFormField('description', value)"
-                        />
-                        
-                        <Toggle
-                            label="Enable Form"
-                            :value="localFormData.enabled !== false"
-                            @update:value="(value) => updateFormField('enabled', value)"
-                        />
+
+                 
+
                     </div>
                     
                     <!-- Layout tab -->
@@ -197,31 +179,8 @@ const saveSettings = async () => {
                         />
                     </div>
                     
-                    <!-- Advanced tab -->
-                    <div v-else-if="activeTab === 'advanced'" class="settings-tab">
-                        <h3>Advanced Settings</h3>
-                        
-                        <Input
-                            label="Form ID"
-                            :value="localFormData.id || 'New Form'"
-                            disabled
-                        />
-                        
-                        <Toggle
-                            label="Enable reCAPTCHA"
-                            :value="localFormData.advanced?.recaptcha?.enabled === true"
-                            @update:value="(value) => updateAdvancedSetting('recaptcha', { enabled: value })"
-                        />
-                        
-                        <Input
-                            label="Submission Storage Period (days, 0 = forever)"
-                            :value="localFormData.advanced?.submissionRetention || '0'"
-                            type="number"
-                            @onInput="(e, value) => updateAdvancedSetting('submissionRetention', value)"
-                        />
-                    </div>
                 </div>
-                
+            
                 <div class="action-buttons">
                     <div class="c-button tertiary i-popup-close pointer">Cancel</div>
                     <Button 

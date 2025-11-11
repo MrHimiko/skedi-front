@@ -323,8 +323,14 @@ onMounted(() => {
 }
 
 .empty-state-content {
-    text-align: center;
-    max-width: 400px;
+text-align: center;
+    max-width: 450px;
+    justify-content: center;
+    align-items: center;
+    display: flex
+;
+    flex-direction: column;
+    
 }
 
 .empty-state-content svg {

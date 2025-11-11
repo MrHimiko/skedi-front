@@ -25,7 +25,6 @@ const props = defineProps({
 // State
 const localData = ref({
     name: '',
-    description: '',
     trigger_type: '',
     trigger_config: {}
 });
@@ -38,7 +37,6 @@ onMounted(async () => {
     // Copy workflow data
     localData.value = {
         name: props.workflow.name || '',
-        description: props.workflow.description || '',
         trigger_type: props.workflow.trigger_type || '',
         trigger_config: props.workflow.trigger_config || {}
     };
@@ -76,7 +74,6 @@ async function save() {
     try {
         await props.callback({
             name: localData.value.name.trim(),
-            description: localData.value.description.trim(),
             trigger_type: localData.value.trigger_type,
             trigger_config: localData.value.trigger_config
         });
@@ -110,14 +107,7 @@ function cancel() {
                         />
                     </div>
                     
-                    <div class="form-field">
-                        <label class="field-label">Description</label>
-                        <Textarea
-                            v-model="localData.description"
-                            placeholder="Describe what this workflow does..."
-                            rows="3"
-                        />
-                    </div>
+                   
                 </div>
                 
                 <!-- Trigger Configuration -->

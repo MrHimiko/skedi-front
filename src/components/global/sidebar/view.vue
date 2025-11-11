@@ -10,7 +10,7 @@
     import { popup } from '@utils/popup';
     import InvitationNotifications from '@user_shared/components/invitationNotifications/view.vue';
     
-    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle, PhBell } from "@phosphor-icons/vue";
+    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle, PhBell, PhCalendar} from "@phosphor-icons/vue";
 
     
     const menuStore = MenuStore()
@@ -105,6 +105,12 @@
             label: 'Profile Settings',
             link: '/account/settings',
             iconComponent: PhUserCircle,
+            weight: 'bold'
+        },
+        {
+            label: 'Availability',
+            link: '/availability',
+            iconComponent: PhCalendar,
             weight: 'bold'
         },
         {

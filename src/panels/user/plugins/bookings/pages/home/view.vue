@@ -11,7 +11,7 @@ import HeadingComponent from '@global/heading/view.vue';
 import BookingsList from '@user_bookings/components/list/view.vue';
 import TabsComponent from '@global/tabs/view.vue';
 import ButtonComponent from '@form/button/view.vue';
-import { PhArrowsClockwise } from "@phosphor-icons/vue";
+import { PhArrowsClockwise, PhQuestion } from "@phosphor-icons/vue";
 
 // State
 const bookings = ref([]);
@@ -544,6 +544,17 @@ const tabs = [
                             label="Show External Events"
                             :disabled="!isExternalEventsEnabled"
                         />
+                        <p>  </p>
+
+                        <PhQuestion 
+                            :size="16" 
+                            style="color: var(--text-tertiary); cursor: help; margin-left: 8px;  " 
+                            v-tooltip="{
+                                content: 'Show events from connected calendar integrations',
+                                placement: 'top'
+                            }"
+                        />
+
                     </div>
 
                     <ButtonComponent
@@ -552,7 +563,10 @@ const tabs = [
                         :iconLeft="{ component: PhArrowsClockwise, weight: 'bold' }"
                         @click="handleSyncClick"
                         :disabled="isLoadingExternalEvents"
-                        title="Force sync all connected calendar integrations to show external events in this list"
+                        v-tooltip="{
+                            content: 'Force a re sync with your calendar integrations to fetch fresh data. We cache your calendar every 30 minutes, so the information shown here may not always be up to date.',
+                            placement: 'top'
+                        }"
                     />
                 </div>
                 
@@ -609,9 +623,6 @@ const tabs = [
     color: var(--text-primary);
 }
 
-.tabs-container {
-    margin-bottom: 20px;
-}
 
 .heading-actions {
     display: flex;
@@ -654,11 +665,16 @@ const tabs = [
     display: flex;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: 10px;
 }
 
 .top-wrapper .c-toggle {
     gap: 10px;
     display: flex;
+}
+
+.c-toggle > div {
+    margin-bottom:0;
 }
 
 .top-wrapper .c-toggle > .holder {
