@@ -8,18 +8,10 @@ export class WorkflowService {
      */
     static async getWorkflows(page = 1, limit = 50) {
         try {
-            // Get organization_id from global session
-            const orgId = window.$session?.organization?.id;
-            
-            if (!orgId) {
-                console.error('No organization ID found in session');
-                return { data: [], total: 0 };
-            }
-            
             const response = await api.get('user/workflows', { 
                 page, 
                 limit,
-                organization_id: orgId  // CRITICAL: Add this
+                organization_id: window.$session?.organization?.id
             });
             
             return response.success ? response.data : { data: [], total: 0 };
@@ -34,15 +26,8 @@ export class WorkflowService {
      */
     static async getWorkflow(id) {
         try {
-            const orgId = window.$session?.organization?.id;
-            
-            if (!orgId) {
-                console.error('No organization ID found in session');
-                return null;
-            }
-            
             const response = await api.get(`user/workflows/${id}`, {
-                organization_id: orgId
+                organization_id: window.$session?.organization?.id
             });
             
             return response.success ? response.data : null;
@@ -52,13 +37,11 @@ export class WorkflowService {
         }
     }
     
-
     /**
      * Create a new workflow
      */
     static async createWorkflow(data) {
         try {
-            // Use organization_id from data if provided, otherwise try session
             if (!data.organization_id) {
                 const orgId = window.$session?.organization?.id;
                 

@@ -100,20 +100,11 @@ const updateOrganization = (value) => {
 };
 
 const updateTrigger = (value) => {
-    console.log('Trigger changed to:', value);
     triggerType.value = value;
 };
 
 // Handle form submission
-// Handle form submission
 async function handleCreate() {
-    // DEBUG - See what values we have
-    console.log('=== FORM SUBMISSION DEBUG ===');
-    console.log('workflowName:', workflowName.value);
-    console.log('organizationId:', organizationId.value);
-    console.log('triggerType:', triggerType.value);
-    console.log('triggerOptions:', triggerOptions.value);
-    
     // Validation with helpful error messages
     if (!workflowName.value || !workflowName.value.trim()) {
         common.notification('Please enter a workflow name', false);
@@ -143,17 +134,17 @@ async function handleCreate() {
             status: 'draft'
         };
         
-        console.log('Creating workflow with data:', workflowData);
-        
         const response = await WorkflowService.createWorkflow(workflowData);
         
         if (response && response.success) {
             common.notification('Workflow created successfully', true);
             
+            // Call callback with response and success flag
             if (props.callback) {
-                props.callback(null, workflowData, response, true);
+                props.callback(response, true);
             }
             
+            // Close the popup
             popup.close();
         } else {
             common.notification('Failed to create workflow: ' + (response?.message || 'Unknown error'), false);
