@@ -84,7 +84,32 @@
                 position: 'center'
             }
         );
+    }   
+
+    async function fetchTeamEventsRecursively(team, orgId) {
+        // Fetch details for current team's events
+        if (team.events && Array.isArray(team.events)) {
+            for (let i = 0; i < team.events.length; i++) {
+                const event = team.events[i];
+                try {
+                    const eventDetail = await api.get(`events/${event.id}?organization_id=${orgId}`);
+                    if (eventDetail.success && eventDetail.data) {
+                        team.events[i] = { ...event, ...eventDetail.data };
+                    }
+                } catch (err) {
+                    console.error(`Failed to fetch team event ${event.id}:`, err);
+                }
+            }
+        }
+        
+        // Recursively fetch for subteams
+        if (team.teams && Array.isArray(team.teams)) {
+            for (const subteam of team.teams) {
+                await fetchTeamEventsRecursively(subteam, orgId);
+            }
+        }
     }
+
 
     // Reload all data including full event details with assignees and location
     async function reloadData() {
@@ -97,6 +122,7 @@
                 
                 // Fetch full event details for each event
                 for (const org of organizations.value) {
+                    // Fetch organization-level events
                     if (org.events && Array.isArray(org.events)) {
                         for (let i = 0; i < org.events.length; i++) {
                             const event = org.events[i];
@@ -111,22 +137,10 @@
                         }
                     }
                     
-                    // Fetch details for team events
+                    // Fetch details for team events (including subteams recursively)
                     if (org.teams && Array.isArray(org.teams)) {
                         for (const team of org.teams) {
-                            if (team.events && Array.isArray(team.events)) {
-                                for (let i = 0; i < team.events.length; i++) {
-                                    const event = team.events[i];
-                                    try {
-                                        const eventDetail = await api.get(`events/${event.id}?organization_id=${org.id}`);
-                                        if (eventDetail.success && eventDetail.data) {
-                                            team.events[i] = { ...event, ...eventDetail.data };
-                                        }
-                                    } catch (err) {
-                                        console.error(`Failed to fetch team event ${event.id}:`, err);
-                                    }
-                                }
-                            }
+                            await fetchTeamEventsRecursively(team, org.id);
                         }
                     }
                 }
@@ -151,6 +165,7 @@
     function getAllEvents(org) {
         const events = [];
         
+        // Get organization-level events
         if (org.events && Array.isArray(org.events)) {
             const orgEvents = org.events
                 .filter(event => !event.deleted)
@@ -165,47 +180,168 @@
             events.push(...orgEvents);
         }
         
+        // Get events from all teams (including nested subteams)
         if (org.teams && Array.isArray(org.teams)) {
             org.teams.forEach(team => {
-                if (team.events && Array.isArray(team.events)) {
-                    const teamEvents = team.events
-                        .filter(event => !event.deleted)
-                        .map(event => ({
-                            ...event,
-                            teamColor: team.color || '#6c5ce7', 
-                            teamName: team.name,
-                            teamId: team.id,
-                            isOrgEvent: false,
-                            organization_id: org.id
-                        }));
-                    events.push(...teamEvents);
-                }
+                const teamEvents = collectTeamEvents(team, org);
+                events.push(...teamEvents);
             });
         }
         
         return events;
     }
 
-    function getFilteredEvents(org) {
-        const allEvents = getAllEvents(org);
-        const orgSelectedTeams = selectedTeams.value[org.id];
+    
+
+
+    function getAllTeamIds(team) {
+        const teamIds = [team.id];
         
-        if (!orgSelectedTeams || orgSelectedTeams.length === 0) {
-            return allEvents;
+        if (team.teams && Array.isArray(team.teams)) {
+            team.teams.forEach(subteam => {
+                const subteamIds = getAllTeamIds(subteam);
+                teamIds.push(...subteamIds);
+            });
         }
         
-        return allEvents.filter(event => {
-            if (orgSelectedTeams.includes('all')) {
-                return true;
-            }
-            
-            if (event.isOrgEvent && orgSelectedTeams.includes('org')) {
-                return true;
-            }
-            
-            return event.teamId && orgSelectedTeams.includes(event.teamId);
-        });
+        return teamIds;
     }
+
+
+    function collectTeamEvents(team, org) {
+        const events = [];
+        
+        // Get events from current team
+        if (team.events && Array.isArray(team.events)) {
+            const teamEvents = team.events
+                .filter(event => !event.deleted)
+                .map(event => ({
+                    ...event,
+                    teamColor: team.color || '#6c5ce7', 
+                    teamName: team.name,
+                    teamId: team.id,
+                    isOrgEvent: false,
+                    organization_id: org.id
+                }));
+            events.push(...teamEvents);
+        }
+        
+        // Recursively get events from subteams
+        if (team.teams && Array.isArray(team.teams)) {
+            team.teams.forEach(subteam => {
+                const subteamEvents = collectTeamEvents(subteam, org);
+                events.push(...subteamEvents);
+            });
+        }
+        
+        return events;
+    }
+
+    function findTeamById(org, teamId) {
+        if (!org.teams || !Array.isArray(org.teams)) {
+            return null;
+        }
+        
+        function searchInTeams(teams) {
+            for (const team of teams) {
+                if (team.id === teamId) {
+                    return team;
+                }
+                if (team.teams && Array.isArray(team.teams)) {
+                    const found = searchInTeams(team.teams);
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        }
+        
+        return searchInTeams(org.teams);
+    }
+
+
+    function getFilteredEvents(org) {
+    const allEvents = getAllEvents(org);
+    const orgSelectedTeams = selectedTeams.value[org.id];
+    
+    console.log('=== FILTER DEBUG FOR ORG:', org.name, '===');
+    console.log('Total events collected:', allEvents.length);
+    console.log('Events:', allEvents.map(e => ({ name: e.name, teamId: e.teamId, teamName: e.teamName })));
+    console.log('Selected teams:', orgSelectedTeams);
+    
+    // If no filters selected, show all events
+    if (!orgSelectedTeams || orgSelectedTeams.length === 0) {
+        console.log('No filters - showing all', allEvents.length, 'events');
+        console.log('=== END FILTER DEBUG ===\n');
+        return allEvents;
+    }
+    
+    const filtered = allEvents.filter(event => {
+        console.log(`\nFiltering event: "${event.name}" (teamId: ${event.teamId})`);
+        
+        // Show all if 'all' is selected
+        if (orgSelectedTeams.includes('all')) {
+            console.log('  ✓ "all" filter active');
+            return true;
+        }
+        
+        // Show org events if 'org' is selected
+        if (event.isOrgEvent && orgSelectedTeams.includes('org')) {
+            console.log('  ✓ Org event and "org" filter active');
+            return true;
+        }
+        
+        // Check team events
+        if (event.teamId) {
+            // Direct match
+            if (orgSelectedTeams.includes(event.teamId)) {
+                console.log(`  ✓ Direct match - teamId ${event.teamId} is selected`);
+                return true;
+            }
+            
+            // Check parent chain
+            console.log(`  Checking parent chain for teamId ${event.teamId}...`);
+            const eventTeam = findTeamById(org, event.teamId);
+            console.log('  Event team found:', eventTeam ? `${eventTeam.name} (ID: ${eventTeam.id})` : 'NOT FOUND');
+            
+            if (eventTeam) {
+                let currentTeam = eventTeam;
+                while (currentTeam) {
+                    console.log(`    - Checking: ${currentTeam.name} (ID: ${currentTeam.id}, parent_id: ${currentTeam.parent_team_id})`);
+                    
+                    if (orgSelectedTeams.includes(currentTeam.id)) {
+                        console.log(`    ✓ MATCH! Team ${currentTeam.id} is in selected teams`);
+                        return true;
+                    }
+                    
+                    if (currentTeam.parent_team_id) {
+                        console.log(`    Going up to parent ${currentTeam.parent_team_id}`);
+                        currentTeam = findTeamById(org, currentTeam.parent_team_id);
+                        if (!currentTeam) {
+                            console.log(`    ✗ Parent team ${currentTeam.parent_team_id} not found!`);
+                            break;
+                        }
+                    } else {
+                        console.log(`    Reached top (no parent)`);
+                        currentTeam = null;
+                    }
+                }
+            }
+            
+            console.log('  ✗ No match found for this event');
+            return false;
+        }
+        
+        console.log('  ✗ Event has no teamId');
+        return false;
+    });
+    
+    console.log('\nFiltered result:', filtered.length, 'events');
+    console.log('=== END FILTER DEBUG ===\n');
+    return filtered;
+}
+
 
     function toggleTeamFilter(orgId, teamId) {
         if (!selectedTeams.value[orgId]) {
@@ -679,15 +815,37 @@
         }
     }
 
-    onMounted(async () => {
-        await reloadData();
+ 
 
-        
+    onMounted(async () => {
+
+        console.log('=== ONMOUNTED START ===');
+    console.log('selectedTeams before reloadData:', selectedTeams.value);
+    
+    await reloadData();
+    
+    console.log('selectedTeams after reloadData:', selectedTeams.value);
+
+    organizations.value = mergeOrganizationsAndTeams();
+    
+    organizations.value.forEach(org => {
+        expandedOrgs.value[org.id] = true;
+        selectedTeams.value[org.id] = []; // Clear filters
+        console.log(`Set filters for org ${org.id}:`, selectedTeams.value[org.id]);
+    });
+    
+    console.log('selectedTeams after initialization:', selectedTeams.value);
+    console.log('=== ONMOUNTED END ===');
+
+    
+        await reloadData();
 
         organizations.value = mergeOrganizationsAndTeams();
         
+        // Initialize expanded orgs and CLEAR any team filters
         organizations.value.forEach(org => {
             expandedOrgs.value[org.id] = true;
+            selectedTeams.value[org.id] = []; // ADD THIS LINE - clear filters by default
         });
         
         if (organizations.value.length === 0) {
@@ -714,6 +872,7 @@
 
 <template>
     <div class="teams-c-items" :key="eventsItems">
+  
         <div v-for="org in organizations" :key="org.id" :class="['teams-c-item', { 'current-org': currentOrgId && org.id === currentOrgId }]">
             <div class="head">
                 <div class="left">
