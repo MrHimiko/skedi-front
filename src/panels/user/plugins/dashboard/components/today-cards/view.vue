@@ -291,20 +291,21 @@ onUnmounted(() => {
 
 <template>
     <div v-if="enhancedTodayEvents.length > 0 || isLoading">
-        
+            
         <div class="schedule-header">
             <h4>Today's schedule</h4>
             <span 
-                v-if="!isLoading && enhancedTodayEvents.length > 0" 
-                class="event-count-badge"
-                @click="openTodayEventsPopup"
-                title="View all today's events"
+                v-if="!isLoading" 
+                :class="['event-count-badge', { 'clickable': enhancedTodayEvents.length > 0 }]"
+                @click="enhancedTodayEvents.length > 0 ? openTodayEventsPopup() : null"
+                :title="enhancedTodayEvents.length > 0 ? 'View all today\'s events' : ''"
             >
                 ({{ enhancedTodayEvents.length }})
             </span>
         </div>
-         
+            
     </div>
+
 </template>
 
 <style scoped>
@@ -328,6 +329,16 @@ onUnmounted(() => {
     transition: all 0.2s ease;
     padding: 2px 6px;
     border-radius: 4px;
+}
+
+.event-count-badge {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.event-count-badge.clickable {
+    cursor: pointer;
+    opacity: 1;
 }
 
 .event-count-badge:hover {

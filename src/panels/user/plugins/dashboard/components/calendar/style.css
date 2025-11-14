@@ -1,7 +1,7 @@
 /* src/panels/user/plugins/dashboard/components/calendar/style.css */
 
 .dashboard-c-calendar {
-    border: 1px solid var(--border);
+border: 1px solid var(--border);
     position: relative;
     overflow: hidden;
     border-radius: 10px;
@@ -9,9 +9,10 @@
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    height: calc(100vh - 96px);
+    height: calc(100vh - 150px);
     display: flex;
     flex-direction: column;
+    margin-top: 20px;
 }
 
 /* Calendar Header */
