@@ -21,9 +21,8 @@ import EventSettingsTab from '@user_events/components/tabs/settings.vue';
 import EventFormWorkflowTab from '@user_events/components/tabs/formWorkflow.vue';
 import EventTeamTab from '@user_events/components/tabs/team.vue';
 import EventBookingsTab from '@user_events/components/tabs/bookings.vue';
+import EventRoutingTab from '@user_events/components/tabs/routing.vue';
 
-// Icons
-import { PhArrowLeft, PhGearSix } from '@phosphor-icons/vue';
 
 // Composables
 const route = useRoute();
@@ -62,6 +61,11 @@ const tabs = computed(() => [
         key: 'bookings',
         label: 'Bookings',
         component: EventBookingsTab
+    },
+    {
+        key: 'routing',
+        label: 'Routing',
+        component: EventRoutingTab
     }
 ]);
 
