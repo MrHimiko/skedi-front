@@ -205,13 +205,33 @@ async function proceedToCheckout() {
             additional_seats: additionalSeats.value
         });
         
-        if (response.success && response.data.checkout_url) {
-            window.location.href = response.data.checkout_url;
+        if (response.success) {
+            if (response.data.checkout_url) {
+                // New subscription - redirect to Stripe
+                window.location.href = response.data.checkout_url;
+            } else if (response.data.upgraded) {
+                // Direct upgrade - show success and refresh
+                isSuccess.value = true;
+                upgradedPlanName.value = response.data.plan_name;
+                
+                // Clear cache and reload subscription data
+                billingStore.clearCache(props.organizationId);
+                await billingStore.loadSubscription(props.organizationId, true);
+                
+                // Start countdown to close
+                countdownInterval = setInterval(() => {
+                    countdown.value--;
+                    if (countdown.value <= 0) {
+                        clearInterval(countdownInterval);
+                        popup.close();
+                    }
+                }, 1000);
+            }
         } else {
-            throw new Error(response.message || 'Failed to create checkout session');
+            throw new Error(response.message || 'Failed to process upgrade');
         }
     } catch (error) {
-        popup.notification(error.message || 'Failed to start checkout', false);
+        common.notification(error.message || 'Failed to start checkout', false);
         loading.value = false;
     }
 }

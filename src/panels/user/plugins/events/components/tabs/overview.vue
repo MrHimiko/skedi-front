@@ -419,12 +419,7 @@ onMounted(() => {
                         <div class="detail-value">{{ organization?.name || 'No organization' }}</div>
                     </div>
                     <div class="detail-actions" v-if="multipleOrganizations">
-                        <ButtonComponent 
-                            @click="changeOrganization"
-                            as="transparent" 
-                            label="Change"
-                            :iconLeft="{ component: PhBuildings, weight: 'bold' }"
-                        />
+                       
                     </div>
                 </div>
 
@@ -615,9 +610,9 @@ onMounted(() => {
 
 /* Organization & Team Grid */
 .org-team-grid {
-    display: flex;
-    flex-direction: column;
+    display: grid;
     gap: 16px;
+    grid-template-columns: 1fr 1fr;
 }
 
 .org-team-item {

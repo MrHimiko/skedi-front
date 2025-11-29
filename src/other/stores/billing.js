@@ -1,3 +1,4 @@
+// src/other/stores/billing.js
 
 import { defineStore } from 'pinia';
 import { api } from '@utils/api';
@@ -7,7 +8,9 @@ export const BillingStore = defineStore('BillingStore', {
         // Store subscriptions by organization ID
         subscriptions: {},
         loading: {},
-        lastFetch: {}
+        lastFetch: {},
+        // ADD THIS: Track in-flight requests
+        pendingRequests: {}
     }),
 
     getters: {
@@ -60,8 +63,26 @@ export const BillingStore = defineStore('BillingStore', {
                 return this.subscriptions[organizationId];
             }
             
+            // ADDED: If there's already a pending request for this org, return that promise
+            if (this.pendingRequests[organizationId]) {
+                return this.pendingRequests[organizationId];
+            }
+            
             console.log('BillingStore: Loading subscription for org:', organizationId);
             
+            // ADDED: Create and store the promise
+            this.pendingRequests[organizationId] = this._fetchSubscription(organizationId);
+            
+            try {
+                return await this.pendingRequests[organizationId];
+            } finally {
+                // ADDED: Clear the pending request when done
+                delete this.pendingRequests[organizationId];
+            }
+        },
+        
+        // ADDED: Extracted fetch logic to separate method
+        async _fetchSubscription(organizationId) {
             try {
                 this.loading[organizationId] = true;
                 const response = await api.get(`billing/organizations/${organizationId}/subscription`);
@@ -74,7 +95,7 @@ export const BillingStore = defineStore('BillingStore', {
                         planLevel: response.data.plan_level,
                         canAddMembers: response.data.can_add_members
                     };
-                    this.lastFetch[organizationId] = now;
+                    this.lastFetch[organizationId] = Date.now();
                     
                     console.log('BillingStore: Updated state for org', organizationId, ':', this.subscriptions[organizationId]);
                 } else {
@@ -128,6 +149,7 @@ export const BillingStore = defineStore('BillingStore', {
             this.subscriptions = {};
             this.lastFetch = {};
             this.loading = {};
+            this.pendingRequests = {};
         }
     }
 });
