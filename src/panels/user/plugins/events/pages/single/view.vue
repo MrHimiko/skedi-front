@@ -109,53 +109,68 @@ const checkAccess = computed(() => {
 });
 
 // Load event data
+// Load event data
 async function loadEvent() {
     try {
         isLoading.value = true;
         
-        // Get user's first organization ID for initial API call (exactly like in your working examples)
         const userOrgs = userStore.getOrganizations();
-        let initialOrgId = null;
         
-        if (Array.isArray(userOrgs) && userOrgs.length > 0 && userOrgs[0].entity) {
-            initialOrgId = userOrgs[0].entity.id;
-        }
-        
-        if (!initialOrgId) {
+        if (!Array.isArray(userOrgs) || userOrgs.length === 0) {
             common.notification('No organization found', false);
             router.push('/events');
             return;
         }
         
-        // Use the correct API pattern from your existing code - events requires organization_id as query param
-        const response = await api.get(`events/${eventId.value}?organization_id=${initialOrgId}`);
+        // Try to find the event in ANY of the user's organizations
+        let foundEvent = null;
+        let foundOrgId = null;
         
-        if (response.success && response.data) {
-            event.value = response.data;
+        for (const org of userOrgs) {
+            const orgId = org.entity?.id || org.id;
+            if (!orgId) continue;
             
-            // Load organization data
-            if (event.value.organization_id) {
-                await loadOrganization(event.value.organization_id);
+            try {
+                const response = await api.get(`events/${eventId.value}?organization_id=${orgId}`);
+                
+                if (response.success && response.data) {
+                    foundEvent = response.data;
+                    foundOrgId = orgId;
+                    break; // Found it, stop searching
+                }
+            } catch (err) {
+                // Event not in this org, try next one
+                continue;
             }
-            
-            // Load team data if event belongs to team
-            if (event.value.team_id) {
-                await loadTeam(event.value.team_id, event.value.organization_id);
-            }
-            
-            // Check access after data is loaded
-            hasAccess.value = checkAccess.value;
-            
-            if (!hasAccess.value) {
-                common.notification('You do not have admin access to this event', false);
-                router.push('/events');
-                return;
-            }
-            
-        } else {
+        }
+        
+        if (!foundEvent) {
             common.notification('Event not found', false);
             router.push('/events');
+            return;
         }
+        
+        event.value = foundEvent;
+        
+        // Load organization data
+        if (event.value.organization_id) {
+            await loadOrganization(event.value.organization_id);
+        }
+        
+        // Load team data if event belongs to team
+        if (event.value.team_id) {
+            await loadTeam(event.value.team_id, event.value.organization_id);
+        }
+        
+        // Check access after data is loaded
+        hasAccess.value = checkAccess.value;
+        
+        if (!hasAccess.value) {
+            common.notification('You do not have admin access to this event', false);
+            router.push('/events');
+            return;
+        }
+        
     } catch (error) {
         console.error('Failed to load event:', error);
         common.notification('Failed to load event', false);

@@ -86,32 +86,41 @@
         );
     }   
 
-    async function fetchTeamEventsRecursively(team, orgId) {
-        // Fetch details for current team's events
+// Helper: Collect event requests from team recursively (for batch API)
+    function collectTeamEventRequests(team, orgId, requests) {
         if (team.events && Array.isArray(team.events)) {
-            for (let i = 0; i < team.events.length; i++) {
-                const event = team.events[i];
-                try {
-                    const eventDetail = await api.get(`events/${event.id}?organization_id=${orgId}`);
-                    if (eventDetail.success && eventDetail.data) {
-                        team.events[i] = { ...event, ...eventDetail.data };
-                    }
-                } catch (err) {
-                    console.error(`Failed to fetch team event ${event.id}:`, err);
+            for (const event of team.events) {
+                if (!event.deleted) {
+                    requests.push({ id: event.id, organization_id: orgId });
                 }
             }
         }
-        
-        // Recursively fetch for subteams
         if (team.teams && Array.isArray(team.teams)) {
             for (const subteam of team.teams) {
-                await fetchTeamEventsRecursively(subteam, orgId);
+                collectTeamEventRequests(subteam, orgId, requests);
             }
         }
     }
 
-
+    // Helper: Update team events with data from batch response
+    function updateTeamEventsFromBatch(team, eventsMap) {
+        if (team.events && Array.isArray(team.events)) {
+            for (let i = 0; i < team.events.length; i++) {
+                const fullEvent = eventsMap[team.events[i].id];
+                if (fullEvent) {
+                    team.events[i] = { ...team.events[i], ...fullEvent };
+                }
+            }
+        }
+        if (team.teams && Array.isArray(team.teams)) {
+            for (const subteam of team.teams) {
+                updateTeamEventsFromBatch(subteam, eventsMap);
+            }
+        }
+    }
+    
     // Reload all data including full event details with assignees and location
+   
     async function reloadData() {
         try {
             const response = await api.get('account/user');
@@ -120,28 +129,58 @@
                 userStore.setData(response.data);
                 organizations.value = mergeOrganizationsAndTeams();
                 
-                // Fetch full event details for each event
+                // Step 1: Collect ALL event IDs that need full details
+                const eventRequests = [];
                 for (const org of organizations.value) {
-                    // Fetch organization-level events
+                    // Collect org-level events
                     if (org.events && Array.isArray(org.events)) {
-                        for (let i = 0; i < org.events.length; i++) {
-                            const event = org.events[i];
-                            try {
-                                const eventDetail = await api.get(`events/${event.id}?organization_id=${org.id}`);
-                                if (eventDetail.success && eventDetail.data) {
-                                    org.events[i] = { ...event, ...eventDetail.data };
-                                }
-                            } catch (err) {
-                                console.error(`Failed to fetch event ${event.id}:`, err);
+                        for (const event of org.events) {
+                            if (!event.deleted) {
+                                eventRequests.push({ id: event.id, organization_id: org.id });
                             }
                         }
                     }
-                    
-                    // Fetch details for team events (including subteams recursively)
+                    // Collect team events (recursive)
                     if (org.teams && Array.isArray(org.teams)) {
                         for (const team of org.teams) {
-                            await fetchTeamEventsRecursively(team, org.id);
+                            collectTeamEventRequests(team, org.id, eventRequests);
                         }
+                    }
+                }
+                
+                // Step 2: Fetch ALL events in ONE batch API call (instead of N calls!)
+                if (eventRequests.length > 0) {
+                    try {
+                        const batchResponse = await api.post('events/batch', { events: eventRequests });
+                        
+                        if (batchResponse.success && batchResponse.data?.events) {
+                            // Create lookup map by event ID
+                            const eventsMap = {};
+                            for (const event of batchResponse.data.events) {
+                                eventsMap[event.id] = event;
+                            }
+                            
+                            // Update all events with full details
+                            for (const org of organizations.value) {
+                                // Update org-level events
+                                if (org.events && Array.isArray(org.events)) {
+                                    for (let i = 0; i < org.events.length; i++) {
+                                        const fullEvent = eventsMap[org.events[i].id];
+                                        if (fullEvent) {
+                                            org.events[i] = { ...org.events[i], ...fullEvent };
+                                        }
+                                    }
+                                }
+                                // Update team events (recursive)
+                                if (org.teams && Array.isArray(org.teams)) {
+                                    for (const team of org.teams) {
+                                        updateTeamEventsFromBatch(team, eventsMap);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (batchError) {
+                        console.error('Batch fetch failed:', batchError);
                     }
                 }
                 
