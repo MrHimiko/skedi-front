@@ -288,6 +288,12 @@
     padding: 0 15px;
     flex:1;
     padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+}
+
+.c-sidebar .sidebar-footer {
+    margin-top: auto;
 }
 
 /* Add this to your src/components/global/sidebar/style.css */

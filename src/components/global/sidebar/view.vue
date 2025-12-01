@@ -5,12 +5,11 @@
     import { storage } from '@utils/storage' 
     import { MenuStore } from '@stores/menu'
     import { UserStore } from '@stores/user'
-    import TimezoneSelector from '@global/timezone-selector/view.vue'
     import MenusComponent from '@global/menus/view.vue'
     import { popup } from '@utils/popup';
     import InvitationNotifications from '@user_shared/components/invitationNotifications/view.vue';
     
-    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle, PhBell, PhCalendar} from "@phosphor-icons/vue";
+    import { PhCaretDoubleLeft, PhSignOut, PhUserCircle, PhBell, PhCalendar, PhInfo } from "@phosphor-icons/vue";
 
     
     const menuStore = MenuStore()
@@ -58,6 +57,20 @@
             minimized.value = 'minimized'
             parent.value = menu
         }
+    }
+
+    // NEW: Handle menu click - supports onClick handlers for items like Instant Meeting
+    function handleMenuClick(menu, event) {
+        // If menu has an onClick handler, use it instead of navigation
+        if (menu.onClick && typeof menu.onClick === 'function') {
+            event.preventDefault();
+            event.stopPropagation();
+            menu.onClick();
+            return;
+        }
+        
+        // Otherwise handle children opening (existing behavior)
+        openChildren(menu);
     }
 
     function isRouteActive(menuLink) {
@@ -181,38 +194,12 @@
                     <p>Main menu</p>
                 </div>
 
+                <!-- UPDATED MENUS SECTION - Now supports onClick handlers -->
                 <div class="menus">
-                    <div @click="openChildren(menu)" v-for="(menu, index) in menuStore.get('sidebar:top')" :key="index">
+                    <div @click="handleMenuClick(menu, $event)" v-for="(menu, index) in menuStore.get('sidebar:top')" :key="index">
+                        <!-- Use router-link for items WITH a link and WITHOUT onClick -->
                         <router-link 
-                            :to="menu.link" 
-                            :class="{ 'active': isRouteActive(menu.link) }" 
-                            :key="minimized" 
-                            v-tooltip="minimized ? {content: menu.label, options: { placement: 'right' }} : null"
-                        >
-                            <div>
-                                <!-- Support both component-based and string-based icons -->
-                                <component 
-                                    v-if="typeof menu.icon === 'object' && menu.icon.component" 
-                                    :is="menu.icon.component" 
-                                    :weight="menu.icon.weight || 'bold'" 
-                                    class="phosphor-icon"
-                                />
-                                <i v-else-if="menu.icon">{{ menu.icon }}</i>
-                                <span class="ellipsis ellipsis-1" v-if="!minimized"> {{ menu.label }} </span>
-                            </div>
-                        </router-link>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bottom">
-                <div v-if="!minimized" class="separator">
-                    <p>Others</p>
-                </div>
-
-                <div class="menus">
-                    <div v-for="(menu, index) in menuStore.get('sidebar:bottom')" :key="index">
-                        <router-link 
+                            v-if="menu.link && !menu.onClick"
                             :to="menu.link" 
                             :class="{ 'active': isRouteActive(menu.link) }" 
                             :key="minimized" 
@@ -230,6 +217,24 @@
                                 <span class="ellipsis ellipsis-1" v-if="!minimized"> {{ menu.label }} </span>
                             </div>
                         </router-link>
+                        
+                        <!-- Use div for items WITH onClick (like Instant Meeting) -->
+                        <div 
+                            v-else
+                            class="menu-action-item"
+                            v-tooltip="minimized ? { content: menu.label, options: { placement: 'right' }} : null"
+                        >
+                            <div>
+                                <component 
+                                    v-if="typeof menu.icon === 'object' && menu.icon.component" 
+                                    :is="menu.icon.component" 
+                                    :weight="menu.icon.weight || 'bold'" 
+                                    class="phosphor-icon"
+                                />
+                                <i v-else-if="menu.icon">{{ menu.icon }}</i>
+                                <span class="ellipsis ellipsis-1" v-if="!minimized"> {{ menu.label }} </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -252,8 +257,6 @@
 </template>
 
 <style>
-
-
 .timezone-display {
     border-top: 1px solid var(--border);
     padding-top: 10px;
@@ -289,5 +292,33 @@
 
 .info-icon:hover {
     color: var(--text-primary);
+}
+
+/* Style for menu action items (onClick handlers like Instant Meeting) */
+.c-sidebar .menus > div > .menu-action-item {
+    padding: 0 10px;
+    border-radius: 10px;
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    color: var(--text-primary);
+    height: 36px;
+    cursor: pointer;
+    font-weight: 500;
+    align-items: center;
+}
+
+.c-sidebar.minimized:not(.children) .menus > div > .menu-action-item {
+    width: 42px;
+}
+
+.c-sidebar .menus > div > .menu-action-item:hover {
+    background-color: var(--background-0);
+}
+
+.c-sidebar .menus > div > .menu-action-item > div {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
 }
 </style>

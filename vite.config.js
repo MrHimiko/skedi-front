@@ -35,6 +35,7 @@ export default defineConfig({
             '@user_integrations': path.resolve(__dirname, './src/panels/user/plugins/integrations'),
             '@user_workflows': path.resolve(__dirname, './src/panels/user/plugins/workflows'),
             '@user_forms': path.resolve(__dirname, './src/panels/user/plugins/forms'),
+            '@user_instant-meeting': path.resolve(__dirname, 'src/panels/user/plugins/instant-meeting'),
 
 
 

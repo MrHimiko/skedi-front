@@ -19,6 +19,7 @@ import RunUserOrganizations from '@user_organizations/run';
 import RunUserBilling from '@user_billing/run';
 import RunUserWorkflows from '@user_workflows/run';
 import RunUserSurvey from '@user_survey/run';
+import InstantMeetingPlugin  from '@user_instant-meeting/run';
 
 
 
@@ -44,7 +45,8 @@ initializeApp((app, router, stores) =>
         RunUserBilling,
         RunUserAvailability,
         RunUserWorkflows,
-        RunUserSurvey
+        RunUserSurvey,
+        InstantMeetingPlugin
     ];
 
     if(stores.extension.has(1))
